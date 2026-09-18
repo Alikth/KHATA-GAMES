@@ -26,8 +26,8 @@ async function boot() {
 async function enterAuthenticated() {
   currentUser = currentUser || (await api("/api/auth/status")).user;
   ["authScreen"].forEach(id => $(id).classList.add("hidden"));
-  $("welcomeUser").textContent = "@" + currentUser.username;
-  $("currentUser").textContent = "@" + currentUser.username;
+  $("welcomeUser").textContent = currentUser.username;
+  $("currentUser").textContent = String(currentUser.username || "").replace(/^@+/, "");
   $("gameLobby").classList.remove("hidden");
   houses = await api("/api/houses"); players = await api("/api/players");
   renderRegions(); renderPlayers(); renderMap(); renderMyCastles(); fillAdminRegions();

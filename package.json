@@ -1,12 +1,15 @@
 {
-  "name": "khata-games-cloudflare",
+  "name": "khata-games",
   "version": "1.0.0",
   "private": true,
+  "description": "KHATA GAMES - Westeros season registration",
+  "main": "server.js",
   "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
-  "devDependencies": {
-    "wrangler": "^4.68.0"
+  "dependencies": {
+    "express": "^5.1.0",
+    "express-session": "^1.18.2"
   }
 }
