@@ -104,7 +104,7 @@ function getCookie(request, name) { const raw = request.headers.get("Cookie") ||
 function newId() { return crypto.randomUUID(); }
 async function hashPassword(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 120000, hash: "SHA-256" }, key, 256);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 12000, hash: "SHA-256" }, key, 256);
   return { salt: btoa(String.fromCharCode(...salt)), hash: btoa(String.fromCharCode(...new Uint8Array(bits))) };
 }
 function bytes(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
