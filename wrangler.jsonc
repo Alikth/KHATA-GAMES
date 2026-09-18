@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "khata-games",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "khata-games-db",
+      "database_id": "17be93e3-805c-4d80-9bf1-7e01f4cf7367"
+    }
+  ],
+  "vars": {
+    "ADMIN_PASSWORD": "khata-admin-2026"
+  }
+}
