@@ -331,7 +331,7 @@ window.addEventListener("DOMContentLoaded", () => {
   async function deletePlayer(id) { if (!confirm("این پلیر حذف شود؟")) return; try { await api("/api/admin/players/" + encodeURIComponent(id), { method: "DELETE" }); await refreshAdmin(); showToast("پلیر حذف شد."); } catch (e) { showToast(e.message, true); } }
   $("adminLogout").onclick = async () => { try { await api("/api/admin/logout", { method: "POST" }); } catch {} currentUser = null; resetGameState(); showAuth(); setAuthTab("login"); };
 
-  $("adminLink").onclick = () => {
+  $("adminLink")?.addEventListener("click", () => {
     if (!currentUser) {
       adminRequested = true;
       sessionStorage.setItem("khata_admin_requested", "1");
@@ -341,7 +341,7 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
     showAdminOnly(); checkAdminSession().catch(e => setMessage("adminMessage", "error", e.message));
-  };
+  });
 
   function showAdminOnly() {
     $("authScreen").classList.add("hidden"); $("gameLobby").classList.add("hidden"); $("gameApp").classList.remove("hidden");
