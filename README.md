@@ -1,34 +1,23 @@
-# KHATA GAMES — updated
+# KHATA GAMES — Cloudflare
 
-این نسخه شامل تغییرات جدید رابط و حساب کاربری است.
+نسخه Cloudflare Worker + D1 با همان رابط QA شده نسخه جدید.
 
-## اجرا
+## Deploy
 ```bash
 npm install
-npm start
+npm run deploy
 ```
-سپس: `http://localhost:3000`
 
-## جریان ورود
-کاربر ابتدا صفحه Login را می‌بیند. از همان صفحه می‌تواند حساب بسازد؛ پس از ورود وارد Lobby می‌شود و سپس Kill The King را باز می‌کند.
+`wrangler.jsonc` اتصال Worker به D1 و Assets را نگه می‌دارد. مقدار `ADMIN_PASSWORD` به‌صورت variable تنظیم شده؛ برای امنیت بالاتر می‌توان آن را به Cloudflare Secret منتقل کرد.
 
-## نقشه
-نقشه فقط بخش Westeros را نشان می‌دهد و ۱۰ Marker اقلیم‌ها روی همان نقاط مشخص‌شده در تصویر مرجع قرار گرفته‌اند.
+## تغییرات
+- رابط frontend جدید و responsive
+- Admin flow پایدارتر و حفظ user session هنگام ورود Admin
+- map zoom controls
+- modal/state fixes
+- حذف inline handlers
+- escape داده‌های dynamic
+- بهبود session/auth behavior
 
-## خاندان‌ها و قلعه‌ها
-بازیکن‌ها بر اساس اقلیم تفکیک می‌شوند. هر قلعه پنل جزئیات دارد و موقعیت، خاندان، وضعیت و توضیح آن نمایش داده می‌شود.
 
-## Admin
-برای ورود مستقیم به مدیریت: `http://localhost:3000/?admin=1`
-
-رمز پیش‌فرض: `khata-admin-2026`
-
-برای محیط واقعی حتماً `ADMIN_PASSWORD` و `SESSION_SECRET` را در Environment تنظیم کن.
-
-## v10 visual polish
-- Replaced the main site background with the approved raw cinematic two-warrior battle image.
-- Kept the image free of UI text/logos.
-- Removed the @ prefix from the logged-in account username in the top controls.
-- Restyled the Lobby / Logout / username controls with a subtle dark cinematic treatment.
-- Added subtle black text shadowing for readability without a heavy overlay.
-- Backend, authentication flow, game data, and D1-related structure were left unchanged.
+Mobile login v14: centered auth content, smaller login card/logo, fantasy border, Admin Access removed from login, and a 2-second login transition with dragon battle overlay.

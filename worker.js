@@ -1,5 +1,3 @@
-const ADMIN_PASSWORD = "khata-admin-2026";
-
 const castleInfo = {
   "Castle Black": { location: "The Wall", description: "دژ اصلی نگهبانان شب در دیوار؛ یکی از مهم‌ترین پایگاه‌های دفاعی شمال و محل فرماندهی Lord Commander." },
   "Eastwatch": { location: "ساحل شرقی دیوار", description: "قلعه‌ای ساحلی در انتهای شرقی دیوار که بر مسیرهای دریایی و دفاع از بخش شرقی دیوار نظارت دارد." },
@@ -156,7 +154,13 @@ async function handleApi(request, env, url) {
     if(await env.DB.prepare("SELECT id FROM players WHERE account_id=?").bind(session.user_id).first()) return json({error:"این حساب قبلاً برای Kill The King یک قلعه انتخاب کرده است."},409);
     const p={id:newId(),username:"@"+username,region,house:selected.house,castle,account_id:session.user_id,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,p.account_id,p.created_at).run(); return json({message:`ثبت شد لرد ${selected.house}`,player:p});
   }
-  if (method === "POST" && path === "/api/admin/login") { const b=await body(request); if(String(b.password||"")!==String(env.ADMIN_PASSWORD||ADMIN_PASSWORD)) return json({error:"رمز مدیر اشتباه است."},401); const sid=await createSession(env,"__admin__",1); return json({ok:true},200,{"set-cookie":cookie("khata_session",sid)}); }
+  if (method === "POST" && path === "/api/admin/login") {
+    if (!env.ADMIN_PASSWORD) return json({error:"رمز مدیر روی سرور تنظیم نشده است."},503);
+    const b=await body(request);
+    if(String(b.password||"")!==String(env.ADMIN_PASSWORD)) return json({error:"رمز مدیر اشتباه است."},401);
+    const sid=await createSession(env,session?.user_id || "__admin__",1);
+    return json({ok:true},200,{"set-cookie":cookie("khata_session",sid)});
+  }
   if (method === "POST" && path === "/api/admin/logout") { await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
   if (method === "GET" && path === "/api/admin/status") return json({admin:!!session?.is_admin});
   if (path === "/api/admin/players" && method === "POST") {
