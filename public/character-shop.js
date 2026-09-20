@@ -61,7 +61,7 @@
     page.innerHTML=`<div class='page-title'><span>⚔</span><div><h2>CHARACTERS</h2><p>شخصیت‌های قلمرو را بشناس</p></div></div><div id='khcs-character-root'></div>`;
     main.appendChild(page);
     const root=document.getElementById('khcs-character-root');
-    if(!characters.length){ root.innerHTML=empty('CHARACTERS ARE COMING','شخصیت‌ها بعداً به این بخش اضافه می‌شوند.'); return; }
+    if(!characters.length){ root.innerHTML=empty('CHARACTERS','هنوز شخصیتی برای نمایش ثبت نشده است.'); return; }
     root.innerHTML=`<div class='khcs-grid'>${characters.map(c=>`<button class='khcs-card' type='button' data-khcs-character='${esc(c.id)}'><div class='khcs-img-wrap'>${c.image?`<img class='khcs-card-img' src='${esc(c.image)}' alt='${esc(c.name)}'>`:`<div class='khcs-card-img'></div>`}${c.premium?`<span class='khcs-badge'>PREMIUM</span>`:''}</div><div class='khcs-card-body'><h3>${esc(c.name)}</h3><p>${esc(c.about)}</p></div></button>`).join('')}</div>`;
   }
 
@@ -92,7 +92,7 @@
     const cat=cats[key], root=document.getElementById('khcs-shop-main'); if(!cat||!root)return;
     document.querySelectorAll('.khcs-tab').forEach(b=>b.classList.toggle('active',b.dataset.khcsShop===key));
     const items=shop[key]||[];
-    if(!items.length){ root.innerHTML=`<div class='khcs-head'><h3>${cat.fa}</h3><p>${cat.desc}</p></div>${empty('COMING SOON','محتوای این دسته بعداً اضافه می‌شود.')}`; return; }
+    if(!items.length){ root.innerHTML=`<div class='khcs-head'><h3>${cat.fa}</h3><p>${cat.desc}</p></div>${empty(cat.fa,'این دسته هنوز محتوایی ندارد.')}`; return; }
     root.innerHTML=`<div class='khcs-head'><h3>${cat.fa}</h3><p>${cat.desc}</p></div><div class='khcs-shop-grid'>${items.map(i=>`<article class='khcs-shop-card'>${i.image?`<img src='${esc(i.image)}' alt='${esc(i.name)}'>`:`<div class='khcs-card-img'></div>`}<div class='khcs-shop-card-body'><h4>${esc(i.name)}</h4>${i.description?`<p>${esc(i.description)}</p>`:''}</div></article>`).join('')}</div>`;
   }
 
