@@ -97,11 +97,51 @@ const SECURITY_HEADERS = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
   "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self'; connect-src 'self'; upgrade-insecure-requests"
 };
+const MAX_BODY_BYTES = 16 * 1024;
+const MAX_PASSWORD_LENGTH = 128;
+const SECURITY_HEADERS = {
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self'; connect-src 'self'; upgrade-insecure-requests"
+};
 
 function json(data, status = 200, headers = {}) {
-  return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
+  return new Response(JSON.stringify(data), { status, headers: { ...SECURITY_HEADERS, "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
 }
-async function body(request) { try { return await request.json(); } catch { return {}; } }
+async function body(request) {
+  const length = Number(request.headers.get("content-length") || 0);
+  if (length > MAX_BODY_BYTES) { const e = new Error("Request body too large"); e.status = 413; throw e; }
+  const type = request.headers.get("content-type") || "";
+  if (!type.toLowerCase().startsWith("application/json")) { const e = new Error("JSON required"); e.status = 415; throw e; }
+  try { return await request.json(); } catch { const e = new Error("Invalid JSON"); e.status = 400; throw e; }
+}
+function sameOrigin(request) {
+  const origin = request.headers.get("Origin");
+  if (!origin) return true;
+  return origin === new URL(request.url).origin;
+}
+async function sha256Base64Url(value) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return base64url(new Uint8Array(digest));
+}
+function base64url(bytes) {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+function randomToken() {
+  return base64url(crypto.getRandomValues(new Uint8Array(32)));
+}
+async function constantTimeSecretEqual(a, b) {
+  const [ha, hb] = await Promise.all([sha256Base64Url(String(a)), sha256Base64Url(String(b))]);
+  if (ha.length !== hb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ha.length; i++) diff |= ha.charCodeAt(i) ^ hb.charCodeAt(i);
+  return diff === 0;
+}
 function normalizeUsername(value) { return String(value || "").trim().replace(/^@+/, "").replace(/\s+/g, ""); }
 function validTelegramUsername(value) { return /^[A-Za-z0-9_]{5,32}$/.test(value); }
 function validAccountUsername(value) { return /^[A-Za-z0-9_]{3,24}$/.test(value); }
@@ -121,7 +161,8 @@ async function verifyPassword(password, salt, storedHash) {
   const a = bytes(made.hash), b = bytes(storedHash); if (a.length !== b.length) return false; let diff = 0; for (let i=0;i<a.length;i++) diff |= a[i]^b[i]; return diff === 0;
 }
 async function getSession(request, env) {
-  const sid = getCookie(request, "khata_session"); if (!sid) return null;
+  const token = getCookie(request, "khata_session"); if (!token) return null;
+  const sid = await sha256Base64Url(token);
   const row = await env.DB.prepare("SELECT * FROM sessions WHERE id = ? AND expires_at > ?").bind(sid, Date.now()).first();
   return row || null;
 }
@@ -140,7 +181,9 @@ async function deleteSession(request, env) {
   const token=getCookie(request,"khata_session");
   if(token){ const sid=await sha256Base64Url(token); await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(sid).run(); }
 }
-async function cleanupExpiredSessions(env) { await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(Date.now()).run(); }
+async function cleanupExpiredSessions(env) {
+  await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(Date.now()).run();
+}
 async function rateLimit(request, env, action, limit, windowMs = 15 * 60 * 1000) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const key = action + ":" + await sha256Base64Url(ip);
