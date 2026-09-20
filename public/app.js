@@ -200,7 +200,7 @@ window.addEventListener("DOMContentLoaded", () => {
     $("castles").classList.remove("hidden");
     $("castles").innerHTML = `<button class="back" type="button" data-action="back-regions">← بازگشت به اقلیم‌ها</button><div class="page-title"><span>${escapeHTML(r.icon)}</span><div><h2>${escapeHTML(r.region)}</h2><p>قلعه را انتخاب کن و مشخصات آن را ببین</p></div></div><div class="castle-grid">${r.castles.map((c, j) => {
       const p = players.find(x => x.region === r.region && x.castle === c.castle);
-      return `<button class="castle-card ${p ? "claimed" : "available"}" type="button" data-action="castle" data-region="${i}" data-castle="${j}"><div class="castle-top"><span class="castle-icon">${escapeHTML(c.icon)}</span><span class="status">${p ? "🔒 CLAIMED" : "🟢 AVAILABLE"}</span></div><h3>${escapeHTML(c.castle)}</h3><div class="house">HOUSE ${escapeHTML(c.house)}</div><div class="claim-by">${p ? escapeHTML(p.username) : "مشاهده اطلاعات و موقعیت قلعه"}</div></button>`;
+      return `<button class="castle-card ${p ? "claimed" : "available"}" type="button" data-action="castle" data-region="${i}" data-castle="${j}"><div class="castle-top"><span class="castle-icon">${escapeHTML(c.icon)}</span><span class="status">${p ? "🔒 CLAIMED" : "🟢 AVAILABLE"}</span></div><h3>${escapeHTML(c.castle)}</h3><div class="house">HOUSE ${escapeHTML(c.house)}</div><div class="claim-by">${p ? escapeHTML(p.username) : "مشاهده اطلاعات و موقعیت قلعه"}</div>${window.khataLordByCastle?.[c.castle] ? `<span class="lord-link" data-action="lord" data-lord="${escapeHTML(window.khataLordByCastle[c.castle])}">مشاهده لرد</span>` : ""}</button>`;
     }).join("")}</div>`;
   }
   function backRegions() { $("castles").classList.add("hidden"); $("regions").classList.remove("hidden"); }
@@ -365,7 +365,7 @@ window.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("click", e => {
     const target = e.target.closest("[data-action]"); if (!target) return;
     const action = target.dataset.action;
-    if (action === "region") openRegion(Number(target.dataset.index));
+    if (action === "lord") { e.preventDefault(); e.stopPropagation(); window.khataOpenCharacter?.(target.dataset.lord); return; }\n    if (action === "region") openRegion(Number(target.dataset.index));
     else if (action === "back-regions") backRegions();
     else if (action === "castle") openCastleDetails(Number(target.dataset.region), Number(target.dataset.castle));
     else if (action === "claim") openClaim(Number(target.dataset.region), Number(target.dataset.castle));
