@@ -99,10 +99,9 @@
   function addNav(){
     const nav=document.querySelector('.nav'), main=document.querySelector('.game-app main');
     if(!nav||!main||document.getElementById('khcsCharactersNav'))return;
-    const c=document.createElement('button'); c.id='khcsCharactersNav'; c.className='nav-btn'; c.type='button'; c.dataset.khcsPage='characters'; c.textContent='⚔ Characters';
-    const s=document.createElement('button'); s.id='khcsShopNav'; s.className='nav-btn'; s.type='button'; s.dataset.khcsPage='shop'; s.textContent='🛒 Shop';
+    const c=document.createElement('button'); c.id='khcsCharactersNav'; c.className='nav-btn'; c.type='button'; c.dataset.page='characters'; c.textContent='⚔ Characters';
+    const s=document.createElement('button'); s.id='khcsShopNav'; s.className='nav-btn'; s.type='button'; s.dataset.page='shop'; s.textContent='🛒 Shop';
     nav.append(c,s);
-    c.addEventListener('click',()=>showPage('characters')); s.addEventListener('click',()=>showPage('shop'));
     buildCharacters(main); buildCharacterModal(); buildShop(main);
   }
 
