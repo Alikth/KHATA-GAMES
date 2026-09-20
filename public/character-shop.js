@@ -10,10 +10,7 @@
 
   const esc=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
   async function loadImage(path){
-    try{
-      const text=await fetch(path,{cache:"force-cache"}).then(r=>r.text());
-      return "data:image/webp;base64,"+text;
-    }catch{return ""}
+    return path;
   }
   function css(){
     if(document.getElementById("khcs-style"))return;
