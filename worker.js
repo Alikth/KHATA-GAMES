@@ -203,40 +203,52 @@ async function handleApi(request, env, url) {
     return json({authenticated:!!user,user:publicUser(user)});
   }
   if (method === "POST" && path === "/api/auth/register") {
+    if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
+    if (!(await rateLimit(request, env, "register", 10))) return json({error:"تعداد درخواست‌ها زیاد است. کمی بعد دوباره تلاش کنید."},429, {"retry-after":"900"});
     const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||"");
     if(!validAccountUsername(username)) return json({error:"نام کاربری باید ۳ تا ۲۴ کاراکتر و فقط شامل حروف، عدد یا _ باشد."},400);
     if(password.length<12 || password.length>MAX_PASSWORD_LENGTH) return json({error:"رمز عبور باید بین ۱۲ تا ۱۲۸ کاراکتر باشد."},400);
     const exists=await env.DB.prepare("SELECT id FROM users WHERE lower(username)=lower(?)").bind(username).first(); if(exists) return json({error:"این نام کاربری قبلاً ثبت شده است."},409);
     const h=await hashPassword(password), id=newId(); await env.DB.prepare("INSERT INTO users (id,username,salt,hash,created_at) VALUES (?,?,?,?,?)").bind(id,username,h.salt,h.hash,new Date().toISOString()).run();
-    await deleteSession(request,env);\n    const sid=await createSession(env,id); return new Response(JSON.stringify({ok:true,user:{id,username}}),{status:200,headers:{"content-type":"application/json","set-cookie":cookie("khata_session",sid)}});
+    await deleteSession(request,env);
+    await deleteSession(request,env);
+    const sid=await createSession(env,id); return new Response(JSON.stringify({ok:true,user:{id,username}}),{status:200,headers:{"content-type":"application/json","set-cookie":cookie("khata_session",sid)}});
   }
   if (method === "POST" && path === "/api/auth/login") {
+    if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
+    if (!(await rateLimit(request, env, "login", 10))) return json({error:"تعداد تلاش‌های ورود زیاد است. ۱۵ دقیقه بعد دوباره تلاش کنید."},429, {"retry-after":"900"});
     const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||""); if(username.length>24 || password.length>MAX_PASSWORD_LENGTH) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); const u=await env.DB.prepare("SELECT * FROM users WHERE lower(username)=lower(?)").bind(username).first();
     if(!u || !(await verifyPassword(password,u.salt,u.hash))) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); await deleteSession(request,env); const sid=await createSession(env,u.id); return json({ok:true,user:publicUser(u)},200,{"set-cookie":cookie("khata_session",sid)});
   }
-  if (method === "POST" && path === "/api/auth/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
+  if (method === "POST" && path === "/api/auth/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
   if (method === "GET" && path === "/api/houses") return json(houses);
   if (method === "GET" && path === "/api/players") return json(await players(env));
-  const session=await getSession(request,env);\n  const userSession=await requireUser(request,env);
+  const session=await getSession(request,env);
+  const userSession=await requireUser(request,env);
   if (method === "GET" && path === "/api/my-castles") { if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); return json((await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(userSession.user_id).all()).results); }
   if (method === "POST" && path === "/api/register") {
+    if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
     if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); const b=await body(request), username=normalizeUsername(b.username), region=String(b.region||"").trim(), castle=String(b.castle||"").trim();
     if(!validTelegramUsername(username)) return json({error:"Username تلگرام معتبر نیست. فقط حروف، عدد و _ و بین ۵ تا ۳۲ کاراکتر."},400); const selected=findCastle(region,castle); if(!selected) return json({error:"قلمرو یا قلعه معتبر نیست."},400);
     if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first()) return json({error:"این قلعه قبلاً توسط یک لرد انتخاب شده است."},409);
     if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first()) return json({error:"این Telegram Username قبلاً ثبت شده است."},409);
-    if(await env.DB.prepare("SELECT id FROM players WHERE account_id=?").bind(session.user_id).first()) return json({error:"این حساب قبلاً برای Kill The King یک قلعه انتخاب کرده است."},409);
-    const p={id:newId(),username:"@"+username,region,house:selected.house,castle,account_id:session.user_id,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,p.account_id,p.created_at).run(); return json({message:`ثبت شد لرد ${selected.house}`,player:p});
+    if(await env.DB.prepare("SELECT id FROM players WHERE account_id=?").bind(userSession.user_id).first()) return json({error:"این حساب قبلاً برای Kill The King یک قلعه انتخاب کرده است."},409);
+    const p={id:newId(),username:"@"+username,region,house:selected.house,castle,account_id:userSession.user_id,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,p.account_id,p.created_at).run(); return json({message:`ثبت شد لرد ${selected.house}`,player:p});
   }
   if (method === "POST" && path === "/api/admin/login") {
+    if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
+    if (!(await rateLimit(request, env, "admin-login", 5))) return json({error:"تعداد تلاش‌های ورود مدیر زیاد است. ۱۵ دقیقه بعد دوباره تلاش کنید."},429, {"retry-after":"900"});
     if (!env.ADMIN_PASSWORD) return json({error:"رمز مدیر روی سرور تنظیم نشده است."},503);
     const b=await body(request);
     if(!(await constantTimeSecretEqual(String(b.password||""), String(env.ADMIN_PASSWORD)))) return json({error:"رمز مدیر اشتباه است."},401);
-    await deleteSession(request,env);\n    const sid=await createSession(env,"__admin__",1);
+    await deleteSession(request,env);
+    const sid=await createSession(env,"__admin__",1);
     return json({ok:true},200,{"set-cookie":cookie("khata_session",sid)});
   }
-  if (method === "POST" && path === "/api/admin/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
+  if (method === "POST" && path === "/api/admin/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
   if (method === "GET" && path === "/api/admin/status") return json({admin:!!session?.is_admin});
   if (path === "/api/admin/players" && method === "POST") {
+    if(!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
     if(!session?.is_admin) return json({error:"دسترسی مدیر لازم است."},401); const b=await body(request), username=normalizeUsername(b.username),region=String(b.region||"").trim(),castle=String(b.castle||"").trim(),selected=findCastle(region,castle); if(!validTelegramUsername(username)||!selected)return json({error:"اطلاعات واردشده معتبر نیست."},400);
     if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first())return json({error:"این قلعه قبلاً رزرو شده است."},409); if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first())return json({error:"این Username قبلاً ثبت شده است."},409);
     const p={id:newId(),username:"@"+username,region,house:selected.house,castle,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,null,p.created_at).run(); return json({player:p});
@@ -250,8 +262,12 @@ export default {
   async fetch(request, env) {
     const url=new URL(request.url);
     try {
+      await cleanupExpiredSessions(env);
       if(url.pathname.startsWith("/api/")) return await handleApi(request,env,url);
-      const response = await env.ASSETS.fetch(request);\n      const headers = new Headers(response.headers);\n      for (const [key, value] of Object.entries(SECURITY_HEADERS)) headers.set(key, value);\n      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+      const response = await env.ASSETS.fetch(request);
+      const headers = new Headers(response.headers);
+      for (const [key, value] of Object.entries(SECURITY_HEADERS)) headers.set(key, value);
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
     } catch(e) { console.error(e); return json({error:e?.status ? e.message : "خطای داخلی سرور رخ داد."},e?.status || 500); }
   }
 };
