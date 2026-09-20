@@ -87,6 +87,16 @@ const houses = [
 
 
 const SESSION_TTL = 8 * 60 * 60 * 1000;
+const MAX_BODY_BYTES = 16 * 1024;
+const MAX_PASSWORD_LENGTH = 128;
+const SECURITY_HEADERS = {
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self'; connect-src 'self'; upgrade-insecure-requests"
+};
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
@@ -115,13 +125,33 @@ async function getSession(request, env) {
   const row = await env.DB.prepare("SELECT * FROM sessions WHERE id = ? AND expires_at > ?").bind(sid, Date.now()).first();
   return row || null;
 }
-async function requireAuth(request, env) { const s = await getSession(request, env); return s?.user_id ? s : null; }
-async function createSession(env, userId, admin = 0) {
-  const id = newId(), expires = Date.now() + SESSION_TTL; await env.DB.prepare("INSERT INTO sessions (id,user_id,is_admin,expires_at) VALUES (?,?,?,?)").bind(id,userId,admin,expires).run(); return id;
+async function requireUser(request, env) {
+  const s = await getSession(request, env);
+  if (!s || s.is_admin) return null;
+  const user = await env.DB.prepare("SELECT id FROM users WHERE id=?").bind(s.user_id).first();
+  return user ? s : null;
 }
-async function deleteSession(request, env) { const sid=getCookie(request,"khata_session"); if(sid) await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(sid).run(); }
+async function createSession(env, userId, admin = 0) {
+  const token = randomToken(), id = await sha256Base64Url(token), expires = Date.now() + SESSION_TTL;
+  await env.DB.prepare("INSERT INTO sessions (id,user_id,is_admin,expires_at) VALUES (?,?,?,?)").bind(id,userId,admin,expires).run();
+  return token;
+}
+async function deleteSession(request, env) {
+  const token=getCookie(request,"khata_session");
+  if(token){ const sid=await sha256Base64Url(token); await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(sid).run(); }
+}
+async function cleanupExpiredSessions(env) { await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(Date.now()).run(); }
+async function rateLimit(request, env, action, limit, windowMs = 15 * 60 * 1000) {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const key = action + ":" + await sha256Base64Url(ip);
+  const now = Date.now(), bucket = now - (now % windowMs);
+  const row = await env.DB.prepare(`INSERT INTO rate_limits (bucket_key, window_start, count) VALUES (?, ?, 1)
+    ON CONFLICT(bucket_key) DO UPDATE SET count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END, window_start = excluded.window_start
+    RETURNING count`).bind(key, bucket).first();
+  return Number(row?.count || 1) <= limit;
+}
 function publicUser(u) { return u ? { id: u.id, username: u.username } : null; }
-async function players(env) { return (await env.DB.prepare("SELECT id, username, region, house, castle, account_id AS accountId, created_at AS createdAt FROM players ORDER BY created_at").all()).results; }
+async function players(env) { return (await env.DB.prepare("SELECT id, username, region, house, castle, created_at AS createdAt FROM players ORDER BY created_at").all()).results; }
 
 async function handleApi(request, env, url) {
   const method=request.method, path=url.pathname;
@@ -132,22 +162,22 @@ async function handleApi(request, env, url) {
   if (method === "POST" && path === "/api/auth/register") {
     const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||"");
     if(!validAccountUsername(username)) return json({error:"نام کاربری باید ۳ تا ۲۴ کاراکتر و فقط شامل حروف، عدد یا _ باشد."},400);
-    if(password.length<6) return json({error:"رمز عبور باید حداقل ۶ کاراکتر باشد."},400);
+    if(password.length<12 || password.length>MAX_PASSWORD_LENGTH) return json({error:"رمز عبور باید بین ۱۲ تا ۱۲۸ کاراکتر باشد."},400);
     const exists=await env.DB.prepare("SELECT id FROM users WHERE lower(username)=lower(?)").bind(username).first(); if(exists) return json({error:"این نام کاربری قبلاً ثبت شده است."},409);
     const h=await hashPassword(password), id=newId(); await env.DB.prepare("INSERT INTO users (id,username,salt,hash,created_at) VALUES (?,?,?,?,?)").bind(id,username,h.salt,h.hash,new Date().toISOString()).run();
-    const sid=await createSession(env,id); return new Response(JSON.stringify({ok:true,user:{id,username}}),{status:200,headers:{"content-type":"application/json","set-cookie":cookie("khata_session",sid)}});
+    await deleteSession(request,env);\n    const sid=await createSession(env,id); return new Response(JSON.stringify({ok:true,user:{id,username}}),{status:200,headers:{"content-type":"application/json","set-cookie":cookie("khata_session",sid)}});
   }
   if (method === "POST" && path === "/api/auth/login") {
-    const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||""); const u=await env.DB.prepare("SELECT * FROM users WHERE lower(username)=lower(?)").bind(username).first();
-    if(!u || !(await verifyPassword(password,u.salt,u.hash))) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); const sid=await createSession(env,u.id); return json({ok:true,user:publicUser(u)},200,{"set-cookie":cookie("khata_session",sid)});
+    const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||""); if(username.length>24 || password.length>MAX_PASSWORD_LENGTH) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); const u=await env.DB.prepare("SELECT * FROM users WHERE lower(username)=lower(?)").bind(username).first();
+    if(!u || !(await verifyPassword(password,u.salt,u.hash))) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); await deleteSession(request,env); const sid=await createSession(env,u.id); return json({ok:true,user:publicUser(u)},200,{"set-cookie":cookie("khata_session",sid)});
   }
-  if (method === "POST" && path === "/api/auth/logout") { await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
+  if (method === "POST" && path === "/api/auth/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
   if (method === "GET" && path === "/api/houses") return json(houses);
   if (method === "GET" && path === "/api/players") return json(await players(env));
-  const session=await requireAuth(request,env);
-  if (method === "GET" && path === "/api/my-castles") { if(!session) return json({error:"ابتدا وارد حساب کاربری شوید."},401); return json((await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(session.user_id).all()).results); }
+  const session=await getSession(request,env);\n  const userSession=await requireUser(request,env);
+  if (method === "GET" && path === "/api/my-castles") { if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); return json((await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(userSession.user_id).all()).results); }
   if (method === "POST" && path === "/api/register") {
-    if(!session) return json({error:"ابتدا وارد حساب کاربری شوید."},401); const b=await body(request), username=normalizeUsername(b.username), region=String(b.region||"").trim(), castle=String(b.castle||"").trim();
+    if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); const b=await body(request), username=normalizeUsername(b.username), region=String(b.region||"").trim(), castle=String(b.castle||"").trim();
     if(!validTelegramUsername(username)) return json({error:"Username تلگرام معتبر نیست. فقط حروف، عدد و _ و بین ۵ تا ۳۲ کاراکتر."},400); const selected=findCastle(region,castle); if(!selected) return json({error:"قلمرو یا قلعه معتبر نیست."},400);
     if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first()) return json({error:"این قلعه قبلاً توسط یک لرد انتخاب شده است."},409);
     if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first()) return json({error:"این Telegram Username قبلاً ثبت شده است."},409);
@@ -157,18 +187,18 @@ async function handleApi(request, env, url) {
   if (method === "POST" && path === "/api/admin/login") {
     if (!env.ADMIN_PASSWORD) return json({error:"رمز مدیر روی سرور تنظیم نشده است."},503);
     const b=await body(request);
-    if(String(b.password||"")!==String(env.ADMIN_PASSWORD)) return json({error:"رمز مدیر اشتباه است."},401);
-    const sid=await createSession(env,session?.user_id || "__admin__",1);
+    if(!(await constantTimeSecretEqual(String(b.password||""), String(env.ADMIN_PASSWORD)))) return json({error:"رمز مدیر اشتباه است."},401);
+    await deleteSession(request,env);\n    const sid=await createSession(env,"__admin__",1);
     return json({ok:true},200,{"set-cookie":cookie("khata_session",sid)});
   }
-  if (method === "POST" && path === "/api/admin/logout") { await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
+  if (method === "POST" && path === "/api/admin/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
   if (method === "GET" && path === "/api/admin/status") return json({admin:!!session?.is_admin});
   if (path === "/api/admin/players" && method === "POST") {
     if(!session?.is_admin) return json({error:"دسترسی مدیر لازم است."},401); const b=await body(request), username=normalizeUsername(b.username),region=String(b.region||"").trim(),castle=String(b.castle||"").trim(),selected=findCastle(region,castle); if(!validTelegramUsername(username)||!selected)return json({error:"اطلاعات واردشده معتبر نیست."},400);
     if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first())return json({error:"این قلعه قبلاً رزرو شده است."},409); if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first())return json({error:"این Username قبلاً ثبت شده است."},409);
     const p={id:newId(),username:"@"+username,region,house:selected.house,castle,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,null,p.created_at).run(); return json({player:p});
   }
-  if(path.startsWith("/api/admin/players/")&&method==="DELETE"){ if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401); const id=decodeURIComponent(path.split("/").pop()); const r=await env.DB.prepare("DELETE FROM players WHERE id=?").bind(id).run(); if(!r.meta.changes)return json({error:"پلیر پیدا نشد."},404); return json({ok:true}); }
+  if(path.startsWith("/api/admin/players/")&&method==="DELETE"){ if(!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401); const id=decodeURIComponent(path.split("/").pop()); const r=await env.DB.prepare("DELETE FROM players WHERE id=?").bind(id).run(); if(!r.meta.changes)return json({error:"پلیر پیدا نشد."},404); return json({ok:true}); }
   if(method==="GET"&&path.startsWith("/api/castles/")){const name=decodeURIComponent(path.slice("/api/castles/".length));const info=castleInfo[name];if(!info)return json({error:"اطلاعات قلعه پیدا نشد."},404);return json(info);}
   return json({error:"Not found"},404);
 }
@@ -178,7 +208,7 @@ export default {
     const url=new URL(request.url);
     try {
       if(url.pathname.startsWith("/api/")) return await handleApi(request,env,url);
-      return env.ASSETS.fetch(request);
-    } catch(e) { console.error(e); return json({error:"خطای داخلی سرور رخ داد."},500); }
+      const response = await env.ASSETS.fetch(request);\n      const headers = new Headers(response.headers);\n      for (const [key, value] of Object.entries(SECURITY_HEADERS)) headers.set(key, value);\n      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    } catch(e) { console.error(e); return json({error:e?.status ? e.message : "خطای داخلی سرور رخ داد."},e?.status || 500); }
   }
 };
