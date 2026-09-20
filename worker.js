@@ -249,6 +249,28 @@ async function handleApi(request, env, url) {
   return json({error:"Not found"},404);
 }
 
+async function serveCharacterImage(request, env, url) {
+  if (!url.pathname.startsWith("/assets/characters/") || !url.pathname.endsWith(".txt")) return null;
+  const source = await env.ASSETS.fetch(request);
+  if (!source.ok) return null;
+  const base64 = (await source.text()).trim();
+  try {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Response(bytes, {
+      status: 200,
+      headers: {
+        "Content-Type": "image/webp",
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff"
+      }
+    });
+  } catch {
+    return new Response("Invalid character image", { status: 500 });
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url=new URL(request.url);
