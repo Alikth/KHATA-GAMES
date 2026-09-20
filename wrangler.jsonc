@@ -13,8 +13,9 @@
       "database_name": "khata-games-db",
       "database_id": "17be93e3-805c-4d80-9bf1-7e01f4cf7367"
     }
-  ],
-  "vars": {
-    "ADMIN_PASSWORD": "khata-admin-2026"
+  ] ,
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": true }
   }
 }
