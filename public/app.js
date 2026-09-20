@@ -365,7 +365,8 @@ window.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("click", e => {
     const target = e.target.closest("[data-action]"); if (!target) return;
     const action = target.dataset.action;
-    if (action === "lord") { e.preventDefault(); e.stopPropagation(); window.khataOpenCharacter?.(target.dataset.lord); return; }\n    if (action === "region") openRegion(Number(target.dataset.index));
+    if (action === "lord") { e.preventDefault(); e.stopPropagation(); window.khataOpenCharacter?.(target.dataset.lord); return; }
+    if (action === "region") openRegion(Number(target.dataset.index));
     else if (action === "back-regions") backRegions();
     else if (action === "castle") openCastleDetails(Number(target.dataset.region), Number(target.dataset.castle));
     else if (action === "claim") openClaim(Number(target.dataset.region), Number(target.dataset.castle));
