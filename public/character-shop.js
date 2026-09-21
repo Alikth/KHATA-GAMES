@@ -26,12 +26,25 @@
   async function loadImage(path){
     if(!path)return "";
     try{
-      const r=await fetch(path,{cache:"force-cache"});
+      const r=await fetch(path,{cache:"no-store"});
       if(!r.ok)throw new Error("image fetch failed");
-      const type=(r.headers.get("content-type")||"").toLowerCase();
-      if(type.includes("image/"))return URL.createObjectURL(await r.blob());
-      const t=(await r.text()).trim();
-      return "data:image/webp;base64,"+t;
+      const buf=await r.arrayBuffer();
+      const bytes=new Uint8Array(buf);
+      const isWebP=bytes.length>=12 &&
+        bytes[0]===0x52 && bytes[1]===0x49 && bytes[2]===0x46 && bytes[3]===0x46 &&
+        bytes[8]===0x57 && bytes[9]===0x45 && bytes[10]===0x42 && bytes[11]===0x50;
+      const isPNG=bytes.length>=8 &&
+        bytes[0]===0x89 && bytes[1]===0x50 && bytes[2]===0x4e && bytes[3]===0x47;
+      const isJPG=bytes.length>=3 &&
+        bytes[0]===0xff && bytes[1]===0xd8 && bytes[2]===0xff;
+      if(isWebP||isPNG||isJPG){
+        const mime=isWebP?"image/webp":isPNG?"image/png":"image/jpeg";
+        return URL.createObjectURL(new Blob([buf],{type:mime}));
+      }
+      const t=new TextDecoder().decode(buf).trim();
+      if(!t)return "";
+      if(t.startsWith("data:image/"))return t;
+      return "data:image/webp;base64,"+t.replace(/\s+/g,"");
     }catch{return ""}
   }
   function css(){
