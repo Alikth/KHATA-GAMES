@@ -30,19 +30,7 @@
     return btoa(binary);
   }
   async function loadImage(path){
-    if(!path)return "";
-    try{
-      const r=await fetch(path,{cache:"no-store"});
-      if(!r.ok)throw new Error("image fetch failed");
-      const type=(r.headers.get("content-type")||"").toLowerCase();
-      if(type.includes("image/")){
-        const buffer=new Uint8Array(await r.arrayBuffer());
-        return "data:"+(type.split(";")[0]||"image/webp")+";base64,"+bytesToBase64(buffer);
-      }
-      const t=(await r.text()).trim();
-      if(!t)return "";
-      return "data:image/webp;base64,"+t;
-    }catch{return ""}
+    return path || "";
   }
   function css(){
     if(document.getElementById("khcs-style"))return;
