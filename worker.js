@@ -253,22 +253,58 @@ async function serveCharacterImage(request, env, url) {
   if (!url.pathname.startsWith("/assets/characters/") || !url.pathname.endsWith(".txt")) return null;
   const source = await env.ASSETS.fetch(request);
   if (!source.ok) return null;
-  const base64 = (await source.text()).trim();
-  try {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new Response(bytes, {
-      status: 200,
-      headers: {
-        "Content-Type": "image/webp",
-        "Cache-Control": "public, max-age=31536000, immutable",
-        "X-Content-Type-Options": "nosniff"
-      }
-    });
-  } catch {
-    return new Response("Invalid character image", { status: 500 });
+
+  const buffer = await source.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  const isWebP = bytes.length >= 12 &&
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+  const isPNG = bytes.length >= 8 &&
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a;
+  const isJPG = bytes.length >= 3 &&
+    bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+
+  let imageBytes = bytes;
+  let contentType = isWebP ? "image/webp" : isPNG ? "image/png" : isJPG ? "image/jpeg" : "";
+
+  if (!contentType) {
+    let text = new TextDecoder().decode(bytes).trim();
+    if (!text) return null;
+    if (text.startsWith("data:image/")) {
+      const comma = text.indexOf(",");
+      if (comma === -1) return null;
+      text = text.slice(comma + 1);
+    }
+    text = text.replace(/\s+/g, "");
+    try {
+      const binary = atob(text);
+      imageBytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) imageBytes[i] = binary.charCodeAt(i);
+    } catch {
+      return null;
+    }
+
+    const b = imageBytes;
+    if (b.length >= 12 &&
+        b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+        b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) contentType = "image/webp";
+    else if (b.length >= 8 &&
+        b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) contentType = "image/png";
+    else if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) contentType = "image/jpeg";
+    else return null;
   }
+
+  return new Response(imageBytes, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; img-src 'self' data:; object-src 'none'"
+    }
+  });
 }
 
 export default {
