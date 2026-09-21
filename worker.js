@@ -277,6 +277,8 @@ export default {
     try {
       await cleanupExpiredSessions(env);
       if(url.pathname.startsWith("/api/")) return await handleApi(request,env,url);
+      const characterImage = await serveCharacterImage(request, env, url);
+      if(characterImage) return characterImage;
       const response = await env.ASSETS.fetch(request);
       const headers = new Headers(response.headers);
       for (const [key, value] of Object.entries(SECURITY_HEADERS)) headers.set(key, value);
