@@ -1,14 +1,8 @@
-(async function(){
+(function(){
   if(!window.matchMedia('(max-width:600px)').matches)return;
   const hero=document.querySelector('.hero');
   if(!hero)return;
-  try{
-    const parts=await Promise.all(Array.from({length:4},(_,i)=>
-      fetch('/assets/mobile-hero-320.part'+i+'.txt?v=4',{cache:'no-store'}).then(r=>r.text())
-    ));
-    const b64=parts.join('').trim();
-    hero.style.backgroundImage='url("data:image/webp;base64,'+b64+'")';
-    hero.style.backgroundSize='cover';
-    hero.style.backgroundPosition='center center';
-  }catch(e){}
+  hero.style.backgroundImage='url("/assets/hero-4k.png?v=1")';
+  hero.style.backgroundSize='cover';
+  hero.style.backgroundPosition='center center';
 })();
