@@ -1,0 +1,12 @@
+/* Mobile visual polish */
+@media(max-width:600px){
+  .hero-top{position:relative;min-height:58px;}
+  .hero-top .site-logo{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:88px;height:58px;margin:0;z-index:3;}
+  .hero-copy h1,.hero-copy .eyebrow,.hero-copy .subtitle,.game-content h2,.game-number,.page-title h2,.page-title p{text-shadow:0 0 5px rgba(0,0,0,.98),0 0 12px rgba(0,0,0,.96),0 3px 18px rgba(0,0,0,.9);}
+  .hero-copy h1{filter:drop-shadow(0 0 4px rgba(0,0,0,.95));}
+  .hero-copy,.game-content,.page-title{position:relative;}
+  .hero-copy:before{content:"";position:absolute;left:50%;top:18%;transform:translate(-50%,-50%);width:92%;height:110px;background:radial-gradient(ellipse,rgba(0,0,0,.58),transparent 72%);z-index:-1;pointer-events:none;}
+  .game-content:before{content:"";position:absolute;inset:5px 8px;background:radial-gradient(ellipse,rgba(0,0,0,.62),transparent 72%);z-index:-1;pointer-events:none;}
+  .page-title h2,.game-content h2{font-weight:800;}
+}
+@media(max-width:380px){.hero-top .site-logo{width:82px;height:54px;}}
