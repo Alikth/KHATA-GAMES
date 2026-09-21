@@ -127,8 +127,18 @@
   }
   function init(){
     css();renderRegionTabs();setupModal();setupShop();
-    characters.forEach(c=>c._image=c.image);
-    render("The North");
+    characters.forEach(c=>c._image="");
+    let activeRegion="The North";
+    render(activeRegion);
+    characters.forEach(async c=>{
+      const image=await loadImage(c.image);
+      c._image=image;
+      if(c.region===activeRegion) render(activeRegion);
+    });
+    document.addEventListener("click",e=>{
+      const r=e.target.closest("[data-khcs-region]");
+      if(r) activeRegion=r.dataset.khcsRegion;
+    });
   }
   document.addEventListener("click",e=>{
     const r=e.target.closest("[data-khcs-region]");if(r){render(r.dataset.khcsRegion);document.querySelectorAll("[data-khcs-region]").forEach(b=>b.classList.toggle("active",b===r))}
