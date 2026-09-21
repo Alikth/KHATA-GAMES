@@ -3,8 +3,8 @@
   const hero=document.querySelector('.hero');
   if(!hero)return;
   try{
-    const parts=await Promise.all(Array.from({length:6},(_,i)=>
-      fetch('/assets/mobile-hero-384.part'+i+'.txt?v=2',{cache:'no-store'}).then(r=>r.text())
+    const parts=await Promise.all(Array.from({length:3},(_,i)=>
+      fetch('/assets/mobile-hero-320.part'+i+'.txt?v=3',{cache:'no-store'}).then(r=>r.text())
     ));
     const b64=parts.join('').trim();
     hero.style.backgroundImage='url("data:image/webp;base64,'+b64+'")';
