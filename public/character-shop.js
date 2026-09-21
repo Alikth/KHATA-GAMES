@@ -136,9 +136,12 @@
     document.querySelectorAll("[data-khcs-shop]").forEach(b=>b.classList.toggle("active",b.dataset.khcsShop===k));
     root.innerHTML='<div class="khcs-head"><h3>'+esc(categories[k])+'</h3><p>محتوای این دسته هنوز اضافه نشده است.</p></div>'+empty(categories[k],"بعداً آیتم‌های این دسته اضافه می‌شوند.");
   }
-  async function init(){
-    css();renderRegionTabs();setupModal();setupShop();
-    await Promise.all(characters.map(async c=>c._image=await loadImage(c.image)));
+  function init(){
+    css();
+    renderRegionTabs();
+    setupModal();
+    setupShop();
+    characters.forEach(c=>c._image=c.image);
     render("The North");
   }
   document.addEventListener("click",e=>{
