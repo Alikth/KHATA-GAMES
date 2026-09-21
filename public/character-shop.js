@@ -1,7 +1,7 @@
 (() => {
   const characters = [
     {id:"sam-stark",name:"Sam Stark",region:"The North",castle:"Winterfell",house:"Stark",age:41,premium:true,image:"/assets/characters/sam-stark-300q68.txt",about:"Sam Stark، لرد ۴۱ ساله‌ی وینترفل، مردی‌ست که زمستان‌های طولانی شمال را با سختی و سکوت پشت سر گذاشته است. زخم روی صورتش یادگار نبردی‌ست که او را تغییر داد؛ اما چیزی که در نگاهش باقی مانده، اراده‌ای سرد و محکم برای حفظ وینترفل است. اکنون در وینترفل، هر تصمیم او می‌تواند سرنوشت خاندان استارک و سرزمین‌های شمال را تغییر دهد."},
-    {id:"roderick-bolton",name:"Roderick Bolton",region:"The North",castle:"Dreadfort",house:"Bolton",age:38,premium:false,image:"/assets/characters/roderick-bolton-1536.jpg",about:"Roderick Bolton، لرد ۳۸ ساله‌ی Dreadfort، از میان سرمای بی‌رحم شمال برخاسته؛ جایی که ترس گاهی از شمشیر قدرتمندتر است. او مردی آرام و حسابگر است که پیش از هر تصمیم، چند قدم جلوتر از دشمنانش را می‌بیند. دیوارهای سرد Dreadfort برای او نمادی از قدرت خاندان بولتون‌اند."},
+    {id:"roderick-bolton",name:"Roderick Bolton",region:"The North",castle:"Dreadfort",house:"Bolton",age:38,premium:false,image:"/assets/characters/roderick-bolton-300q68.txt",about:"Roderick Bolton، لرد ۳۸ ساله‌ی Dreadfort، از میان سرمای بی‌رحم شمال برخاسته؛ جایی که ترس گاهی از شمشیر قدرتمندتر است. او مردی آرام و حسابگر است که پیش از هر تصمیم، چند قدم جلوتر از دشمنانش را می‌بیند. دیوارهای سرد Dreadfort برای او نمادی از قدرت خاندان بولتون‌اند."},
     {id:"edrik-karstark",name:"Edrik Karstark",region:"The North",castle:"Karhold",house:"Karstark",age:28,premium:false,image:"/assets/characters/edrik-karstark-300q68.txt",about:"Edrik Karstark، لرد ۲۸ ساله‌ی Karhold، از نسل جنگجویانی برخاسته که سرمای شمال را بخشی از وجود خود می‌دانند. جوان است، اما در نگاهش چیزی از بی‌تجربگی دیده نمی‌شود. زخم روی پیشانی‌اش یادگاری از نبردی است که او را به فرمانروایی محتاط تبدیل کرد."},
     {id:"elyas-tully",name:"Elyas Tully",region:"Riverlands",castle:"The Twins",house:"Tully",age:40,premium:true,image:"/assets/characters/edric-tully-300q52.txt",about:"Elyas Tully، لرد ۴۰ ساله‌ی The Twins، در قلب سرزمین‌های رودخانه‌ای میان وفاداری خاندان، سیاست و خطر دائمی جنگ فرمان می‌راند. او مردی آرام و حسابگر است که می‌داند هر پیمان می‌تواند روزی به یک جنگ تبدیل شود؛ برای همین، پیش از هر تصمیم مسیر رودخانه و شمشیر را با هم می‌سنجد."},
     {id:"walder-frey",name:"Walder Frey",region:"Riverlands",castle:"The Twins",house:"Frey",age:34,premium:false,image:"/assets/characters/walder-frey-300q68.txt",about:"Walder Frey، لرد ۳۴ ساله‌ی خاندان Frey، در The Twins بر یکی از مهم‌ترین گذرگاه‌های Riverlands فرمان می‌راند. او مردی جاه‌طلب و حسابگر است که ارزش هر پیمان و هر اتحاد را به‌خوبی می‌داند. برای Walder، قدرت همیشه در میدان نبرد به دست نمی‌آید؛ گاهی کنترل یک گذرگاه و دانستن زمان درست برای مذاکره، از هزار شمشیر ارزشمندتر است."},
@@ -15,22 +15,32 @@
     {id:"addam-marbrand",name:"Addam Marbrand",region:"Westerlands",castle:"Ashemark",house:"Marbrand",age:29,premium:false,image:"/assets/characters/addam-marbrand-300q15.txt",about:"Addam Marbrand، لرد ۲۹ ساله‌ی Ashemark، از خاندان Marbrand در Westerlands برخاسته است. جوان و جسور است و به سرعت عمل و حملات غافلگیرکننده تکیه دارد. Addam تلاش می‌کند در کنار وفاداری به خاندانش، جایگاه Marbrand را میان خاندان‌های قدرتمند Westerlands بالاتر ببرد."},
     {id:"euron-greyjoy",name:"Euron Greyjoy",region:"Iron Islands",castle:"Pyke",house:"Greyjoy",age:39,premium:true,image:"/assets/characters/euron-greyjoy-300q68.txt",about:"Euron Greyjoy، یکی از جنگجویان برجسته‌ی خاندان Greyjoy، از دژ سنگی Pyke بر جزایر آهنین فرمان می‌راند. او مردی بی‌رحم، جسور و غیرقابل‌پیش‌بینی است که دریا را همانند میدان نبرد خود می‌شناسد. برای Euron، ترس دشمنان یک سلاح است و کسی که در برابر طوفان عقب‌نشینی کند، شایسته‌ی فرمانروایی بر Iron Islands نیست."},
     {id:"maron-harlaw",name:"Maron Harlaw",region:"Iron Islands",castle:"Ten Towers",house:"Harlaw",age:35,premium:true,image:"/assets/characters/maron-harlaw-300q68.txt",about:"Maron Harlaw، لرد ۳۵ ساله‌ی خاندان Harlaw، از دژ Ten Towers بر یکی از قدرتمندترین خاندان‌های Iron Islands فرمان می‌راند. او مردی آرام اما خطرناک است که قدرت خود را بیشتر با حسابگری و صبر نشان می‌دهد تا خشم و هیاهو. Maron می‌داند که در جزایر آهنین، احترام گرفتن آسان نیست و تنها کسانی دوام می‌آورند که هم قدرت جنگیدن داشته باشند و هم زمان مناسب برای حمله را بشناسند."},
-    {id:"vaeron-targaryen",name:"Vaeron Targaryen",region:"Crownlands",castle:"Dragonstone",house:"Targaryen",age:30,premium:true,image:"/assets/characters/vaeron-targaryen-300q15.txt",about:"Vaelor Targaryen، لرد ۳۰ ساله‌ی Dragonstone، وارث یکی از کهن‌ترین خاندان‌های وستروس است. او با اژدها و آتش پیوندی عمیق دارد و از قلعه‌ی سنگی Dragonstone بر آب‌های Crownlands نظارت می‌کند. Vaelor مردی سرد و باوقار است که قدرت خاندانش را نه تنها در شمشیر، بلکه در میراث والریایی و ترس دشمنان از نام Targaryen می‌بیند."},
+    {id:"vaeron-targaryen",name:"Vaeron Targaryen",region:"Crownlands",castle:"Dragonstone",house:"Targaryen",age:30,premium:true,image:"/assets/characters/vaeron-targaryen-300q15.txt",about:"Vaeron Targaryen، لرد ۳۰ ساله‌ی Dragonstone، وارث یکی از کهن‌ترین خاندان‌های وستروس است. او با اژدها و آتش پیوندی عمیق دارد و از قلعه‌ی سنگی Dragonstone بر آب‌های Crownlands نظارت می‌کند. Vaeron مردی سرد و باوقار است که قدرت خاندانش را نه تنها در شمشیر، بلکه در میراث والریایی و ترس دشمنان از نام Targaryen می‌بیند."},
     {id:"lucan-bar-emmon",name:"Lucan Bar Emmon",region:"Crownlands",castle:"Sharp Point",house:"Bar Emmon",age:42,premium:false,image:"/assets/characters/lucan-bar-emmon-300q15.txt",about:"Lucan Bar Emmon، لرد ۴۲ ساله‌ی Sharp Point، از خاندان Bar Emmon و یکی از نجیب‌زادگان قدیمی Crownlands است. سال‌ها تجربه به او آموخته که قدرت یک دژ ساحلی تنها به دیوارهایش وابسته نیست؛ بلکه به کشتی‌ها، دیده‌بان‌ها و توانایی کنترل مسیرهای دریایی بستگی دارد. Lucan آرام و محتاط است و پیش از هر نبرد، به دنبال راهی برای تبدیل موقعیت جغرافیایی قلعه به برتری می‌گردد."}
   ];
   const regions=["The North","Riverlands","Vale","Iron Islands","Westerlands","Crownlands","Stormlands","Reach","Dorne","The Wall"];
   const categories={founding:"تأسیس",packs:"پک‌ها",items:"آیتم‌ها",special:"ویژه"};
-  window.khataLordByCastle={Winterfell:"sam-stark",Dreadfort:"roderick-bolton",Karhold:"edrik-karstark","The Twins":"elyas-tully",Seagard:"harwyn-mallister","The Eyrie":"elyon-arryn",Gulltown:"marq-grafton",Redfort:"alric-redfort",Pyke:"euron-greyjoy","Ten Towers":"maron-harlaw",Dragonstone:"vaeron-targaryen","Sharp Point":"lucan-bar-emmon"};
+  window.khataLordByCastle={Winterfell:"sam-stark",Dreadfort:"roderick-bolton",Karhold:"edrik-karstark","The Twins":"elyas-tully",Seagard:"harwyn-mallister","The Eyrie":"elyon-arryn",Gulltown:"marq-grafton",Redfort:"alric-redfort",Pyke:"euron-greyjoy","Ten Towers":"maron-harlaw",Hammerhorn:"gorold-goodbrother","Casterly Rock":"damon-lannister",Hornvale:"tytos-brax",Ashemark:"addam-marbrand",Dragonstone:"vaeron-targaryen","Sharp Point":"lucan-bar-emmon"};
 
   const esc=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
+  function bytesToBase64(bytes){
+    let binary="";
+    const chunk=0x8000;
+    for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));
+    return btoa(binary);
+  }
   async function loadImage(path){
     if(!path)return "";
     try{
-      const r=await fetch(path,{cache:"force-cache"});
+      const r=await fetch(path,{cache:"no-store"});
       if(!r.ok)throw new Error("image fetch failed");
       const type=(r.headers.get("content-type")||"").toLowerCase();
-      if(type.includes("image/"))return URL.createObjectURL(await r.blob());
+      if(type.includes("image/")){
+        const buffer=new Uint8Array(await r.arrayBuffer());
+        return "data:"+(type.split(";")[0]||"image/webp")+";base64,"+bytesToBase64(buffer);
+      }
       const t=(await r.text()).trim();
+      if(!t)return "";
       return "data:image/webp;base64,"+t;
     }catch{return ""}
   }
