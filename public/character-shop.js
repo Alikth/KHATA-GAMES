@@ -46,14 +46,26 @@
     try{
       const r=await fetch(path,{cache:"no-store"});
       if(!r.ok)throw new Error("image fetch failed");
-      const type=(r.headers.get("content-type")||"").toLowerCase();
-      if(type.includes("image/")){
-        const buffer=new Uint8Array(await r.arrayBuffer());
-        return "data:"+(type.split(";")[0]||"image/webp")+";base64,"+bytesToBase64(buffer);
+      const buffer=new Uint8Array(await r.arrayBuffer());
+      const isWebP=buffer.length>=12&&buffer[0]===0x52&&buffer[1]===0x49&&buffer[2]===0x46&&buffer[3]===0x46&&buffer[8]===0x57&&buffer[9]===0x45&&buffer[10]===0x42&&buffer[11]===0x50;
+      const isPNG=buffer.length>=8&&buffer[0]===0x89&&buffer[1]===0x50&&buffer[2]===0x4e&&buffer[3]===0x47&&buffer[4]===0x0d&&buffer[5]===0x0a&&buffer[6]===0x1a&&buffer[7]===0x0a;
+      const isJPG=buffer.length>=3&&buffer[0]===0xff&&buffer[1]===0xd8&&buffer[2]===0xff;
+      if(isWebP||isPNG||isJPG){
+        const mime=isWebP?"image/webp":isPNG?"image/png":"image/jpeg";
+        return "data:"+mime+";base64,"+bytesToBase64(buffer);
       }
-      const t=(await r.text()).trim();
+      const t=new TextDecoder().decode(buffer).trim();
       if(!t)return "";
-      return "data:image/webp;base64,"+t;
+      const raw=t.startsWith("data:image/")?t.slice(t.indexOf(",")+1):t;
+      const binary=atob(raw.replace(/\\s+/g,""));
+      const decoded=new Uint8Array(binary.length);
+      for(let i=0;i<binary.length;i++)decoded[i]=binary.charCodeAt(i);
+      const dWebP=decoded.length>=12&&decoded[0]===0x52&&decoded[1]===0x49&&decoded[2]===0x46&&decoded[3]===0x46&&decoded[8]===0x57&&decoded[9]===0x45&&decoded[10]===0x42&&decoded[11]===0x50;
+      const dPNG=decoded.length>=8&&decoded[0]===0x89&&decoded[1]===0x50&&decoded[2]===0x4e&&decoded[3]===0x47&&decoded[4]===0x0d&&decoded[5]===0x0a&&decoded[6]===0x1a&&decoded[7]===0x0a;
+      const dJPG=decoded.length>=3&&decoded[0]===0xff&&decoded[1]===0xd8&&decoded[2]===0xff;
+      if(!dWebP&&!dPNG&&!dJPG)return "";
+      const mime=dWebP?"image/webp":dPNG?"image/png":"image/jpeg";
+      return "data:"+mime+";base64,"+bytesToBase64(decoded);
     }catch{return ""}
   }
   function css(){
