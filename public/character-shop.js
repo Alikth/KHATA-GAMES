@@ -18,58 +18,17 @@
     {id:"vaeron-targaryen",name:"Vaeron Targaryen",region:"Crownlands",castle:"Dragonstone",house:"Targaryen",age:30,premium:true,image:"/assets/characters/vaeron-targaryen-300q15.webp",about:"Vaeron Targaryen، لرد ۳۰ ساله‌ی Dragonstone، وارث یکی از کهن‌ترین خاندان‌های وستروس است. او با اژدها و آتش پیوندی عمیق دارد و از قلعه‌ی سنگی Dragonstone بر آب‌های Crownlands نظارت می‌کند. Vaeron مردی سرد و باوقار است که قدرت خاندانش را نه تنها در شمشیر، بلکه در میراث والریایی و ترس دشمنان از نام Targaryen می‌بیند."},
     {id:"lucan-bar-emmon",name:"Lucan Bar Emmon",region:"Crownlands",castle:"Sharp Point",house:"Bar Emmon",age:42,premium:false,image:"/assets/characters/lucan-bar-emmon-300q15.webp",about:"Lucan Bar Emmon، لرد ۴۲ ساله‌ی Sharp Point، از خاندان Bar Emmon و یکی از نجیب‌زادگان قدیمی Crownlands است. سال‌ها تجربه به او آموخته که قدرت یک دژ ساحلی تنها به دیوارهایش وابسته نیست؛ بلکه به کشتی‌ها، دیده‌بان‌ها و توانایی کنترل مسیرهای دریایی بستگی دارد. Lucan آرام و محتاط است و پیش از هر نبرد، به دنبال راهی برای تبدیل موقعیت جغرافیایی قلعه به برتری می‌گردد."}
   ];
+
   const regions=["The North","Riverlands","Vale","Iron Islands","Westerlands","Crownlands","Stormlands","Reach","Dorne","The Wall"];
   const categories={founding:"تأسیس",packs:"پک‌ها",items:"آیتم‌ها",special:"ویژه"};
   window.khataLordByCastle={Winterfell:"sam-stark",Dreadfort:"roderick-bolton",Karhold:"edrik-karstark","The Twins":"elyas-tully",Seagard:"harwyn-mallister","The Eyrie":"elyon-arryn",Gulltown:"marq-grafton",Redfort:"alric-redfort",Pyke:"euron-greyjoy","Ten Towers":"maron-harlaw",Hammerhorn:"gorold-goodbrother","Casterly Rock":"damon-lannister",Hornvale:"tytos-brax",Ashemark:"addam-marbrand",Dragonstone:"vaeron-targaryen","Sharp Point":"lucan-bar-emmon"};
 
   const esc=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
-  function bytesToBase64(bytes){
-    let binary="";
-    const chunk=0x8000;
-    for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));
-    return btoa(binary);
-  }
-  function imageMime(bytes){
-    if(bytes.length>=12 && bytes[0]===0x52 && bytes[1]===0x49 && bytes[2]===0x46 && bytes[3]===0x46 && bytes[8]===0x57 && bytes[9]===0x45 && bytes[10]===0x42 && bytes[11]===0x50) return "image/webp";
-    if(bytes.length>=8 && bytes[0]===0x89 && bytes[1]===0x50 && bytes[2]===0x4e && bytes[3]===0x47 && bytes[4]===0x0d && bytes[5]===0x0a && bytes[6]===0x1a && bytes[7]===0x0a) return "image/png";
-    if(bytes.length>=3 && bytes[0]===0xff && bytes[1]===0xd8 && bytes[2]===0xff) return "image/jpeg";
-    return "";
-  }
-  function toDataUrl(bytes,mime){return "data:"+mime+";base64,"+bytesToBase64(bytes)}
-  function decodeBase64Image(text){
-    let t=String(text||"").trim().replace(/^data:image\\/[^,]+,/i,"").replace(/\\s+/g,"");
-    for(let pass=0;pass<2;pass++){
-      try{
-        const raw=atob(t);
-        const bytes=new Uint8Array(raw.length);
-        for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
-        const mime=imageMime(bytes);
-        if(mime)return toDataUrl(bytes,mime);
-        const decoded=new TextDecoder().decode(bytes).trim();
-        if(decoded && /^[A-Za-z0-9+/=_-]+$/.test(decoded)) t=decoded; else break;
-      }catch{break}
-    }
-    return "";
-  }
-  async function loadImage(path){
-    if(!path)return "";
-    const candidates=[path,path.replace(/\\.webp$/,".txt")];
-    for(const url of candidates){
-      try{
-        const r=await fetch(url,{cache:"no-store"});
-        if(!r.ok)continue;
-        const bytes=new Uint8Array(await r.arrayBuffer());
-        const mime=imageMime(bytes);
-        if(mime)return toDataUrl(bytes,mime);
-        const legacy=decodeBase64Image(new TextDecoder().decode(bytes));
-        if(legacy)return legacy;
-      }catch{}
-    }
-    return "";
-  }
+
   function css(){
     if(document.getElementById("khcs-style"))return;
-    const s=document.createElement("style");s.id="khcs-style";
+    const s=document.createElement("style");
+    s.id="khcs-style";
     s.textContent=`
       .khcs-region-tabs{display:flex;gap:8px;overflow:auto;margin-top:22px;padding:4px 0 12px}
       .khcs-region-tab{flex:0 0 auto;border:1px solid rgba(255,255,255,.1);background:#0d0d0d;color:#888;padding:10px 14px;cursor:pointer;font:11px Cinzel,serif}
@@ -78,7 +37,8 @@
       .khcs-card{position:relative;padding:0;border:1px solid rgba(255,255,255,.1);background:#0a0a0a;color:inherit;text-align:right;cursor:pointer;overflow:hidden;width:100%}
       .khcs-card:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.3)}
       .khcs-card-img{width:100%;aspect-ratio:1/1;object-fit:contain;display:block;background:#111}
-      .khcs-card-body{padding:15px 16px 17px}.khcs-card-body h3{margin:0;color:#e8e8e8;font:600 20px Cinzel,serif}
+      .khcs-card-body{padding:15px 16px 17px}
+      .khcs-card-body h3{margin:0;color:#e8e8e8;font:600 20px Cinzel,serif}
       .khcs-card-body p{margin:8px 0;color:#858585;line-height:1.8;font-size:13px}
       .khcs-badge{position:absolute;top:12px;left:12px;padding:5px 9px;border:1px solid #777;background:#080808cc;color:#ddd;font:10px Cinzel,serif}
       .khcs-meta{display:flex;gap:7px;flex-wrap:wrap;color:#777;font-size:11px}.khcs-meta span{border:1px solid rgba(255,255,255,.08);padding:4px 7px}
@@ -91,63 +51,145 @@
       .khcs-empty{text-align:center;padding:90px 20px;color:#666}.khcs-empty-mark{font-size:34px;color:#555}.khcs-empty h3{color:#aaa}.khcs-empty p{color:#666}
       .khcs-modal{max-width:980px}.khcs-detail{display:grid;grid-template-columns:minmax(260px,380px) 1fr;gap:28px;align-items:center}
       .khcs-detail img{width:100%;aspect-ratio:1/1;max-height:650px;object-fit:contain;background:#111}.khcs-detail h2{margin:0;font:600 31px Cinzel,serif;color:#eee}.khcs-detail p{margin-top:15px;color:#999;line-height:2}
-      .lord-link{display:inline-block;margin-top:10px;padding:7px 11px;border:1px solid rgba(255,255,255,.15);color:#aaa;font-size:11px;cursor:pointer}
-      .lord-link:hover{color:#eee;border-color:#9c0000}
       @media(max-width:760px){.khcs-shop{grid-template-columns:1fr}.khcs-shop-side{order:-1;display:grid;grid-template-columns:1fr 1fr}.khcs-detail{grid-template-columns:1fr}.khcs-detail img{max-height:430px}}
       @media(max-width:470px){.khcs-shop-side{grid-template-columns:1fr}}
     `;
     document.head.appendChild(s);
   }
-  function empty(t,p){return '<div class="khcs-empty"><div class="khcs-empty-mark">◈</div><h3>'+esc(t)+'</h3><p>'+esc(p)+'</p></div>'}
-  function renderRegionTabs(){
-    const root=document.getElementById("khcs-region-tabs"); if(!root)return;
-    root.innerHTML=regions.map((r,i)=>'<button class="khcs-region-tab '+(i===0?"active":"")+'" type="button" data-khcs-region="'+esc(r)+'">'+esc(r)+'</button>').join("");
+
+  function empty(t,p){
+    return '<div class="khcs-empty"><div class="khcs-empty-mark">◈</div><h3>'+esc(t)+'</h3><p>'+esc(p)+'</p></div>';
   }
+
+  function renderRegionTabs(){
+    const root=document.getElementById("khcs-region-tabs");
+    if(!root)return;
+    root.innerHTML="";
+    regions.forEach((region,i)=>{
+      const btn=document.createElement("button");
+      btn.className="khcs-region-tab"+(i===0?" active":"");
+      btn.type="button";
+      btn.dataset.khcsRegion=region;
+      btn.textContent=region;
+      root.appendChild(btn);
+    });
+  }
+
   function render(region){
-    const root=document.getElementById("khcs-character-root"); if(!root)return;
+    const root=document.getElementById("khcs-character-root");
+    if(!root)return;
     const list=characters.filter(c=>c.region===region);
     if(!list.length){root.innerHTML=empty(region,"هنوز کاراکتری برای این اقلیم ثبت نشده است.");return}
-    root.innerHTML='<div class="khcs-grid">'+list.map(c=>'<button class="khcs-card" type="button" data-khcs-character="'+c.id+'"><div style="position:relative"><img class="khcs-card-img" src="'+c._image+'" alt="'+esc(c.name)+'" onerror="this.onerror=null;this.src=this.src.replace(/\\.webp$/,".txt")">'+(c.premium?'<span class="khcs-badge">PREMIUM</span>':"")+'</div><div class="khcs-card-body"><h3>'+esc(c.name)+'</h3><p>'+esc(c.about)+'</p><div class="khcs-meta"><span>'+esc(c.castle)+'</span><span>HOUSE '+esc(c.house)+'</span><span>AGE '+c.age+'</span></div></div></button>').join("")+'</div>';
+    root.innerHTML="";
+    const grid=document.createElement("div");
+    grid.className="khcs-grid";
+    list.forEach(c=>{
+      const card=document.createElement("button");
+      card.className="khcs-card";
+      card.type="button";
+      card.dataset.khcsCharacter=c.id;
+
+      const media=document.createElement("div");
+      media.style.position="relative";
+
+      const img=document.createElement("img");
+      img.className="khcs-card-img";
+      img.alt=c.name;
+      img.src=c.image;
+      media.appendChild(img);
+
+      if(c.premium){
+        const badge=document.createElement("span");
+        badge.className="khcs-badge";
+        badge.textContent="PREMIUM";
+        media.appendChild(badge);
+      }
+
+      const body=document.createElement("div");
+      body.className="khcs-card-body";
+      body.innerHTML='<h3>'+esc(c.name)+'</h3><p>'+esc(c.about)+'</p><div class="khcs-meta"><span>'+esc(c.castle)+'</span><span>HOUSE '+esc(c.house)+'</span><span>AGE '+c.age+'</span></div>';
+
+      card.append(media,body);
+      grid.appendChild(card);
+    });
+    root.appendChild(grid);
   }
+
   function setupModal(){
     if(document.getElementById("khcs-modal"))return;
-    const m=document.createElement("div");m.id="khcs-modal";m.className="modal hidden";
+    const m=document.createElement("div");
+    m.id="khcs-modal";
+    m.className="modal hidden";
     m.innerHTML='<div class="modal-card khcs-modal"><button class="close" id="khcs-close">×</button><div id="khcs-detail"></div></div>';
     document.body.appendChild(m);
-    m.addEventListener("click",e=>{if(e.target===m||e.target.id==="khcs-close"){m.classList.add("hidden");document.body.classList.remove("modal-open")}});
+    m.addEventListener("click",e=>{
+      if(e.target===m||e.target.id==="khcs-close"){
+        m.classList.add("hidden");
+        document.body.classList.remove("modal-open");
+      }
+    });
   }
-  window.khataOpenCharacter=async id=>{
-    const c=characters.find(x=>x.id===id);if(!c)return;
+
+  window.khataOpenCharacter=function(id){
+    const c=characters.find(x=>x.id===id);
+    if(!c)return;
     document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id==="characters"));
     document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active",b.dataset.page==="characters"));
     document.querySelectorAll("[data-khcs-region]").forEach(b=>b.classList.toggle("active",b.dataset.khcsRegion===c.region));
     render(c.region);
-    const m=document.getElementById("khcs-modal"),d=document.getElementById("khcs-detail");
-    d.innerHTML='<div class="khcs-detail"><img src="'+c._image+'" alt="'+esc(c.name)+'" onerror="this.onerror=null;this.src=this.src.replace(/\\.webp$/,".txt")"><div><div class="eyebrow">'+(c.premium?"PREMIUM CHARACTER":"CHARACTER")+'</div><h2>'+esc(c.name)+'</h2><div class="khcs-meta"><span>'+esc(c.region)+'</span><span>'+esc(c.castle)+'</span><span>HOUSE '+esc(c.house)+'</span><span>AGE '+c.age+'</span></div><p>'+esc(c.about)+'</p></div></div>';
-    m.classList.remove("hidden");document.body.classList.add("modal-open");
+    const m=document.getElementById("khcs-modal");
+    const d=document.getElementById("khcs-detail");
+    d.innerHTML='<div class="khcs-detail"><img src="'+esc(c.image)+'" alt="'+esc(c.name)+'"><div><div class="eyebrow">'+(c.premium?"PREMIUM CHARACTER":"CHARACTER")+'</div><h2>'+esc(c.name)+'</h2><div class="khcs-meta"><span>'+esc(c.region)+'</span><span>'+esc(c.castle)+'</span><span>HOUSE '+esc(c.house)+'</span><span>AGE '+c.age+'</span></div><p>'+esc(c.about)+'</p></div></div>';
+    m.classList.remove("hidden");
+    document.body.classList.add("modal-open");
   };
+
   function setupShop(){
-    const side=document.getElementById("khcs-shop-side"); if(!side)return;
-    side.innerHTML=Object.entries(categories).map(([k,v],i)=>'<button class="khcs-tab '+(i===0?"active":"")+'" type="button" data-khcs-shop="'+k+'"><span>'+v+'</span><small>'+k.toUpperCase()+'</small></button>').join("");
+    const side=document.getElementById("khcs-shop-side");
+    if(!side)return;
+    side.innerHTML="";
+    Object.entries(categories).forEach(([k,v],i)=>{
+      const btn=document.createElement("button");
+      btn.className="khcs-tab"+(i===0?" active":"");
+      btn.type="button";
+      btn.dataset.khcsShop=k;
+      btn.innerHTML='<span>'+esc(v)+'</span><small>'+k.toUpperCase()+'</small>';
+      side.appendChild(btn);
+    });
     openShop("founding");
   }
+
   function openShop(k){
-    const root=document.getElementById("khcs-shop-main");if(!root)return;
+    const root=document.getElementById("khcs-shop-main");
+    if(!root)return;
     document.querySelectorAll("[data-khcs-shop]").forEach(b=>b.classList.toggle("active",b.dataset.khcsShop===k));
     root.innerHTML='<div class="khcs-head"><h3>'+esc(categories[k])+'</h3><p>محتوای این دسته هنوز اضافه نشده است.</p></div>'+empty(categories[k],"بعداً آیتم‌های این دسته اضافه می‌شوند.");
   }
+
   function init(){
     css();
     renderRegionTabs();
     setupModal();
     setupShop();
-    characters.forEach(c=>c._image=c.image);
     render("The North");
   }
+
   document.addEventListener("click",e=>{
-    const r=e.target.closest("[data-khcs-region]");if(r){render(r.dataset.khcsRegion);document.querySelectorAll("[data-khcs-region]").forEach(b=>b.classList.toggle("active",b===r))}
-    const c=e.target.closest("[data-khcs-character]");if(c)window.khataOpenCharacter(c.dataset.khcsCharacter);
-    const s=e.target.closest("[data-khcs-shop]");if(s)openShop(s.dataset.khcsShop);
+    const r=e.target.closest("[data-khcs-region]");
+    if(r){
+      render(r.dataset.khcsRegion);
+      document.querySelectorAll("[data-khcs-region]").forEach(b=>b.classList.toggle("active",b===r));
+      return;
+    }
+    const c=e.target.closest("[data-khcs-character]");
+    if(c){
+      window.khataOpenCharacter(c.dataset.khcsCharacter);
+      return;
+    }
+    const s=e.target.closest("[data-khcs-shop]");
+    if(s)openShop(s.dataset.khcsShop);
   });
-  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
+
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});
+  else init();
 })();
