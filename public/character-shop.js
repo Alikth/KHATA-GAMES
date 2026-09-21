@@ -72,7 +72,7 @@
     const root=document.getElementById("khcs-character-root"); if(!root)return;
     const list=characters.filter(c=>c.region===region);
     if(!list.length){root.innerHTML=empty(region,"هنوز کاراکتری برای این اقلیم ثبت نشده است.");return}
-    root.innerHTML='<div class="khcs-grid">'+list.map(c=>'<button class="khcs-card" type="button" data-khcs-character="'+c.id+'"><div style="position:relative"><img class="khcs-card-img" src="'+c._image+'" alt="'+esc(c.name)+'">'+(c.premium?'<span class="khcs-badge">PREMIUM</span>':"")+'</div><div class="khcs-card-body"><h3>'+esc(c.name)+'</h3><p>'+esc(c.about)+'</p><div class="khcs-meta"><span>'+esc(c.castle)+'</span><span>HOUSE '+esc(c.house)+'</span><span>AGE '+c.age+'</span></div></div></button>').join("")+'</div>';
+    root.innerHTML='<div class="khcs-grid">'+list.map(c=>'<button class="khcs-card" type="button" data-khcs-character="'+c.id+'"><div style="position:relative"><img class="khcs-card-img" src="'+c._image+'" alt="'+esc(c.name)+'" onerror="this.onerror=null;this.src=this.src.replace(/\.webp$/,'.txt')">'+(c.premium?'<span class="khcs-badge">PREMIUM</span>':"")+'</div><div class="khcs-card-body"><h3>'+esc(c.name)+'</h3><p>'+esc(c.about)+'</p><div class="khcs-meta"><span>'+esc(c.castle)+'</span><span>HOUSE '+esc(c.house)+'</span><span>AGE '+c.age+'</span></div></div></button>').join("")+'</div>';
   }
   function setupModal(){
     if(document.getElementById("khcs-modal"))return;
@@ -88,7 +88,7 @@
     document.querySelectorAll("[data-khcs-region]").forEach(b=>b.classList.toggle("active",b.dataset.khcsRegion===c.region));
     render(c.region);
     const m=document.getElementById("khcs-modal"),d=document.getElementById("khcs-detail");
-    d.innerHTML='<div class="khcs-detail"><img src="'+c._image+'" alt="'+esc(c.name)+'"><div><div class="eyebrow">'+(c.premium?"PREMIUM CHARACTER":"CHARACTER")+'</div><h2>'+esc(c.name)+'</h2><div class="khcs-meta"><span>'+esc(c.region)+'</span><span>'+esc(c.castle)+'</span><span>HOUSE '+esc(c.house)+'</span><span>AGE '+c.age+'</span></div><p>'+esc(c.about)+'</p></div></div>';
+    d.innerHTML='<div class="khcs-detail"><img src="'+c._image+'" alt="'+esc(c.name)+'" onerror="this.onerror=null;this.src=this.src.replace(/\.webp$/,'.txt')"><div><div class="eyebrow">'+(c.premium?"PREMIUM CHARACTER":"CHARACTER")+'</div><h2>'+esc(c.name)+'</h2><div class="khcs-meta"><span>'+esc(c.region)+'</span><span>'+esc(c.castle)+'</span><span>HOUSE '+esc(c.house)+'</span><span>AGE '+c.age+'</span></div><p>'+esc(c.about)+'</p></div></div>';
     m.classList.remove("hidden");document.body.classList.add("modal-open");
   };
   function setupShop(){
