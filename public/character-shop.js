@@ -19,7 +19,40 @@
   const esc=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
   async function loadImage(path){
     if(!path)return "";
-    try{const t=await fetch(path,{cache:"force-cache"}).then(r=>r.text());return "data:image/webp;base64,"+t.trim()}catch{return ""}
+    try{
+      const t=await fetch(path,{cache:"force-cache"}).then(r=>r.text());
+      const src="data:image/webp;base64,"+t.trim();
+      const img=new Image();
+      img.decoding="async";
+      img.src=src;
+      await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject});
+      
+      // Upscale the 300px source with high-quality browser resampling.
+      // This does not invent detail, but produces a cleaner result than
+      // letting the browser stretch the low-resolution source directly.
+      const size=800;
+      const canvas=document.createElement("canvas");
+      canvas.width=size; canvas.height=size;
+      const ctx=canvas.getContext("2d",{alpha:false});
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality="high";
+      ctx.drawImage(img,0,0,size,size);
+
+      // Very light sharpening for the enlarged portrait.
+      const imageData=ctx.getImageData(0,0,size,size);
+      const data=imageData.data, copy=new Uint8ClampedArray(data);
+      for(let y=1;y<size-1;y++){
+        for(let x=1;x<size-1;x++){
+          const p=(y*size+x)*4;
+          for(let ch=0;ch<3;ch++){
+            const v=copy[p+ch]*5-copy[p-size*4+ch]-copy[p+size*4+ch]-copy[p-4+ch]-copy[p+4+ch];
+            data[p+ch]=Math.max(0,Math.min(255,copy[p+ch]*0.72+v*0.07));
+          }
+        }
+      }
+      ctx.putImageData(imageData,0,0);
+      return canvas.toDataURL("image/webp",0.92);
+    }catch{return ""}
   }
   function css(){
     if(document.getElementById("khcs-style"))return;
@@ -31,7 +64,7 @@
       .khcs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:22px;margin-top:22px}
       .khcs-card{position:relative;padding:0;border:1px solid rgba(255,255,255,.1);background:#0a0a0a;color:inherit;text-align:right;cursor:pointer;overflow:hidden;width:100%}
       .khcs-card:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.3)}
-      .khcs-card-img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;background:#111}
+      .khcs-card-img{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;background:#111;image-rendering:auto;-webkit-backface-visibility:hidden;backface-visibility:hidden}
       .khcs-card-body{padding:15px 16px 17px}.khcs-card-body h3{margin:0;color:#e8e8e8;font:600 20px Cinzel,serif}
       .khcs-card-body p{margin:8px 0;color:#858585;line-height:1.8;font-size:13px}
       .khcs-badge{position:absolute;top:12px;left:12px;padding:5px 9px;border:1px solid #777;background:#080808cc;color:#ddd;font:10px Cinzel,serif}
