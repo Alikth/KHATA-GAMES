@@ -187,6 +187,177 @@ async function rateLimit(request, env, action, limit, windowMs = 15 * 60 * 1000)
 function publicUser(u) { return u ? { id: u.id, username: u.username } : null; }
 async function players(env) { return (await env.DB.prepare("SELECT id, username, region, house, castle, created_at AS createdAt FROM players ORDER BY created_at").all()).results; }
 
+
+
+const ECONOMY_SCHEMA = [
+  \`CREATE TABLE IF NOT EXISTS castle_state (
+    castle TEXT PRIMARY KEY, region TEXT NOT NULL, owner_account_id TEXT,
+    peasants INTEGER NOT NULL DEFAULT 500, coins INTEGER NOT NULL DEFAULT 5000,
+    wood INTEGER NOT NULL DEFAULT 500, stone INTEGER NOT NULL DEFAULT 500, iron INTEGER NOT NULL DEFAULT 500,
+    meat INTEGER NOT NULL DEFAULT 500, fish INTEGER NOT NULL DEFAULT 500, grain INTEGER NOT NULL DEFAULT 6000,
+    horses INTEGER NOT NULL DEFAULT 0, dragon_glass INTEGER NOT NULL DEFAULT 0, wildfire INTEGER NOT NULL DEFAULT 0,
+    tar INTEGER NOT NULL DEFAULT 0, grapes INTEGER NOT NULL DEFAULT 50,
+    workshop_level INTEGER NOT NULL DEFAULT 0, port_level INTEGER NOT NULL DEFAULT 0, port_enabled INTEGER NOT NULL DEFAULT 0,
+    special_item TEXT, equipment_day TEXT, equipment_week TEXT,
+    UNIQUE(castle)
+  )\`,
+  \`CREATE TABLE IF NOT EXISTS castle_production (castle TEXT NOT NULL, production_key TEXT NOT NULL, level INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,production_key))\`,
+  \`CREATE TABLE IF NOT EXISTS castle_camps (castle TEXT NOT NULL, camp_key TEXT NOT NULL, level INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,camp_key))\`,
+  \`CREATE TABLE IF NOT EXISTS castle_special_camps (castle TEXT NOT NULL, camp_key TEXT NOT NULL, level INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,camp_key))\`,
+  \`CREATE TABLE IF NOT EXISTS castle_army (castle TEXT NOT NULL, unit_key TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,unit_key))\`,
+  \`CREATE TABLE IF NOT EXISTS castle_equipment (castle TEXT NOT NULL, item_key TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,item_key))\`,
+  \`CREATE TABLE IF NOT EXISTS castle_fleet (castle TEXT NOT NULL, ship_key TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,ship_key))\`,
+  \`CREATE TABLE IF NOT EXISTS game_week_runs (week_key TEXT PRIMARY KEY, processed_at TEXT NOT NULL)\`
+];
+
+const GENERAL_PRODUCTIONS = {
+  farm:{label:"🌾 مزرعه",max:50,cost:{coins:500,wood:100,stone:20,peasants:20},base:"grain",yield:500},
+  lumber:{label:"🪵 چوب‌بری",max:50,cost:{coins:400,stone:25,peasants:20},base:"wood",yield:300},
+  stone:{label:"🪨 معدن سنگ",max:50,cost:{coins:200,wood:100,peasants:20},base:"stone",yield:50},
+  iron:{label:"⛓ معدن آهن",max:50,cost:{coins:200,wood:100,stone:25,peasants:20},base:"iron",yield:100},
+  recreation:{label:"🕹 مرکز تفریحی",max:50,cost:{coins:500,wood:100,stone:25,peasants:25},base:"coins",yield:500},
+  village:{label:"🏘 دهکده",max:50,cost:{coins:200,wood:100,stone:25,peasants:20},base:"peasants",yield:50},
+  market:{label:"🛒 بازارچه",max:50,cost:{coins:1000,wood:200,stone:50,peasants:20},base:"coins",yield:800},
+  stable:{label:"🐎 اصطبل",max:50,cost:{coins:200,wood:150,stone:25,peasants:20},base:"horses",yield:20},
+  slaughterhouse:{label:"🥩 کشتارگاه",max:50,cost:{coins:300,wood:100,stone:20,peasants:20},base:"meat",yield:100}
+};
+const SPECIAL_PRODUCTIONS = {
+  Riverlands:{key:"fishery",label:"🐟 شیلات",max:20,cost:{coins:250,wood:150,peasants:15},base:"fish",yield:250},
+  Westerlands:{key:"gold_mine",label:"🦁 معدن طلا",max:20,cost:{wood:300,iron:150,peasants:20},base:"coins",yield:2500},
+  Crownlands:{key:"dragon_glass",label:"🐉 تولید شیشه اژدها",max:20,cost:{coins:1200,peasants:20,wood:70,iron:25},base:"dragon_glass",yield:50},
+  Stormlands:{key:"tar",label:"🛢 تولید قیر",max:20,cost:{coins:200,wood:100,stone:250,peasants:20},base:"tar",yield:5},
+  Dorne:{key:"vineyard",label:"🍇 تاکستان",max:20,cost:{coins:250,wood:100,peasants:20},base:"grapes",yield:300}
+};
+const REGION_MULTIPLIERS = {
+  "The Wall":{lumber:2},"North":{lumber:2},"Vale":{stone:2},"Iron Islands":{iron:2},"Reach":{farm:2},
+  "Free Folk":{slaughterhouse:2}
+};
+const GENERAL_CAMPS = {
+  swordsman:{label:"🗡 کمپ شمشیرزن",max:20,unit:"swordsman",cost:{coins:300,wood:100,iron:25,peasants:100},yield:100},
+  archer:{label:"🏹 کمپ کماندار",max:20,unit:"archer",cost:{coins:300,wood:100,iron:25,peasants:100},yield:100},
+  spearman:{label:"🔱 کمپ نیزه‌دار",max:20,unit:"spearman",cost:{coins:300,wood:100,iron:25,peasants:100},yield:100},
+  cavalry:{label:"🏇 کمپ سواره‌نظام",max:20,unit:"cavalry",cost:{coins:350,wood:150,iron:25,peasants:50,horses:50},yield:100}
+};
+const SPECIAL_CAMPS = {
+  "The Wall":[{key:"ranger",label:"🥷 کمپ رنجر",cost:{wood:200,iron:20,peasants:50},unit:"ranger",yield:50}],
+  "North":[{key:"winter_soldier",label:"🐺 کمپ سرباز زمستان",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"winter_soldier",yield:50}],
+  "Riverlands":[
+    {key:"vale_knight",label:"😀 کمپ شوالیه ویل",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"vale_knight",yield:50},
+    {key:"crossbowman",label:"🏹 کمپ کراسبو‌دار",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"crossbowman",yield:50}
+  ],
+  "Westerlands":[{key:"red_cloak",label:"🩸 کمپ ردا سرخ",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"red_cloak",yield:50}],
+  "Crownlands":[{key:"dragon_knight",label:"🐉 کمپ شوالیه اژدها",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"dragon_knight",yield:50}],
+  "Iron Islands":[{key:"axeman",label:"🪓 کمپ تبر‌دار",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"axeman",yield:50}],
+  "Reach":[{key:"flower_knight",label:"🏵 شوالیه گل",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"flower_knight",yield:50}],
+  "Stormlands":[{key:"hammer_wielder",label:"🔨 پتک‌دار",cost:{coins:300,wood:200,iron:30,peasants:50},unit:"hammer_wielder",yield:50}],
+  "Dorne":[{key:"dornish_spearman",label:"🔱 نیزه‌دار دورنیش",cost:{coins:300,wood:200,iron:10,peasants:50},unit:"dornish_spearman",yield:50}]
+};
+const EQUIPMENT = {
+  ladder:{label:"🪜 نردبان",level:1,cost:{wood:70},limit:10,period:"day"},
+  ram:{label:"🔩 دژکوب",level:2,cost:{wood:500,iron:50},limit:3,period:"day"},
+  catapult:{label:"☄ منجنیق",level:3,cost:{wood:700,stone:75},limit:3,period:"day"},
+  scorpion:{label:"🦂 اسکورپین",level:4,cost:{wood:1200,iron:90},limit:1,period:"day"},
+  siege_tower:{label:"🏗 برج محاصره",level:5,cost:{wood:1500,stone:120,iron:120},limit:2,period:"week"}
+};
+const EQUIPMENT_UPGRADE_COST = 6000;
+const RESOURCE_KEYS = ["peasants","coins","wood","stone","iron","meat","fish","grain","horses","dragon_glass","wildfire","tar","grapes"];
+const RESOURCE_LABELS = {peasants:"👥 رعیت",coins:"💰 سکه",wood:"🪵 چوب",stone:"🪨 سنگ",iron:"⛓ آهن",meat:"🥩 گوشت",fish:"🐟 ماهی",grain:"🌾 غلات",horses:"🐎 اسب",dragon_glass:"🌑 شیشه اژدها",wildfire:"🧪 وایلدفایر",tar:"🛢 قیر",grapes:"🍇 انگور"};
+
+function gameWeekKey(date=new Date()) {
+  const d=new Date(date); const day=d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate()-day+1); d.setUTCHours(0,0,0,0);
+  return d.toISOString().slice(0,10);
+}
+function gameDayKey(date=new Date()) { return new Date(date).toISOString().slice(0,10); }
+function addCostCheck(state,cost){ return Object.entries(cost).every(([k,v])=>Number(state[k]||0)>=Number(v)); }
+function costText(cost){ return Object.entries(cost).map(([k,v])=>\`\${RESOURCE_LABELS[k]||k} \${v}\`).join(" + "); }
+
+async function ensureEconomySchema(env) {
+  for (const sql of ECONOMY_SCHEMA) await env.DB.prepare(sql).run();
+  for (const r of houses) {
+    await env.DB.prepare(\`INSERT OR IGNORE INTO castle_state (castle,region) VALUES (?,?)\`).bind(r.castles[0].castle,r.region).run();
+    for (const c of r.castles.slice(1)) await env.DB.prepare(\`INSERT OR IGNORE INTO castle_state (castle,region) VALUES (?,?)\`).bind(c.castle,r.region).run();
+  }
+  const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
+  for (const r of houses) for (const c of r.castles) {
+    for (const [k,lvl] of Object.entries(defaults)) await env.DB.prepare("INSERT OR IGNORE INTO castle_production (castle,production_key,level) VALUES (?,?,?)").bind(c.castle,k,lvl).run();
+    for (const k of Object.keys(GENERAL_CAMPS)) await env.DB.prepare("INSERT OR IGNORE INTO castle_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,k).run();
+    for (const unit of ["swordsman","archer","spearman","cavalry"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_army (castle,unit_key,count) VALUES (?,?,?)").bind(c.castle,unit,unit==="swordsman"?500:unit==="archer"?200:unit==="spearman"?100:100).run();
+    for (const unit of Object.values(EQUIPMENT)) {}
+    for (const item of Object.keys(EQUIPMENT)) await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment (castle,item_key,count) VALUES (?,?,0)").bind(c.castle,item).run();
+    for (const ship of ["transport","warship"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet (castle,ship_key,count) VALUES (?,?,1)").bind(c.castle,ship).run();
+    for (const sp of (SPECIAL_CAMPS[r.region]||[])) await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,sp.key).run();
+  }
+}
+
+async function loadCastleEconomy(env, castle) {
+  const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
+  if(!state) return null;
+  const [prod,camps,specialCamps,army,equipment,fleet]=await Promise.all([
+    env.DB.prepare("SELECT production_key,level FROM castle_production WHERE castle=?").bind(castle).all(),
+    env.DB.prepare("SELECT camp_key,level FROM castle_camps WHERE castle=?").bind(castle).all(),
+    env.DB.prepare("SELECT camp_key,level FROM castle_special_camps WHERE castle=?").bind(castle).all(),
+    env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(castle).all(),
+    env.DB.prepare("SELECT item_key,count FROM castle_equipment WHERE castle=?").bind(castle).all(),
+    env.DB.prepare("SELECT ship_key,count FROM castle_fleet WHERE castle=?").bind(castle).all()
+  ]);
+  const production=Object.fromEntries(prod.results.map(x=>[x.production_key,{level:Number(x.level),...GENERAL_PRODUCTIONS[x.production_key]}]));
+  const campMap=Object.fromEntries(camps.results.map(x=>[x.camp_key,{level:Number(x.level),...GENERAL_CAMPS[x.camp_key]}]));
+  const specialCampMap=Object.fromEntries(specialCamps.results.map(x=>[x.camp_key,{level:Number(x.level),...(SPECIAL_CAMPS[state.region]||[]).find(s=>s.key===x.camp_key)}]));
+  const armyMap=Object.fromEntries(army.results.map(x=>[x.unit_key,Number(x.count)]));
+  const equipmentMap=Object.fromEntries(equipment.results.map(x=>[x.item_key,Number(x.count)]));
+  const fleetMap=Object.fromEntries(fleet.results.map(x=>[x.ship_key,Number(x.count)]));
+  return {castle:state.castle,region:state.region,ownerAccountId:state.owner_account_id,resources:Object.fromEntries(RESOURCE_KEYS.map(k=>[k,Number(state[k]||0)])),production,camps:campMap,specialCamps:specialCampMap,army:armyMap,equipment:equipmentMap,fleet:fleetMap,workshop:{level:Number(state.workshop_level),maxLevel:5,upgradeCost:EQUIPMENT_UPGRADE_COST},port:{enabled:!!state.port_enabled,level:Number(state.port_level),maxLevel:15,weeklyYieldPerShipType:Number(state.port_level)},specialItem:state.special_item?JSON.parse(state.special_item):null,gameWeek:gameWeekKey()};
+}
+
+async function runWeeklyUpdate(env) {
+  const week=gameWeekKey();
+  const inserted=await env.DB.prepare("INSERT OR IGNORE INTO game_week_runs (week_key,processed_at) VALUES (?,?)").bind(week,new Date().toISOString()).run();
+  if(!inserted.meta.changes) return;
+  const rows=(await env.DB.prepare("SELECT * FROM castle_state").all()).results;
+  for(const s of rows){
+    const prods=(await env.DB.prepare("SELECT production_key,level FROM castle_production WHERE castle=?").bind(s.castle).all()).results;
+    const camps=(await env.DB.prepare("SELECT camp_key,level FROM castle_camps WHERE castle=?").bind(s.castle).all()).results;
+    const scamps=(await env.DB.prepare("SELECT camp_key,level FROM castle_special_camps WHERE castle=?").bind(s.castle).all()).results;
+    const army=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(s.castle).all()).results;
+    const changes={}; const add=(k,v)=>changes[k]=(changes[k]||0)+v;
+    for(const p of prods){const def=GENERAL_PRODUCTIONS[p.production_key];if(!def||!p.level)continue;let gain=Number(p.level)*def.yield;if(p.production_key==="farm"&&Number(p.level)===1)gain=300;const mult=REGION_MULTIPLIERS[s.region]?.[p.production_key]||1;add(def.base,gain*mult);}
+    const sp=SPECIAL_PRODUCTIONS[s.region]; if(sp){const lvl=Number((await env.DB.prepare("SELECT level FROM castle_production WHERE castle=? AND production_key=?").bind(s.castle,sp.key).first())?.level||0);if(lvl)add(sp.base,lvl*sp.yield);}
+    for(const c of camps){const d=GENERAL_CAMPS[c.camp_key];if(d&&c.level)add(d.unit,c.level*d.yield);}
+    for(const c of scamps){const d=(SPECIAL_CAMPS[s.region]||[]).find(x=>x.key===c.camp_key);if(d&&c.level)add(d.unit,c.level*d.yield);}
+    if(Number(s.port_enabled)&&Number(s.port_level)>0){add("transport",0);add("warship",0);}
+    const a=Object.fromEntries(army.map(x=>[x.unit_key,Number(x.count)]));
+    let grainNeed=(a.swordsman||0)+(a.archer||0)+(a.spearman||0)+((a.cavalry||0)*2);
+    for(const [key,count] of Object.entries(a)) if(!["swordsman","archer","spearman","cavalry"].includes(key)) grainNeed+=(key==="giants"?0:count*2);
+    let meatNeed=(a.giants||0)*2;
+    let grainUsed=Math.min(Number(s.grain),grainNeed); let rem=grainNeed-grainUsed; let fishUsed=Math.min(Number(s.fish),Math.ceil(rem/2)); rem-=fishUsed*2; let meatUsed=Math.min(Number(s.meat),Math.ceil(Math.max(0,rem)/2)); rem-=meatUsed*2;
+    const sqlParts=[]; const bind=[];
+    for(const [k,v] of Object.entries(changes)) if(RESOURCE_KEYS.includes(k)&&v) {sqlParts.push(\`\${k}=\${k}+?\`);bind.push(Math.floor(v));}
+    sqlParts.push("grain=grain-?","fish=fish-?","meat=meat-?");
+    bind.push(grainUsed,fishUsed,meatUsed);
+    if(Number(s.port_enabled)&&Number(s.port_level)>0){ }
+    const batch=[env.DB.prepare(\`UPDATE castle_state SET \${sqlParts.join(",")} WHERE castle=?\`).bind(...bind,s.castle)];
+    for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k))) batch.push(env.DB.prepare("UPDATE castle_army SET count=count+? WHERE castle=? AND unit_key=?").bind(Math.floor(gain),s.castle,unit));
+    if(Number(s.port_enabled)&&Number(s.port_level)>0){batch.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key=?").bind(Number(s.port_level),s.castle,"transport"),env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key=?").bind(Number(s.port_level),s.castle,"warship"));}
+    await env.DB.batch(batch);
+  }
+}
+
+async function requireCastleOwner(request,env){
+  const s=await requireUser(request,env); if(!s)return null;
+  return await env.DB.prepare("SELECT * FROM castle_state WHERE owner_account_id=?").bind(s.user_id).first();
+}
+function safeCost(cost){return Object.fromEntries(Object.entries(cost).filter(([k,v])=>RESOURCE_KEYS.includes(k)&&Number(v)>0));}
+async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
+  const row=await env.DB.prepare(\`SELECT level FROM \${table} WHERE castle=? AND \${table==="castle_production"?"production_key":"camp_key"}=?\`).bind(castle,key).first();
+  const level=Number(row?.level||0); if(level>=maxLevel)return {error:"این مورد به حداکثر سطح رسیده است.",status:400};
+  if(!addCostCheck(await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first(),def.cost))return {error:"منابع کافی نیست.",status:400};
+  const cost=safeCost(def.cost); const sets=Object.keys(cost).map(k=>\`\${k}=\${k}-?\`).join(",");
+  const where=table==="castle_production"?"production_key":"camp_key";
+  const q1=env.DB.prepare(\`UPDATE castle_state SET \${sets} WHERE castle=? AND \${Object.keys(cost).map(k=>\`\${k}>=?\`).join(" AND ")}\`).bind(...Object.values(cost),castle,...Object.values(cost));
+  const q2=env.DB.prepare(\`UPDATE \${table} SET level=level+1 WHERE castle=? AND \${where}=? AND level=?\`).bind(castle,key,level);
+  const b=await env.DB.batch([q1,q2]); if(!b[1]?.meta?.changes)return {error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن.",status:409}; return {ok:true,newLevel:level+1};
+}
+
 async function handleApi(request, env, url) {
   const method=request.method, path=url.pathname;
   if (method === "GET" && path === "/api/auth/status") {
@@ -224,7 +395,7 @@ async function handleApi(request, env, url) {
     if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first()) return json({error:"این قلعه قبلاً توسط یک لرد انتخاب شده است."},409);
     if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first()) return json({error:"این Telegram Username قبلاً ثبت شده است."},409);
     if(await env.DB.prepare("SELECT id FROM players WHERE account_id=?").bind(userSession.user_id).first()) return json({error:"این حساب قبلاً برای Kill The King یک قلعه انتخاب کرده است."},409);
-    const p={id:newId(),username:"@"+username,region,house:selected.house,castle,account_id:userSession.user_id,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,p.account_id,p.created_at).run(); return json({message:`ثبت شد لرد ${selected.house}`,player:p});
+    const p={id:newId(),username:"@"+username,region,house:selected.house,castle,account_id:userSession.user_id,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,p.account_id,p.created_at).run(); await ensureEconomySchema(env); await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=?").bind(p.account_id,p.castle).run(); return json({message:`ثبت شد لرد ${selected.house}`,player:p});
   }
   if (method === "POST" && path === "/api/admin/login") {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
@@ -242,10 +413,103 @@ async function handleApi(request, env, url) {
     if(!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
     if(!session?.is_admin) return json({error:"دسترسی مدیر لازم است."},401); const b=await body(request), username=normalizeUsername(b.username),region=String(b.region||"").trim(),castle=String(b.castle||"").trim(),selected=findCastle(region,castle); if(!validTelegramUsername(username)||!selected)return json({error:"اطلاعات واردشده معتبر نیست."},400);
     if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first())return json({error:"این قلعه قبلاً رزرو شده است."},409); if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first())return json({error:"این Username قبلاً ثبت شده است."},409);
-    const p={id:newId(),username:"@"+username,region,house:selected.house,castle,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,null,p.created_at).run(); return json({player:p});
+    const p={id:newId(),username:"@"+username,region,house:selected.house,castle,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,null,p.created_at).run(); await ensureEconomySchema(env); return json({player:p});
   }
-  if(path.startsWith("/api/admin/players/")&&method==="DELETE"){ if(!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401); const id=decodeURIComponent(path.split("/").pop()); const r=await env.DB.prepare("DELETE FROM players WHERE id=?").bind(id).run(); if(!r.meta.changes)return json({error:"پلیر پیدا نشد."},404); return json({ok:true}); }
+  if(path.startsWith("/api/admin/players/")&&method==="DELETE"){ if(!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401); const id=decodeURIComponent(path.split("/").pop()); const old=await env.DB.prepare("SELECT castle FROM players WHERE id=?").bind(id).first(); const r=await env.DB.prepare("DELETE FROM players WHERE id=?").bind(id).run(); if(!r.meta.changes)return json({error:"پلیر پیدا نشد."},404); await ensureEconomySchema(env); if(old?.castle) await env.DB.prepare("UPDATE castle_state SET owner_account_id=NULL WHERE castle=?").bind(old.castle).run(); return json({ok:true}); }
   if(method==="GET"&&path.startsWith("/api/castles/")){const name=decodeURIComponent(path.slice("/api/castles/".length));const info=castleInfo[name];if(!info)return json({error:"اطلاعات قلعه پیدا نشد."},404);return json(info);}
+
+  if (path.startsWith("/api/my-castle") || path.startsWith("/api/game/")) {
+    await ensureEconomySchema(env);
+    await runWeeklyUpdate(env);
+  }
+  if (method==="GET" && path==="/api/game/week") return json({week:gameWeekKey()});
+  if (method==="GET" && path==="/api/my-castle/assets") {
+    const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
+    return json(await loadCastleEconomy(env,state.castle));
+  }
+  if (method==="POST" && path==="/api/my-castle/production/upgrade") {
+    const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    const b=await body(request), key=String(b.key||""); const def=GENERAL_PRODUCTIONS[key];
+    if(!def)return json({error:"تولیدی معتبر نیست."},400);
+    const result=await upgradeResourceBacked(env,state.castle,"castle_production",key,def,def.max);
+    if(result.error)return json({error:result.error},result.status);
+    return json(result);
+  }
+  if (method==="POST" && path==="/api/my-castle/camp/upgrade") {
+    const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    const b=await body(request), key=String(b.key||""); const def=GENERAL_CAMPS[key];
+    if(!def)return json({error:"کمپ معتبر نیست."},400);
+    const result=await upgradeResourceBacked(env,state.castle,"castle_camps",key,def,def.max);
+    if(result.error)return json({error:result.error},result.status);
+    return json(result);
+  }
+  if (method==="POST" && path==="/api/my-castle/special-camp/upgrade") {
+    const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    const b=await body(request), key=String(b.key||""); const def=(SPECIAL_CAMPS[state.region]||[]).find(x=>x.key===key);
+    if(!def)return json({error:"کمپ ویژه این اقلیم معتبر نیست."},400);
+    const row=await env.DB.prepare("SELECT level FROM castle_special_camps WHERE castle=? AND camp_key=?").bind(state.castle,key).first(); const level=Number(row?.level||0);
+    if(level>=50)return json({error:"کمپ به حداکثر سطح 50 رسیده است."},400);
+    if(!addCostCheck(state,def.cost))return json({error:"منابع کافی نیست."},400);
+    const cost=safeCost(def.cost), sets=Object.keys(cost).map(k=>\`\${k}=\${k}-?\`).join(","), cond=Object.keys(cost).map(k=>\`\${k}>=?\`).join(" AND ");
+    const bres=await env.DB.batch([
+      env.DB.prepare(\`UPDATE castle_state SET \${sets} WHERE castle=? AND \${cond}\`).bind(...Object.values(cost),state.castle,...Object.values(cost)),
+      env.DB.prepare("UPDATE castle_special_camps SET level=level+1 WHERE castle=? AND camp_key=? AND level=?").bind(state.castle,key,level)
+    ]);
+    if(!bres[1]?.meta?.changes)return json({error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن."},409);
+    return json({ok:true,newLevel:level+1});
+  }
+  if (method==="POST" && path==="/api/my-castle/special-production/upgrade") {
+    const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    const sp=SPECIAL_PRODUCTIONS[state.region]; if(!sp)return json({error:"این اقلیم تولیدی ویژه ندارد."},400);
+    const row=await env.DB.prepare("SELECT level FROM castle_production WHERE castle=? AND production_key=?").bind(state.castle,sp.key).first(); const level=Number(row?.level||0);
+    if(level>=sp.max)return json({error:"تولیدی ویژه به حداکثر سطح رسیده است."},400); if(!addCostCheck(state,sp.cost))return json({error:"منابع کافی نیست."},400);
+    const cost=safeCost(sp.cost),sets=Object.keys(cost).map(k=>\`\${k}=\${k}-?\`).join(","),cond=Object.keys(cost).map(k=>\`\${k}>=?\`).join(" AND ");
+    const bres=await env.DB.batch([env.DB.prepare(\`UPDATE castle_state SET \${sets} WHERE castle=? AND \${cond}\`).bind(...Object.values(cost),state.castle,...Object.values(cost)),env.DB.prepare("UPDATE castle_production SET level=level+1 WHERE castle=? AND production_key=? AND level=?").bind(state.castle,sp.key,level)]);
+    if(!bres[1]?.meta?.changes)return json({error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:level+1});
+  }
+  if (method==="POST" && path==="/api/my-castle/workshop/upgrade") {
+    const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    if(state.workshop_level>=5)return json({error:"کارگاه به حداکثر سطح رسیده است."},400);
+    if(Number(state.coins)<EQUIPMENT_UPGRADE_COST)return json({error:"6000 سکه لازم است."},400);
+    const bres=await env.DB.batch([env.DB.prepare("UPDATE castle_state SET coins=coins-6000 WHERE castle=? AND coins>=6000").bind(state.castle),env.DB.prepare("UPDATE castle_state SET workshop_level=workshop_level+1 WHERE castle=? AND workshop_level=?").bind(state.castle,state.workshop_level)]);
+    if(!bres[1]?.meta?.changes)return json({error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:state.workshop_level+1});
+  }
+  if (method==="POST" && path==="/api/my-castle/equipment/build") {
+    const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    const b=await body(request),key=String(b.key||""),def=EQUIPMENT[key]; if(!def)return json({error:"ادوات معتبر نیست."},400);
+    if(Number(state.workshop_level)<def.level)return json({error:\`برای ساخت \${def.label} کارگاه باید حداقل سطح \${def.level} باشد.\`},400);
+    const today=gameDayKey(),week=gameWeekKey(),dayCount=state.equipment_day===today?Number((await env.DB.prepare("SELECT count FROM castle_equipment WHERE castle=? AND item_key=?").bind(state.castle,key).first())?.count||0):0;
+    const counter=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(state.castle).first();
+    let counters={day:counter.equipment_day===today?dayCount:0,week:counter.equipment_week===week?0:0};
+    const metaRow=await env.DB.prepare("SELECT equipment_day,equipment_week FROM castle_state WHERE castle=?").bind(state.castle).first();
+    const existing=(await env.DB.prepare("SELECT count FROM castle_equipment WHERE castle=? AND item_key=?").bind(state.castle,key).first())?.count||0;
+    const periodUsed=def.period==="day"?(metaRow.equipment_day===today?0:0):(metaRow.equipment_week===week?0:0);
+    const trackerKey=def.period==="day"?\`equip:\${today}:\${key}\`:\`equip:\${week}:\${key}\`;
+    const trackerTableExists=true;
+    const current=Number((await env.DB.prepare("SELECT count FROM castle_equipment WHERE castle=? AND item_key=?").bind(state.castle,key).first())?.count||0);
+    // Limits are tracked by dedicated counters in special_item JSON to keep the schema stable.
+    let meta={}; try{meta=counter.special_item?JSON.parse(counter.special_item):{}}catch{}
+    const used=Number(meta[trackerKey]||0);
+    if(used>=def.limit)return json({error:\`سقف ساخت این آیتم برای این \${def.period==="day"?"روز":"هفته"} پر شده است.\`},400);
+    if(!addCostCheck(state,def.cost))return json({error:"منابع کافی نیست."},400);
+    const cost=safeCost(def.cost),sets=Object.keys(cost).map(k=>\`\${k}=\${k}-?\`).join(","),cond=Object.keys(cost).map(k=>\`\${k}>=?\`).join(" AND ");
+    meta[trackerKey]=used+1;
+    const bres=await env.DB.batch([
+      env.DB.prepare(\`UPDATE castle_state SET \${sets},special_item=? WHERE castle=? AND \${cond}\`).bind(...Object.values(cost),JSON.stringify(meta),state.castle,...Object.values(cost)),
+      env.DB.prepare("UPDATE castle_equipment SET count=count+1 WHERE castle=? AND item_key=?").bind(state.castle,key)
+    ]);
+    if(!bres[1]?.meta?.changes)return json({error:"ساخت همزمان تغییر کرده؛ دوباره تلاش کن."},409);
+    return json({ok:true,count:current+1});
+  }
+  if (method==="POST" && path==="/api/my-castle/port/upgrade") {
+    const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    if(!Number(state.port_enabled))return json({error:"این قلعه فعلاً بندری تعریف نشده است."},400);
+    if(Number(state.port_level)>=15)return json({error:"اسکله به حداکثر سطح 15 رسیده است."},400);
+    if(Number(state.coins)<1500||Number(state.wood)<1000)return json({error:"برای ارتقای اسکله 1500 سکه و 1000 چوب لازم است."},400);
+    const bres=await env.DB.batch([env.DB.prepare("UPDATE castle_state SET coins=coins-1500,wood=wood-1000 WHERE castle=? AND coins>=1500 AND wood>=1000").bind(state.castle),env.DB.prepare("UPDATE castle_state SET port_level=port_level+1 WHERE castle=? AND port_level=?").bind(state.castle,state.port_level)]);
+    if(!bres[1]?.meta?.changes)return json({error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:state.port_level+1});
+  }
+
   return json({error:"Not found"},404);
 }
 
