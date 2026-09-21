@@ -1,12 +1,14 @@
-(function(){
+(async function(){
   if(!window.matchMedia('(max-width:600px)').matches)return;
   const hero=document.querySelector('.hero');
   if(!hero)return;
-  fetch('/assets/mobile-hero-khata.b64.txt',{cache:'force-cache'})
-    .then(r=>r.text())
-    .then(b64=>{
-      if(!b64.trim())return;
-      hero.style.backgroundImage='url("data:image/webp;base64,'+b64.trim()+'")';
-    })
-    .catch(()=>{});
+  try{
+    const parts=await Promise.all(Array.from({length:6},(_,i)=>
+      fetch('/assets/mobile-hero-384.part'+i+'.txt?v=2',{cache:'no-store'}).then(r=>r.text())
+    ));
+    const b64=parts.join('').trim();
+    hero.style.backgroundImage='url("data:image/webp;base64,'+b64+'")';
+    hero.style.backgroundSize='cover';
+    hero.style.backgroundPosition='center center';
+  }catch(e){}
 })();
