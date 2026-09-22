@@ -284,7 +284,7 @@ async function ensureEconomySchema(env) {
     for (const unit of ["swordsman","archer","spearman","cavalry"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_army (castle,unit_key,count) VALUES (?,?,?)").bind(c.castle,unit,unit==="swordsman"?500:unit==="archer"?200:unit==="spearman"?100:100).run();
     for (const unit of Object.values(EQUIPMENT)) {}
     for (const item of Object.keys(EQUIPMENT)) await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment (castle,item_key,count) VALUES (?,?,0)").bind(c.castle,item).run();
-    await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state (castle,last_week_key) VALUES (?,NULL)").bind(c.castle).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state (castle,last_week_key) VALUES (?,?)").bind(c.castle,gameWeekKey()).run();
     for (const ship of ["transport","warship"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet (castle,ship_key,count) VALUES (?,?,1)").bind(c.castle,ship).run();
     for (const sp of (SPECIAL_CAMPS[r.region]||[])) await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,sp.key).run();
   }
@@ -307,7 +307,9 @@ async function loadCastleEconomy(env, castle) {
   const armyMap=Object.fromEntries(army.results.map(x=>[x.unit_key,Number(x.count)]));
   const equipmentMap=Object.fromEntries(equipment.results.map(x=>[x.item_key,Number(x.count)]));
   const fleetMap=Object.fromEntries(fleet.results.map(x=>[x.ship_key,Number(x.count)]));
-  return {castle:state.castle,region:state.region,ownerAccountId:state.owner_account_id,resources:Object.fromEntries(RESOURCE_KEYS.map(k=>[k,Number(state[k]||0)])),production,camps:campMap,specialCamps:specialCampMap,army:armyMap,equipment:equipmentMap,fleet:fleetMap,workshop:{level:Number(state.workshop_level),maxLevel:5,upgradeCost:EQUIPMENT_UPGRADE_COST},port:{enabled:!!state.port_enabled,level:Number(state.port_level),maxLevel:15,weeklyYieldPerShipType:Number(state.port_level)},specialItem:state.special_item?JSON.parse(state.special_item):null,gameWeek:gameWeekKey()};
+  const sp=SPECIAL_PRODUCTIONS[state.region]||null;
+  const specialProduction=sp?{key:sp.key,level:Number(production[sp.key]?.level||0),label:sp.label,max:sp.max,cost:sp.cost,base:sp.base,yield:sp.yield}:null;
+  return {castle:state.castle,region:state.region,ownerAccountId:state.owner_account_id,resources:Object.fromEntries(RESOURCE_KEYS.map(k=>[k,Number(state[k]||0)])),production,camps:campMap,specialCamps:specialCampMap,specialProduction,army:armyMap,equipment:equipmentMap,fleet:fleetMap,workshop:{level:Number(state.workshop_level),maxLevel:5,upgradeCost:EQUIPMENT_UPGRADE_COST},port:{enabled:!!state.port_enabled,level:Number(state.port_level),maxLevel:15,weeklyYieldPerShipType:Number(state.port_level)},specialItem:state.special_item?JSON.parse(state.special_item):null,gameWeek:gameWeekKey()};
 }
 
 async function runWeeklyUpdate(env) {
