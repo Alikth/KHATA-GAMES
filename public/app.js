@@ -1,5 +1,5 @@
 window.addEventListener("DOMContentLoaded", () => {
-  let houses = [], players = [], selected = null, currentUser = null;
+  let houses = [], players = [], adminPlayers = [], selected = null, currentUser = null;
   let castleRequestId = 0;
   let adminRequested = new URLSearchParams(location.search).get("admin") === "1";
   const $ = id => document.getElementById(id);
@@ -348,7 +348,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   function updateAdminAssignPlayers(){
     const select=$("adminAssignPlayer"); if(!select)return;
-    const seen=new Set(); const list=players.filter(p=>p.accountId&&!seen.has(p.accountId)&&(seen.add(p.accountId),true));
+    const seen=new Set(); const list=adminPlayers.filter(p=>p.accountId&&!seen.has(p.accountId)&&(seen.add(p.accountId),true));
     select.innerHTML=list.length?list.map(p=>'<option value="'+escapeHTML(p.id)+'">'+escapeHTML(p.username)+' — '+escapeHTML(p.castle)+'</option>').join(''):'<option value="">پلیر دارای حسابی وجود ندارد</option>';
   }
   function updateAdminAssignCastles(){
@@ -405,8 +405,8 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   async function refreshAdmin(){
-    const [lordList,warData,tradeData,controlData,castleData]=await Promise.all([api('/api/players'),api('/api/admin/war-expeditions'),api('/api/admin/trades'),api('/api/admin/controls'),api('/api/admin/castles')]);
-    players=lordList;renderPlayers();renderMap();updateAdminCastles();updateAdminAssignPlayers();updateAdminAssignCastles();
+    const [lordList,adminLordList,warData,tradeData,controlData,castleData]=await Promise.all([api('/api/players'),api('/api/admin/players'),api('/api/admin/war-expeditions'),api('/api/admin/trades'),api('/api/admin/controls'),api('/api/admin/castles')]);
+    players=lordList;adminPlayers=adminLordList;renderPlayers();renderMap();updateAdminCastles();updateAdminAssignPlayers();updateAdminAssignCastles();
     $("adminPlayers").innerHTML=players.length?players.map(p=>'<div class="admin-row"><span>'+escapeHTML(p.username)+' · '+escapeHTML(p.castle)+'</span><button class="delete" type="button" data-action="delete-player" data-id="'+escapeHTML(p.id)+'">DELETE</button></div>').join(''):'<small>هیچ پلیری ثبت نشده.</small>';
     const wars=warData.expeditions||[];
     $("adminLordCount").textContent=players.length;$("adminWarCount").textContent=wars.length;$("adminActiveWarCount").textContent=wars.filter(x=>x.active).length;
