@@ -1,8 +1,5 @@
 -- KHATA GAMES war cancellation and trade system
-ALTER TABLE war_logs ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE war_logs ADD COLUMN cancelled_at TEXT;
-ALTER TABLE war_logs ADD COLUMN cancelled_by TEXT;
-
+-- war_logs cancellation columns are added idempotently by ensureWarLogSchema in worker.js.
 CREATE TABLE IF NOT EXISTS trade_requests (
   id TEXT PRIMARY KEY,
   sender_account_id TEXT NOT NULL,
