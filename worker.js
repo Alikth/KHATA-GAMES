@@ -332,9 +332,8 @@ async function runWeeklyUpdate(env) {
   const week=gameWeekKey();
   const rows=(await env.DB.prepare("SELECT * FROM castle_state").all()).results;
   for(const s of rows){
-    // Claim the week atomically so concurrent API requests cannot pay twice.
-    const claim=await env.DB.prepare("UPDATE castle_week_state SET last_week_key=? WHERE castle=? AND (last_week_key IS NULL OR last_week_key<>?)").bind(week,s.castle,week).run();
-    if(!claim.meta?.changes) continue;
+    const marker=await env.DB.prepare("SELECT last_week_key FROM castle_week_state WHERE castle=?").bind(s.castle).first();
+    if(marker?.last_week_key===week) continue;
     const prods=(await env.DB.prepare("SELECT production_key,level FROM castle_production WHERE castle=?").bind(s.castle).all()).results;
     const camps=(await env.DB.prepare("SELECT camp_key,level FROM castle_camps WHERE castle=?").bind(s.castle).all()).results;
     const scamps=(await env.DB.prepare("SELECT camp_key,level FROM castle_special_camps WHERE castle=?").bind(s.castle).all()).results;
@@ -371,8 +370,7 @@ async function runWeeklyUpdate(env) {
       statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='transport'").bind(Number(s.port_level),s.castle));
       statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='warship'").bind(Number(s.port_level),s.castle));
     }
-    // The weekly claim and all production changes must succeed together.
-    // D1 batch rollback prevents a claimed week from being lost on failure.
+    statements.push(env.DB.prepare("UPDATE castle_week_state SET last_week_key=? WHERE castle=?").bind(week,s.castle));
     await env.DB.batch(statements);
   }
 }
