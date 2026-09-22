@@ -311,6 +311,8 @@ window.addEventListener("DOMContentLoaded", () => {
     catch(e){ showToast(e.message,true); }
   }
 
+  window.khataRefreshMyCastles = renderMyCastles;
+
   async function openPage(page) {
     document.querySelectorAll(".nav-btn").forEach(x => x.classList.toggle("active", x.dataset.page === page));
     document.querySelectorAll(".page").forEach(x => x.classList.toggle("active", x.id === page));
