@@ -13,7 +13,7 @@
   const api=async(url,options={})=>{const h=new Headers(options.headers||{});if(options.body&&!h.has('Content-Type'))h.set('Content-Type','application/json');const r=await fetch(url,{cache:'no-store',...options,headers:h});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'خطایی رخ داد.');return d;};
   let houses=[], assets=null, type='', fake=false, values={}, fakeAvailable=false;
 
-  function reset(){houses=[];assets=null;type='';fake=false;values={};fakeAvailable=false;$('weTypeStep').classList.add('active');$('weFormStep').classList.remove('active');$('weConfirmStep').classList.remove('active');$('weRoot').innerHTML='';}
+  function reset(){houses=[];assets=null;type='';fake=false;values={};fakeAvailable=false;$('weTypeStep').classList.add('active');$('weFormStep').classList.remove('active');$('weConfirmStep').classList.remove('active');}
   function castlesOptions(selected=''){
     return houses.map(r=>'<optgroup label="'+esc(r.icon+' '+r.region)+'">'+r.castles.map(c=>'<option value="'+esc(c.castle)+'" '+(c.castle===selected?'selected':'')+'>'+esc(c.castle)+' — '+esc(c.house)+'</option>').join('')+'</optgroup>').join('');
   }
