@@ -208,7 +208,9 @@ const ECONOMY_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS castle_army (castle TEXT NOT NULL, unit_key TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,unit_key))`,
   `CREATE TABLE IF NOT EXISTS castle_equipment (castle TEXT NOT NULL, item_key TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,item_key))`,
   `CREATE TABLE IF NOT EXISTS castle_fleet (castle TEXT NOT NULL, ship_key TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,ship_key))`,
-  `CREATE TABLE IF NOT EXISTS game_week_runs (week_key TEXT PRIMARY KEY, processed_at TEXT NOT NULL)`
+  `CREATE TABLE IF NOT EXISTS game_week_runs (week_key TEXT PRIMARY KEY, processed_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS castle_week_state (castle TEXT PRIMARY KEY, last_week_key TEXT)`,
+  `CREATE TABLE IF NOT EXISTS castle_equipment_limits (castle TEXT NOT NULL, tracker_key TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,tracker_key))`
 ];
 
 const GENERAL_PRODUCTIONS = {
@@ -274,9 +276,11 @@ function costText(cost){ return Object.entries(cost).map(([k,v])=>`${RESOURCE_LA
 
 async function ensureEconomySchema(env) {
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS economy_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
+  // Always ensure every economy table exists. This also repairs databases that were
+  // partially initialized before the full schema was available.
+  for (const sql of ECONOMY_SCHEMA) await env.DB.prepare(sql).run();
   const ready=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='seeded'").first();
   if(ready?.value==="1") return;
-  for (const sql of ECONOMY_SCHEMA) await env.DB.prepare(sql).run();
   for (const r of houses) {
     for (const c of r.castles) {
       await env.DB.prepare("INSERT OR IGNORE INTO castle_state (castle,region) VALUES (?,?)").bind(c.castle,r.region).run();
