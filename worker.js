@@ -276,24 +276,39 @@ function costText(cost){ return Object.entries(cost).map(([k,v])=>`${RESOURCE_LA
 
 async function ensureEconomySchema(env) {
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS economy_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
-  // Always ensure every economy table exists. This also repairs databases that were
-  // partially initialized before the full schema was available.
+  // The economy was added after the original game schema. Keep this initializer
+  // idempotent so an existing/partially initialized D1 database can repair itself.
   for (const sql of ECONOMY_SCHEMA) await env.DB.prepare(sql).run();
-  const ready=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='seeded'").first();
-  if(ready?.value==="1") return;
+
+  const week=gameWeekKey();
+  const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
+
   for (const r of houses) {
     for (const c of r.castles) {
       await env.DB.prepare("INSERT OR IGNORE INTO castle_state (castle,region) VALUES (?,?)").bind(c.castle,r.region).run();
-      await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state (castle,last_week_key) VALUES (?,?)").bind(c.castle,gameWeekKey()).run();
-      const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
-      for (const [k,lvl] of Object.entries(defaults)) await env.DB.prepare("INSERT OR IGNORE INTO castle_production (castle,production_key,level) VALUES (?,?,?)").bind(c.castle,k,lvl).run();
+      // Missing markers are repaired at the current week so legacy castles do not
+      // receive an accidental backlog of production.
+      await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state (castle,last_week_key) VALUES (?,?)").bind(c.castle,week).run();
+      for (const [k,lvl] of Object.entries(defaults)) {
+        await env.DB.prepare("INSERT OR IGNORE INTO castle_production (castle,production_key,level) VALUES (?,?,?)").bind(c.castle,k,lvl).run();
+      }
       const sp=SPECIAL_PRODUCTIONS[r.region];
       if(sp) await env.DB.prepare("INSERT OR IGNORE INTO castle_production (castle,production_key,level) VALUES (?,?,0)").bind(c.castle,sp.key).run();
-      for (const k of Object.keys(GENERAL_CAMPS)) await env.DB.prepare("INSERT OR IGNORE INTO castle_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,k).run();
-      for (const unit of ["swordsman","archer","spearman","cavalry"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_army (castle,unit_key,count) VALUES (?,?,?)").bind(c.castle,unit,unit==="swordsman"?500:unit==="archer"?200:100).run();
-      for (const item of Object.keys(EQUIPMENT)) await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment (castle,item_key,count) VALUES (?,?,0)").bind(c.castle,item).run();
-      for (const ship of ["transport","warship"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet (castle,ship_key,count) VALUES (?,?,1)").bind(c.castle,ship).run();
-      for (const spc of (SPECIAL_CAMPS[r.region]||[])) await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,spc.key).run();
+      for (const k of Object.keys(GENERAL_CAMPS)) {
+        await env.DB.prepare("INSERT OR IGNORE INTO castle_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,k).run();
+      }
+      for (const unit of ["swordsman","archer","spearman","cavalry"]) {
+        await env.DB.prepare("INSERT OR IGNORE INTO castle_army (castle,unit_key,count) VALUES (?,?,?)").bind(c.castle,unit,unit==="swordsman"?500:unit==="archer"?200:100).run();
+      }
+      for (const item of Object.keys(EQUIPMENT)) {
+        await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment (castle,item_key,count) VALUES (?,?,0)").bind(c.castle,item).run();
+      }
+      for (const ship of ["transport","warship"]) {
+        await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet (castle,ship_key,count) VALUES (?,?,1)").bind(c.castle,ship).run();
+      }
+      for (const spc of (SPECIAL_CAMPS[r.region]||[])) {
+        await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,spc.key).run();
+      }
     }
   }
   await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('seeded','1')").run();
@@ -326,8 +341,9 @@ async function runWeeklyUpdate(env) {
   const week=gameWeekKey();
   const rows=(await env.DB.prepare("SELECT * FROM castle_state").all()).results;
   for(const s of rows){
-    const marker=await env.DB.prepare("SELECT last_week_key FROM castle_week_state WHERE castle=?").bind(s.castle).first();
-    if(marker?.last_week_key===week) continue;
+    // Claim the week atomically so concurrent API requests cannot pay twice.
+    const claim=await env.DB.prepare("UPDATE castle_week_state SET last_week_key=? WHERE castle=? AND (last_week_key IS NULL OR last_week_key<>?)").bind(week,s.castle,week).run();
+    if(!claim.meta?.changes) continue;
     const prods=(await env.DB.prepare("SELECT production_key,level FROM castle_production WHERE castle=?").bind(s.castle).all()).results;
     const camps=(await env.DB.prepare("SELECT camp_key,level FROM castle_camps WHERE castle=?").bind(s.castle).all()).results;
     const scamps=(await env.DB.prepare("SELECT camp_key,level FROM castle_special_camps WHERE castle=?").bind(s.castle).all()).results;
@@ -341,40 +357,31 @@ async function runWeeklyUpdate(env) {
       add(def.base,gain);
     }
     const sp=SPECIAL_PRODUCTIONS[s.region];
-    if(sp){
-      const lvl=Number(prods.find(x=>x.production_key===sp.key)?.level||0);
-      if(lvl) add(sp.base,lvl*sp.yield);
-    }
+    if(sp){const lvl=Number(prods.find(x=>x.production_key===sp.key)?.level||0);if(lvl)add(sp.base,lvl*sp.yield);}
     for(const c of camps){const d=GENERAL_CAMPS[c.camp_key];if(d&&c.level)add(d.unit,c.level*d.yield);}
     for(const c of scamps){const d=(SPECIAL_CAMPS[s.region]||[]).find(x=>x.key===c.camp_key);if(d&&c.level)add(d.unit,c.level*d.yield);}
     const a=Object.fromEntries(army.map(x=>[x.unit_key,Number(x.count)]));
-    let grainNeed=(a.swordsman||0)+(a.archer||0)+(a.spearman||0)+((a.cavalry||0)*2);
-    let meatNeed=(a.giants||0)*2;
-    for(const [key,count] of Object.entries(a)) if(!["swordsman","archer","spearman","cavalry","giants"].includes(key)) grainNeed+=count*2;
-    let grainUsed=Math.min(Number(s.grain),grainNeed);
-    let rem=grainNeed-grainUsed;
-    let fishUsed=Math.min(Number(s.fish),Math.ceil(rem/2));
-    rem-=fishUsed*2;
-    let meatUsed=Math.min(Number(s.meat),Math.max(Math.ceil(Math.max(0,rem)/2),meatNeed));
+    const grainNeed=(a.swordsman||0)+(a.archer||0)+(a.spearman||0)+((a.cavalry||0)*2)+Object.entries(a).filter(([key])=>!["swordsman","archer","spearman","cavalry","giants"].includes(key)).reduce((sum,[,count])=>sum+Number(count||0)*2,0);
+    const meatNeed=(a.giants||0)*2;
+    const grainUsed=Math.min(Number(s.grain||0),grainNeed);
+    let rem=Math.max(0,grainNeed-grainUsed);
+    const fishUsed=Math.min(Number(s.fish||0),Math.ceil(rem/2));
+    rem=Math.max(0,rem-fishUsed*2);
+    const meatUsed=Math.min(Number(s.meat||0),Math.max(meatNeed,Math.ceil(rem/2)));
     const resourceParts=[]; const resourceBind=[];
-    for(const [k,v] of Object.entries(changes)){
-      if(RESOURCE_KEYS.includes(k)&&v){resourceParts.push(`${k}=${k}+?`);resourceBind.push(Math.floor(v));}
-    }
-    resourceParts.push("grain=grain-?","fish=fish-?","meat=meat-?");
+    for(const [k,v] of Object.entries(changes)){if(RESOURCE_KEYS.includes(k)&&v){resourceParts.push(k+"="+k+"+?");resourceBind.push(Math.floor(v));}}
+    resourceParts.push("grain=MAX(0,grain-?)","fish=MAX(0,fish-?)","meat=MAX(0,meat-?)");
     resourceBind.push(grainUsed,fishUsed,meatUsed);
-    const statements=[
-      env.DB.prepare(`UPDATE castle_state SET ${resourceParts.join(",")} WHERE castle=?`).bind(...resourceBind,s.castle),
-      env.DB.prepare("UPDATE castle_week_state SET last_week_key=? WHERE castle=?").bind(week,s.castle)
-    ];
+    const statements=[env.DB.prepare("UPDATE castle_state SET "+resourceParts.join(",")+" WHERE castle=?").bind(...resourceBind,s.castle)];
     for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k))){
       statements.push(env.DB.prepare("INSERT INTO castle_army(castle,unit_key,count) VALUES (?,?,?) ON CONFLICT(castle,unit_key) DO UPDATE SET count=count+excluded.count").bind(s.castle,unit,Math.floor(gain)));
     }
     if(Number(s.port_enabled)&&Number(s.port_level)>0){
-      statements.push(
-        env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='transport'").bind(Number(s.port_level),s.castle),
-        env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='warship'").bind(Number(s.port_level),s.castle)
-      );
+      statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='transport'").bind(Number(s.port_level),s.castle));
+      statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='warship'").bind(Number(s.port_level),s.castle));
     }
+    // The weekly claim and all production changes must succeed together.
+    // D1 batch rollback prevents a claimed week from being lost on failure.
     await env.DB.batch(statements);
   }
 }
@@ -420,7 +427,7 @@ async function handleApi(request, env, url) {
     const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||""); if(username.length>24 || password.length>MAX_PASSWORD_LENGTH) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); const u=await env.DB.prepare("SELECT * FROM users WHERE lower(username)=lower(?)").bind(username).first();
     if(!u || !(await verifyPassword(password,u.salt,u.hash))) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); await deleteSession(request,env); const sid=await createSession(env,u.id); return json({ok:true,user:publicUser(u)},200,{"set-cookie":cookie("khata_session",sid)});
   }
-  if (method === "POST" && path === "/api/auth/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
+  if (method === "POST" && path === "/api/auth/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
   if (method === "GET" && path === "/api/houses") return json(houses);
   if (method === "GET" && path === "/api/players") return json(await players(env));
   const session=await getSession(request,env);
@@ -445,7 +452,7 @@ async function handleApi(request, env, url) {
     const sid=await createSession(env,"__admin__",1);
     return json({ok:true},200,{"set-cookie":cookie("khata_session",sid)});
   }
-  if (method === "POST" && path === "/api/admin/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
+  if (method === "POST" && path === "/api/admin/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
   if (method === "GET" && path === "/api/admin/status") return json({admin:!!session?.is_admin});
   if (path === "/api/admin/players" && method === "POST") {
     if(!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
