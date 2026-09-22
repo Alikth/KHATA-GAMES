@@ -469,8 +469,16 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   async function checkAdminSession() {
     const status = await api("/api/admin/status");
-    $("adminLoginBox").classList.toggle("hidden", status.admin); $("adminPanel").classList.toggle("hidden", !status.admin);
-    if (status.admin) await refreshAdmin();
+    $("adminLoginBox").classList.toggle("hidden", status.admin);
+    $("adminPanel").classList.toggle("hidden", !status.admin);
+    if (status.admin) {
+      try { await refreshAdmin(); }
+      catch (e) {
+        console.error("Admin refresh failed:", e);
+        $("adminPanel").classList.remove("hidden");
+        setMessage("adminMessage", "error", "پنل ادمین باز شد، اما بارگذاری اطلاعات با خطا مواجه شد: " + e.message);
+      }
+    }
   }
 
   function showToast(message, isError = false) {
