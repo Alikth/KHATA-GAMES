@@ -284,6 +284,7 @@ async function ensureEconomySchema(env) {
     for (const unit of ["swordsman","archer","spearman","cavalry"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_army (castle,unit_key,count) VALUES (?,?,?)").bind(c.castle,unit,unit==="swordsman"?500:unit==="archer"?200:unit==="spearman"?100:100).run();
     for (const unit of Object.values(EQUIPMENT)) {}
     for (const item of Object.keys(EQUIPMENT)) await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment (castle,item_key,count) VALUES (?,?,0)").bind(c.castle,item).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state (castle,last_week_key) VALUES (?,NULL)").bind(c.castle).run();
     for (const ship of ["transport","warship"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet (castle,ship_key,count) VALUES (?,?,1)").bind(c.castle,ship).run();
     for (const sp of (SPECIAL_CAMPS[r.region]||[])) await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,sp.key).run();
   }
@@ -311,34 +312,58 @@ async function loadCastleEconomy(env, castle) {
 
 async function runWeeklyUpdate(env) {
   const week=gameWeekKey();
-  const inserted=await env.DB.prepare("INSERT OR IGNORE INTO game_week_runs (week_key,processed_at) VALUES (?,?)").bind(week,new Date().toISOString()).run();
-  if(!inserted.meta.changes) return;
   const rows=(await env.DB.prepare("SELECT * FROM castle_state").all()).results;
   for(const s of rows){
+    const marker=await env.DB.prepare("SELECT last_week_key FROM castle_week_state WHERE castle=?").bind(s.castle).first();
+    if(marker?.last_week_key===week) continue;
     const prods=(await env.DB.prepare("SELECT production_key,level FROM castle_production WHERE castle=?").bind(s.castle).all()).results;
     const camps=(await env.DB.prepare("SELECT camp_key,level FROM castle_camps WHERE castle=?").bind(s.castle).all()).results;
     const scamps=(await env.DB.prepare("SELECT camp_key,level FROM castle_special_camps WHERE castle=?").bind(s.castle).all()).results;
     const army=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(s.castle).all()).results;
     const changes={}; const add=(k,v)=>changes[k]=(changes[k]||0)+v;
-    for(const p of prods){const def=GENERAL_PRODUCTIONS[p.production_key];if(!def||!p.level)continue;let gain=Number(p.level)*def.yield;if(p.production_key==="farm"&&Number(p.level)===1)gain=300;const mult=REGION_MULTIPLIERS[s.region]?.[p.production_key]||1;add(def.base,gain*mult);}
-    const sp=SPECIAL_PRODUCTIONS[s.region]; if(sp){const lvl=Number((await env.DB.prepare("SELECT level FROM castle_production WHERE castle=? AND production_key=?").bind(s.castle,sp.key).first())?.level||0);if(lvl)add(sp.base,lvl*sp.yield);}
+    for(const p of prods){
+      const def=GENERAL_PRODUCTIONS[p.production_key]; if(!def||!p.level) continue;
+      let gain=Number(p.level)*def.yield;
+      if(p.production_key==="farm"&&Number(p.level)===1) gain=300;
+      gain*=REGION_MULTIPLIERS[s.region]?.[p.production_key]||1;
+      add(def.base,gain);
+    }
+    const sp=SPECIAL_PRODUCTIONS[s.region];
+    if(sp){
+      const lvl=Number(prods.find(x=>x.production_key===sp.key)?.level||0);
+      if(lvl) add(sp.base,lvl*sp.yield);
+    }
     for(const c of camps){const d=GENERAL_CAMPS[c.camp_key];if(d&&c.level)add(d.unit,c.level*d.yield);}
     for(const c of scamps){const d=(SPECIAL_CAMPS[s.region]||[]).find(x=>x.key===c.camp_key);if(d&&c.level)add(d.unit,c.level*d.yield);}
-    if(Number(s.port_enabled)&&Number(s.port_level)>0){add("transport",0);add("warship",0);}
     const a=Object.fromEntries(army.map(x=>[x.unit_key,Number(x.count)]));
     let grainNeed=(a.swordsman||0)+(a.archer||0)+(a.spearman||0)+((a.cavalry||0)*2);
-    for(const [key,count] of Object.entries(a)) if(!["swordsman","archer","spearman","cavalry"].includes(key)) grainNeed+=(key==="giants"?0:count*2);
     let meatNeed=(a.giants||0)*2;
-    let grainUsed=Math.min(Number(s.grain),grainNeed); let rem=grainNeed-grainUsed; let fishUsed=Math.min(Number(s.fish),Math.ceil(rem/2)); rem-=fishUsed*2; let meatUsed=Math.min(Number(s.meat),Math.ceil(Math.max(0,rem)/2)); rem-=meatUsed*2;
-    const sqlParts=[]; const bind=[];
-    for(const [k,v] of Object.entries(changes)) if(RESOURCE_KEYS.includes(k)&&v) {sqlParts.push(\`\${k}=\${k}+?\`);bind.push(Math.floor(v));}
-    sqlParts.push("grain=grain-?","fish=fish-?","meat=meat-?");
-    bind.push(grainUsed,fishUsed,meatUsed);
-    if(Number(s.port_enabled)&&Number(s.port_level)>0){ }
-    const batch=[env.DB.prepare(\`UPDATE castle_state SET \${sqlParts.join(",")} WHERE castle=?\`).bind(...bind,s.castle)];
-    for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k))) batch.push(env.DB.prepare("UPDATE castle_army SET count=count+? WHERE castle=? AND unit_key=?").bind(Math.floor(gain),s.castle,unit));
-    if(Number(s.port_enabled)&&Number(s.port_level)>0){batch.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key=?").bind(Number(s.port_level),s.castle,"transport"),env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key=?").bind(Number(s.port_level),s.castle,"warship"));}
-    await env.DB.batch(batch);
+    for(const [key,count] of Object.entries(a)) if(!["swordsman","archer","spearman","cavalry","giants"].includes(key)) grainNeed+=count*2;
+    let grainUsed=Math.min(Number(s.grain),grainNeed);
+    let rem=grainNeed-grainUsed;
+    let fishUsed=Math.min(Number(s.fish),Math.ceil(rem/2));
+    rem-=fishUsed*2;
+    let meatUsed=Math.min(Number(s.meat),Math.max(Math.ceil(Math.max(0,rem)/2),meatNeed));
+    const resourceParts=[]; const resourceBind=[];
+    for(const [k,v] of Object.entries(changes)){
+      if(RESOURCE_KEYS.includes(k)&&v){resourceParts.push(\`\${k}=\${k}+?\`);resourceBind.push(Math.floor(v));}
+    }
+    resourceParts.push("grain=grain-?","fish=fish-?","meat=meat-?");
+    resourceBind.push(grainUsed,fishUsed,meatUsed);
+    const statements=[
+      env.DB.prepare(\`UPDATE castle_state SET \${resourceParts.join(",")} WHERE castle=?\`).bind(...resourceBind,s.castle),
+      env.DB.prepare("UPDATE castle_week_state SET last_week_key=? WHERE castle=?").bind(week,s.castle)
+    ];
+    for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k))){
+      statements.push(env.DB.prepare("INSERT INTO castle_army(castle,unit_key,count) VALUES (?,?,?) ON CONFLICT(castle,unit_key) DO UPDATE SET count=count+excluded.count").bind(s.castle,unit,Math.floor(gain)));
+    }
+    if(Number(s.port_enabled)&&Number(s.port_level)>0){
+      statements.push(
+        env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='transport'").bind(Number(s.port_level),s.castle),
+        env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='warship'").bind(Number(s.port_level),s.castle)
+      );
+    }
+    await env.DB.batch(statements);
   }
 }
 
@@ -478,29 +503,20 @@ async function handleApi(request, env, url) {
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     const b=await body(request),key=String(b.key||""),def=EQUIPMENT[key]; if(!def)return json({error:"ادوات معتبر نیست."},400);
     if(Number(state.workshop_level)<def.level)return json({error:\`برای ساخت \${def.label} کارگاه باید حداقل سطح \${def.level} باشد.\`},400);
-    const today=gameDayKey(),week=gameWeekKey(),dayCount=state.equipment_day===today?Number((await env.DB.prepare("SELECT count FROM castle_equipment WHERE castle=? AND item_key=?").bind(state.castle,key).first())?.count||0):0;
-    const counter=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(state.castle).first();
-    let counters={day:counter.equipment_day===today?dayCount:0,week:counter.equipment_week===week?0:0};
-    const metaRow=await env.DB.prepare("SELECT equipment_day,equipment_week FROM castle_state WHERE castle=?").bind(state.castle).first();
-    const existing=(await env.DB.prepare("SELECT count FROM castle_equipment WHERE castle=? AND item_key=?").bind(state.castle,key).first())?.count||0;
-    const periodUsed=def.period==="day"?(metaRow.equipment_day===today?0:0):(metaRow.equipment_week===week?0:0);
-    const trackerKey=def.period==="day"?\`equip:\${today}:\${key}\`:\`equip:\${week}:\${key}\`;
-    const trackerTableExists=true;
-    const current=Number((await env.DB.prepare("SELECT count FROM castle_equipment WHERE castle=? AND item_key=?").bind(state.castle,key).first())?.count||0);
-    // Limits are tracked by dedicated counters in special_item JSON to keep the schema stable.
-    let meta={}; try{meta=counter.special_item?JSON.parse(counter.special_item):{}}catch{}
-    const used=Number(meta[trackerKey]||0);
-    if(used>=def.limit)return json({error:\`سقف ساخت این آیتم برای این \${def.period==="day"?"روز":"هفته"} پر شده است.\`},400);
+    const trackerKey=\`\${def.period}:\${def.period==="day"?gameDayKey():gameWeekKey()}:\${key}\`;
+    const used=Number((await env.DB.prepare("SELECT used FROM castle_equipment_limits WHERE castle=? AND tracker_key=?").bind(state.castle,trackerKey).first())?.used||0);
+    if(used>=def.limit)return json({error:\`سقف ساخت \${def.label} برای این \${def.period==="day"?"روز":"هفته"} پر شده است.\`},400);
     if(!addCostCheck(state,def.cost))return json({error:"منابع کافی نیست."},400);
     const cost=safeCost(def.cost),sets=Object.keys(cost).map(k=>\`\${k}=\${k}-?\`).join(","),cond=Object.keys(cost).map(k=>\`\${k}>=?\`).join(" AND ");
-    meta[trackerKey]=used+1;
     const bres=await env.DB.batch([
-      env.DB.prepare(\`UPDATE castle_state SET \${sets},special_item=? WHERE castle=? AND \${cond}\`).bind(...Object.values(cost),JSON.stringify(meta),state.castle,...Object.values(cost)),
-      env.DB.prepare("UPDATE castle_equipment SET count=count+1 WHERE castle=? AND item_key=?").bind(state.castle,key)
+      env.DB.prepare(\`UPDATE castle_state SET \${sets} WHERE castle=? AND \${cond}\`).bind(...Object.values(cost),state.castle,...Object.values(cost)),
+      env.DB.prepare("UPDATE castle_equipment SET count=count+1 WHERE castle=? AND item_key=?").bind(state.castle,key),
+      env.DB.prepare("INSERT INTO castle_equipment_limits(castle,tracker_key,used) VALUES (?,?,1) ON CONFLICT(castle,tracker_key) DO UPDATE SET used=used+1").bind(state.castle,trackerKey)
     ]);
-    if(!bres[1]?.meta?.changes)return json({error:"ساخت همزمان تغییر کرده؛ دوباره تلاش کن."},409);
-    return json({ok:true,count:current+1});
+    if(!bres[1]?.meta?.changes || !bres[2]?.meta?.changes)return json({error:"ساخت همزمان تغییر کرده؛ دوباره تلاش کن."},409);
+    return json({ok:true});
   }
+
   if (method==="POST" && path==="/api/my-castle/port/upgrade") {
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     if(!Number(state.port_enabled))return json({error:"این قلعه فعلاً بندری تعریف نشده است."},400);
