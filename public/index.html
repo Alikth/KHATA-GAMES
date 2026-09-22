@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/mobile-polish.css?v=1">
   <link rel="stylesheet" href="/castle-management.css?v=2">
   <link rel="stylesheet" href="/war-expedition.css?v=1">
+  <link rel="stylesheet" href="/trade.css?v=1">
 </head>
 <body>
   <div class="ambient"></div>
@@ -65,13 +66,24 @@
       <section id="players" class="page"><div class="page-title"><span>🗺️</span><div><h2>THE HOUSES OF WESTEROS</h2><p>اقلیم را روی نقشه انتخاب کن و خاندان‌های آن را ببین</p></div></div><div class="stats"><div><b id="playerCount">0</b><span>PLAYERS</span></div><div><b id="castleCount">30</b><span>CASTLES</span></div></div><div class="map-layout"><div class="map-shell"><div class="map-toolbar"><div><span class="map-live-dot"></span> WESTEROS REALM MAP</div><div class="map-controls" aria-label="کنترل نقشه"><button id="mapZoomOut" type="button" title="کوچک‌نمایی">−</button><button id="mapZoomReset" type="button" title="اندازه اصلی"><span id="mapZoomValue">100%</span></button><button id="mapZoomIn" type="button" title="بزرگ‌نمایی">+</button></div><small>برای دیدن جزئیات نقشه از کنترل بزرگ‌نمایی استفاده کن.</small></div><div id="westerosMap" class="westeros-map"><img src="/assets/westeros-west-only.jpg" alt="Westeros map"><div id="regionMarkers" class="region-markers"></div></div></div><aside id="regionPanel" class="region-panel"><div class="region-panel-empty"><div class="panel-crown">◐</div><h3>CHOOSE A REALM</h3><p>برای مشاهده خاندان‌ها و قلعه‌های هر اقلیم، یکی از دایره‌های روی نقشه را انتخاب کن.</p></div></aside></div><div class="map-legend"><span><i class="legend-dot free"></i> قلعه آزاد</span><span><i class="legend-dot claimed"></i> قلعه تصاحب شده</span><span>⚓ دارای بندر</span><span>🔱 اقلیم بالادست</span></div><div class="realm-list-title"><span>REGISTERED LORDS</span><em>لردهای ثبت‌شده بر اساس اقلیم</em></div><div id="playerList" class="player-list"></div></section>
       <section id="characters" class="page"><div class="page-title"><span>⚔</span><div><h2>CHARACTERS</h2><p>لردها و شخصیت‌های قلمرو</p></div></div><div id="khcs-region-tabs" class="khcs-region-tabs"></div><div id="khcs-character-root"></div></section>
       <section id="shop" class="page"><div class="page-title"><span>🛒</span><div><h2>THE SHOP</h2><p>فروشگاه قلمرو</p></div></div><div class="khcs-shop"><div id="khcs-shop-main" class="khcs-shop-main"></div><aside id="khcs-shop-side" class="khcs-shop-side"></aside></div></section>
-      <section id="admin" class="page"><div class="page-title"><span>🛡</span><div><h2>ROYAL ADMIN</h2><p>مدیریت لردها و قلمروها</p></div></div><div id="adminLoginBox" class="admin-box"><input id="adminPassword" type="password" placeholder="Admin Password"><button class="primary" id="adminLogin">ENTER THE REALM</button><div id="adminMessage"></div></div><div id="adminPanel" class="hidden"><div class="admin-grid"><div class="admin-box"><h3>ADD LORD</h3><input id="adminUsername" placeholder="Telegram Username"><select id="adminRegion"></select><select id="adminCastle"></select><button class="primary" id="adminAdd">ADD PLAYER</button></div><div class="admin-box"><h3>REGISTERED LORDS</h3><div id="adminPlayers"></div></div></div><button class="danger" id="adminLogout">LOG OUT</button></div></section>
+      <section id="admin" class="page admin-page">
+        <div class="admin-dashboard">
+          <header class="admin-dashboard-head"><div><span class="admin-kicker">KHATA GAMES · CONTROL ROOM</span><h1>ROYAL ADMIN</h1><p>مدیریت کامل قلمرو، لردها و لشکرکشی‌ها</p></div><button class="danger" id="adminLogout">خروج از پنل</button></header>
+          <div id="adminLoginBox" class="admin-login-box"><h2>ورود به مرکز مدیریت</h2><p>این بخش از فضای بازیکنان جداست.</p><input id="adminPassword" type="password" placeholder="Admin Password"><button class="primary" id="adminLogin">ENTER CONTROL ROOM</button><div id="adminMessage"></div></div>
+          <div id="adminPanel" class="hidden">
+            <div class="admin-stats"><div><b id="adminLordCount">0</b><span>لردها</span></div><div><b id="adminWarCount">0</b><span>لشکرکشی‌ها</span></div><div><b id="adminActiveWarCount">0</b><span>لشکرکشی فعال</span></div></div>
+            <section class="admin-section"><div class="admin-section-head"><div><span>WAR EXPEDITIONS</span><h2>لشکرکشی‌ها</h2></div><button class="ghost" id="adminRefreshWars">↻ بروزرسانی</button></div><div id="adminWarList" class="admin-war-list"></div></section>
+            <section class="admin-section"><div class="admin-section-head"><div><span>LORDS</span><h2>لردها</h2></div></div><div class="admin-grid"><div class="admin-box"><h3>ADD LORD</h3><input id="adminUsername" placeholder="Telegram Username"><select id="adminRegion"></select><select id="adminCastle"></select><button class="primary" id="adminAdd">ADD PLAYER</button></div><div class="admin-box"><h3>REGISTERED LORDS</h3><div id="adminPlayers"></div></div></div></section>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
   <div id="castleModal" class="modal hidden"><div class="modal-card castle-modal"><button class="close" id="closeCastleModal">×</button><div id="castleDetails"></div></div></div>
   <div id="castleManagementModal" class="castle-management-modal hidden"><div class="castle-management-shell"><div id="castleManagementRoot"></div></div></div>
   <div id="warExpeditionModal" class="war-expedition-modal hidden"><div class="war-expedition-shell"><div class="we-head"><div><span class="cm-kicker">WAR EXPEDITION</span><h2>⚔️ لشکرکشی</h2><p>انتخاب نیرو، مسیر و تأیید نهایی</p></div><button id="weClose" class="we-close">×</button></div><div class="we-body"><section id="weTypeStep" class="we-step active"></section><section id="weFormStep" class="we-step"></section><section id="weConfirmStep" class="we-step"></section></div></div></div>
+  <div id="tradeModal" class="trade-modal hidden"><div class="trade-shell"><div id="tradeRoot"></div></div></div>
   <div id="registerModal" class="modal hidden"><div class="modal-card"><button class="close" id="closeModal">×</button><p class="eyebrow">HOUSE CLAIM</p><h2 id="selectedCastle"></h2><p id="selectedHouse" class="silver"></p><form id="registerForm"><label>Telegram Username</label><div class="telegram-input"><span>@</span><input id="username" maxlength="32" placeholder="YourUsername" autocomplete="off"></div><small>فقط Username تلگرام؛ آیدی عددی پذیرفته نمی‌شود.</small><button class="primary" type="submit">⚔ CLAIM CASTLE</button></form><div id="formMessage"></div></div></div>
   <footer>KHATA GAMES · THE REALM AWAITS</footer>
   <script src="/app.js?v=15"></script>
@@ -79,5 +91,6 @@
   <script src="/character-shop.js?v=11"></script>
   <script src="/castle-management.js?v=2"></script>
   <script src="/war-expedition.js?v=1"></script>
+  <script src="/trade.js?v=1"></script>
 </body>
 </html>
