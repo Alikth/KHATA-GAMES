@@ -543,6 +543,11 @@ async function handleApi(request, env, url) {
   }
   if (method === "POST" && path === "/api/admin/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie("khata_session")}}); }
   if (method === "GET" && path === "/api/admin/status") return json({admin:!!session?.is_admin});
+  if (path === "/api/admin/players" && method === "GET") {
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    const rows=(await env.DB.prepare("SELECT id,username,region,house,castle,account_id AS accountId,created_at AS createdAt FROM players ORDER BY created_at").all()).results;
+    return json(rows);
+  }
   if (path === "/api/admin/players" && method === "POST") {
     if(!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
     if(!session?.is_admin) return json({error:"دسترسی مدیر لازم است."},401); const b=await body(request), username=normalizeUsername(b.username),region=String(b.region||"").trim(),castle=String(b.castle||"").trim(),selected=findCastle(region,castle); if(!validTelegramUsername(username)||!selected)return json({error:"اطلاعات واردشده معتبر نیست."},400);
