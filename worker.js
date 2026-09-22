@@ -211,6 +211,7 @@ const ECONOMY_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS game_week_runs (week_key TEXT PRIMARY KEY, processed_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS castle_week_state (castle TEXT PRIMARY KEY, last_week_key TEXT)`,
   `CREATE TABLE IF NOT EXISTS castle_equipment_limits (castle TEXT NOT NULL, tracker_key TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,tracker_key))`,
+  `CREATE TABLE IF NOT EXISTS game_controls (control_key TEXT PRIMARY KEY, locked INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS war_logs (
     id TEXT PRIMARY KEY, week_key TEXT NOT NULL, created_at TEXT NOT NULL,
     attacker_account_id TEXT NOT NULL, attacker_username TEXT NOT NULL, lord_name TEXT,
@@ -307,6 +308,15 @@ async function ensureTradeSchema(env){
     status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL, responded_at TEXT
   )`).run();
 }
+async function ensureGameControls(env){
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS game_controls (control_key TEXT PRIMARY KEY, locked INTEGER NOT NULL DEFAULT 0)`).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO game_controls(control_key,locked) VALUES ('war',0),('trade',0)").run();
+}
+async function isGameControlLocked(env,key){
+  await ensureGameControls(env);
+  const row=await env.DB.prepare("SELECT locked FROM game_controls WHERE control_key=?").bind(key).first();
+  return Number(row?.locked||0)===1;
+}
 function tradeAssets(raw){
   const out={}; const allowed=RESOURCE_KEYS.filter(k=>k!=="peasants");
   if(!raw || typeof raw!=="object") return out;
@@ -400,12 +410,12 @@ async function loadCastleEconomy(env, castle) {
   return {castle:state.castle,region:state.region,ownerAccountId:state.owner_account_id,resources:Object.fromEntries(RESOURCE_KEYS.map(k=>[k,Number(state[k]||0)])),production,camps:campMap,specialCamps:specialCampMap,specialProduction,army:armyMap,equipment:equipmentMap,fleet:fleetMap,workshop:{level:Number(state.workshop_level),maxLevel:5,upgradeCost:EQUIPMENT_UPGRADE_COST},port:{enabled:!!state.port_enabled,level:Number(state.port_level),maxLevel:15,weeklyYieldPerShipType:Number(state.port_level)},specialItem:parsedSpecialItem,gameWeek:gameWeekKey()};
 }
 
-async function runWeeklyUpdate(env) {
+async function runWeeklyUpdate(env, force=false) {
   const week=gameWeekKey();
   const rows=(await env.DB.prepare("SELECT * FROM castle_state").all()).results;
   for(const s of rows){
     const marker=await env.DB.prepare("SELECT last_week_key FROM castle_week_state WHERE castle=?").bind(s.castle).first();
-    if(marker?.last_week_key===week) continue;
+    if(!force && marker?.last_week_key===week) continue;
     const prods=(await env.DB.prepare("SELECT production_key,level FROM castle_production WHERE castle=?").bind(s.castle).all()).results;
     const camps=(await env.DB.prepare("SELECT camp_key,level FROM castle_camps WHERE castle=?").bind(s.castle).all()).results;
     const scamps=(await env.DB.prepare("SELECT camp_key,level FROM castle_special_camps WHERE castle=?").bind(s.castle).all()).results;
@@ -544,7 +554,6 @@ async function handleApi(request, env, url) {
 
   if (path.startsWith("/api/my-castle") || path.startsWith("/api/game/")) {
     await ensureEconomySchema(env);
-    await runWeeklyUpdate(env);
   }
   if (method==="GET" && path==="/api/game/week") return json({week:gameWeekKey()});
   if (method==="GET" && path==="/api/my-castle/assets") {
@@ -668,6 +677,7 @@ async function handleApi(request, env, url) {
   }
   if (method==="POST" && path==="/api/war-expeditions") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(await isGameControlLocked(env,"war"))return json({error:"لشکرکشی‌ها فعلاً توسط ادمین قفل شده‌اند."},423);
     await ensureWarLogSchema(env);
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
     const b=await body(request), type=String(b.type||""), source=String(b.source||"").trim(), destination=String(b.destination||"").trim(), arrivalTime=String(b.arrivalTime||"").trim(), isFake=!!b.fake;
@@ -718,6 +728,113 @@ async function handleApi(request, env, url) {
     return json({ok:true,id});
   }
 
+  if (method==="GET" && path==="/api/admin/controls") {
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureGameControls(env);
+    const rows=(await env.DB.prepare("SELECT control_key AS key,locked FROM game_controls ORDER BY control_key").all()).results;
+    return json({controls:Object.fromEntries(rows.map(x=>[x.key,!!Number(x.locked)]))});
+  }
+  if (method==="POST" && path==="/api/admin/controls") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureGameControls(env);
+    const b=await body(request), key=String(b.key||""), locked=!!b.locked;
+    if(!["war","trade"].includes(key))return json({error:"قفل نامعتبر است."},400);
+    await env.DB.prepare("UPDATE game_controls SET locked=? WHERE control_key=?").bind(locked?1:0,key).run();
+    return json({ok:true,key,locked});
+  }
+  if (method==="POST" && path==="/api/admin/weekly-update") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureEconomySchema(env);
+    const week=gameWeekKey();
+    const done=await env.DB.prepare("SELECT week_key FROM game_week_runs WHERE week_key=?").bind(week).first();
+    if(done)return json({error:"آپدیت این هفته قبلاً انجام شده است.",week,already:true},409);
+    await runWeeklyUpdate(env,true);
+    await env.DB.prepare("INSERT INTO game_week_runs(week_key,processed_at) VALUES(?,?)").bind(week,new Date().toISOString()).run();
+    return json({ok:true,week});
+  }
+  if (method==="GET" && path==="/api/admin/trades") {
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureTradeSchema(env);
+    const rows=(await env.DB.prepare("SELECT t.*, su.username AS sender_username, ru.username AS receiver_username FROM trade_requests t LEFT JOIN users su ON su.id=t.sender_account_id LEFT JOIN users ru ON ru.id=t.receiver_account_id ORDER BY t.created_at DESC").all()).results;
+    return json({trades:rows.map(x=>({...x,sendAssets:JSON.parse(x.send_assets_json||"{}"),receiveAssets:JSON.parse(x.receive_assets_json||"{}")}))});
+  }
+  if (method==="GET" && path==="/api/admin/castles") {
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureEconomySchema(env);
+    const rows=(await env.DB.prepare("SELECT c.castle,c.region,p.house,c.owner_account_id AS ownerAccountId,u.username FROM castle_state c LEFT JOIN players p ON p.castle=c.castle AND p.account_id=c.owner_account_id LEFT JOIN users u ON u.id=c.owner_account_id ORDER BY c.region,c.castle").all()).results;
+    return json({castles:rows});
+  }
+  if (method==="POST" && path.match(/^\/api\/admin\/players\/[^/]+\/castles$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    const playerId=decodeURIComponent(path.split("/")[4]), b=await body(request), region=String(b.region||"").trim(), castle=String(b.castle||"").trim(), selected=findCastle(region,castle);
+    if(!selected)return json({error:"قلمرو یا قلعه معتبر نیست."},400);
+    const player=await env.DB.prepare("SELECT id,account_id AS accountId FROM players WHERE id=?").bind(playerId).first();
+    if(!player?.accountId)return json({error:"این پلیر حساب کاربری معتبر ندارد."},400);
+    const taken=await env.DB.prepare("SELECT owner_account_id FROM castle_state WHERE castle=?").bind(castle).first();
+    if(taken?.owner_account_id)return json({error:"این قلعه قبلاً در اختیار یک پلیر است."},409);
+    await ensureEconomySchema(env);
+    const exists=await env.DB.prepare("SELECT id FROM players WHERE account_id=? AND castle=?").bind(player.accountId,castle).first();
+    if(exists)return json({error:"این قلعه قبلاً برای این پلیر ثبت شده است."},409);
+    const u=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(player.accountId).first();
+    const p={id:newId(),username:u?.username||"",region,house:selected.house,castle,account_id:player.accountId,created_at:new Date().toISOString()};
+    await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,p.account_id,p.created_at).run();
+    await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=?").bind(player.accountId,castle).run();
+    return json({ok:true,player:p});
+  }
+  if (method==="GET" && path==="/api/admin/castle-assets") {
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureEconomySchema(env);
+    const castle=String(url.searchParams.get("castle")||"").trim();
+    if(!castle)return json({error:"قلعه را انتخاب کنید."},400);
+    const state=await loadCastleEconomy(env,castle);
+    if(!state)return json({error:"قلعه پیدا نشد."},404);
+    return json(state);
+  }
+  if (method==="POST" && path==="/api/admin/castle-assets") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureEconomySchema(env);
+    const b=await body(request), castle=String(b.castle||"").trim(), changes=b.changes&&typeof b.changes==="object"?b.changes:{};
+    const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
+    if(!state)return json({error:"قلعه پیدا نشد."},404);
+    const updates=[];
+    const res=changes.resources&&typeof changes.resources==="object"?changes.resources:{};
+    for(const k of RESOURCE_KEYS){
+      if(Object.prototype.hasOwnProperty.call(res,k)){
+        const n=Math.floor(Number(res[k])); if(!Number.isFinite(n)||n<0||n>1000000000)return json({error:"مقدار دارایی نامعتبر است."},400);
+        updates.push(env.DB.prepare("UPDATE castle_state SET "+k+"=? WHERE castle=?").bind(n,castle));
+      }
+    }
+    for(const pair of [["workshop_level",changes.workshopLevel],["port_level",changes.portLevel]]){
+      if(pair[1]!==undefined){const n=Math.floor(Number(pair[1]));if(!Number.isFinite(n)||n<0)return json({error:"سطح نامعتبر است."},400);updates.push(env.DB.prepare("UPDATE castle_state SET "+pair[0]+"=? WHERE castle=?").bind(n,castle));}
+    }
+    if(changes.portEnabled!==undefined)updates.push(env.DB.prepare("UPDATE castle_state SET port_enabled=? WHERE castle=?").bind(changes.portEnabled?1:0,castle));
+    const updateRows=async(table,keyField,source)=>{if(!source||typeof source!=="object")return;for(const [k,raw] of Object.entries(source)){const n=Math.floor(Number(raw));if(!Number.isFinite(n)||n<0||n>1000000000)throw new Error("مقدار نامعتبر است.");let valid=true;if(table==="castle_production")valid=!!GENERAL_PRODUCTIONS[k]||!!(SPECIAL_PRODUCTIONS[state.region]&&SPECIAL_PRODUCTIONS[state.region].key===k);else if(table==="castle_camps")valid=!!GENERAL_CAMPS[k];else if(table==="castle_special_camps")valid=!!(SPECIAL_CAMPS[state.region]||[]).find(x=>x.key===k);if(!valid&&table!=="castle_army"&&table!=="castle_equipment"&&table!=="castle_fleet")throw new Error("کلید نامعتبر است.");const valueField=(table==="castle_army"||table==="castle_equipment"||table==="castle_fleet")?"count":"level";updates.push(env.DB.prepare("UPDATE "+table+" SET "+valueField+"=? WHERE castle=? AND "+keyField+"=?").bind(n,castle,k));}};
+    try{
+      await updateRows("castle_production","production_key",changes.production);
+      await updateRows("castle_camps","camp_key",changes.camps);
+      await updateRows("castle_special_camps","camp_key",changes.specialCamps);
+      await updateRows("castle_army","unit_key",changes.army);
+      await updateRows("castle_equipment","item_key",changes.equipment);
+      await updateRows("castle_fleet","ship_key",changes.fleet);
+    }catch(e){return json({error:e.message||"مقدار نامعتبر است."},400);}
+    if(changes.specialItem!==undefined)updates.push(env.DB.prepare("UPDATE castle_state SET special_item=? WHERE castle=?").bind(changes.specialItem==null?null:JSON.stringify(changes.specialItem),castle));
+    if(!updates.length)return json({ok:true});
+    await env.DB.batch(updates);
+    return json({ok:true});
+  }
+  if (method==="GET" && path==="/api/admin/scenarios") {
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    return json({items:[]});
+  }
+  if (method==="GET" && path==="/api/admin/roles") {
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    return json({items:[]});
+  }
+
   if (method==="GET" && path==="/api/admin/war-expeditions") {
     await ensureWarLogSchema(env);
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
@@ -763,6 +880,7 @@ async function handleApi(request, env, url) {
   }
   if (method==="POST" && path==="/api/trades") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(await isGameControlLocked(env,"trade"))return json({error:"تجارت فعلاً توسط ادمین قفل شده است."},423);
     await ensureTradeSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
@@ -781,6 +899,7 @@ async function handleApi(request, env, url) {
   }
   if (method==="POST" && path.match(/^\/api\/trades\/[^/]+\/respond$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(await isGameControlLocked(env,"trade"))return json({error:"تجارت فعلاً توسط ادمین قفل شده است."},423);
     await ensureTradeSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]), action=String((await body(request)).action||"");
