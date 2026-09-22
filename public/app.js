@@ -46,24 +46,28 @@ window.addEventListener("DOMContentLoaded", () => {
   async function boot() {
     try {
       const auth = await api("/api/auth/status");
+      if (adminRequested) {
+        // Admin login is independent from the normal player login.
+        // Open the control-room login directly at ?admin=1.
+        showAdminOnly();
+        await checkAdminSession();
+        return;
+      }
       if (!auth.authenticated) {
         showAuth();
-        if (adminRequested) {
-          setAuthTab("login");
-          setMessage("authMessage", "error", "ابتدا وارد حساب کاربری شوید؛ سپس بخش مدیریت باز می‌شود.");
-        }
         return;
       }
       currentUser = auth.user;
       await enterAuthenticated();
-      if (adminRequested) {
-        showAdminOnly();
-        await checkAdminSession();
-      }
     } catch (err) {
       console.error(err);
-      showAuth();
-      setMessage("authMessage", "error", "ارتباط با سرور برقرار نشد. اتصال اینترنت و اجرای سرور را بررسی کنید.");
+      if (adminRequested) {
+        showAdminOnly();
+        setMessage("adminMessage", "error", "ارتباط با سرور برقرار نشد: " + err.message);
+      } else {
+        showAuth();
+        setMessage("authMessage", "error", "ارتباط با سرور برقرار نشد. اتصال اینترنت و اجرای سرور را بررسی کنید.");
+      }
     }
   }
 
@@ -480,6 +484,30 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     }
   }
+
+  $("adminLogin").onclick = async () => {
+    const button = $("adminLogin");
+    const password = $("adminPassword").value;
+    setMessage("adminMessage", "", "");
+    if (!password) {
+      setMessage("adminMessage", "error", "رمز مدیر را وارد کنید.");
+      $("adminPassword").focus();
+      return;
+    }
+    button.disabled = true;
+    try {
+      await api("/api/admin/login", { method: "POST", body: JSON.stringify({ password }) });
+      $("adminPassword").value = "";
+      await checkAdminSession();
+      if (new URLSearchParams(location.search).get("admin") !== "1") {
+        history.replaceState({}, "", "?admin=1");
+      }
+    } catch (err) {
+      setMessage("adminMessage", "error", err.message);
+    } finally {
+      button.disabled = false;
+    }
+  };
 
   function showToast(message, isError = false) {
     let root = $("toast");
