@@ -210,7 +210,14 @@ const ECONOMY_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS castle_fleet (castle TEXT NOT NULL, ship_key TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,ship_key))`,
   `CREATE TABLE IF NOT EXISTS game_week_runs (week_key TEXT PRIMARY KEY, processed_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS castle_week_state (castle TEXT PRIMARY KEY, last_week_key TEXT)`,
-  `CREATE TABLE IF NOT EXISTS castle_equipment_limits (castle TEXT NOT NULL, tracker_key TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,tracker_key))`
+  `CREATE TABLE IF NOT EXISTS castle_equipment_limits (castle TEXT NOT NULL, tracker_key TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,tracker_key))`,
+  `CREATE TABLE IF NOT EXISTS war_logs (
+    id TEXT PRIMARY KEY, week_key TEXT NOT NULL, created_at TEXT NOT NULL,
+    attacker_account_id TEXT NOT NULL, attacker_username TEXT NOT NULL, lord_name TEXT,
+    type TEXT NOT NULL, source_castle TEXT NOT NULL, destination_castle TEXT NOT NULL,
+    arrival_time TEXT NOT NULL, is_fake INTEGER NOT NULL DEFAULT 0,
+    assets_json TEXT NOT NULL DEFAULT '{}'
+  )`
 ];
 
 const GENERAL_PRODUCTIONS = {
@@ -265,6 +272,29 @@ const EQUIPMENT = {
 const EQUIPMENT_UPGRADE_COST = 6000;
 const RESOURCE_KEYS = ["peasants","coins","wood","stone","iron","meat","fish","grain","horses","dragon_glass","wildfire","tar","grapes"];
 const RESOURCE_LABELS = {peasants:"👥 رعیت",coins:"💰 سکه",wood:"🪵 چوب",stone:"🪨 سنگ",iron:"⛓ آهن",meat:"🥩 گوشت",fish:"🐟 ماهی",grain:"🌾 غلات",horses:"🐎 اسب",dragon_glass:"🌑 شیشه اژدها",wildfire:"🧪 وایلدفایر",tar:"🛢 قیر",grapes:"🍇 انگور"};
+
+
+const WAR_LORDS = {
+  "Castle Black":"Jon Snow","Eastwatch":"Eddison Tollett","Shadow Tower":"Alliser Thorne",
+  "Winterfell":"Sam Stark","The Dreadfort":"Roderick Bolton","Karhold":"Edrik Karstark",
+  "Riverrun":"Elyas Tully","The Twins":"Elyas Tully","Seagard":"Harwyn Mallister",
+  "The Eyrie":"Elyon Arryn","Gulltown":"Marq Grafton","Redfort":"Alric Redfort",
+  "Pyke":"Euron Greyjoy","Ten Towers":"Maron Harlaw","Hammerhorn":"Gorold Goodbrother",
+  "Casterly Rock":"Damon Lannister","Hornvale":"Tytos Brax","Ashemark":"Addam Marbrand",
+  "King's Landing":"","Dragonstone":"Vaeron Targaryen","Sharp Point":"Lucan Bar Emmon",
+  "Storm's End":"Stannis Baratheon","Fellwood":"Ronnel Fell","Blackhaven":"Beric Dondarrion",
+  "Highgarden":"Mace Tyrell","Horn Hill":"Randyll Tarly","Oldtown":"Leyton Hightower",
+  "Sunspear":"Doran Martell","Kingsgrave":"Nymeria Manwoody","Yronwood":"Anders Yronwood"
+};
+async function ensureWarLogSchema(env){
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS war_logs (
+    id TEXT PRIMARY KEY, week_key TEXT NOT NULL, created_at TEXT NOT NULL,
+    attacker_account_id TEXT NOT NULL, attacker_username TEXT NOT NULL, lord_name TEXT,
+    type TEXT NOT NULL, source_castle TEXT NOT NULL, destination_castle TEXT NOT NULL,
+    arrival_time TEXT NOT NULL, is_fake INTEGER NOT NULL DEFAULT 0,
+    assets_json TEXT NOT NULL DEFAULT '{}'
+  )`).run();
+}
 
 function gameWeekKey(date=new Date()) {
   const d=new Date(date); const day=d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate()-day+1); d.setUTCHours(0,0,0,0);
@@ -551,6 +581,69 @@ async function handleApi(request, env, url) {
     if(Number(state.coins)<1500||Number(state.wood)<1000)return json({error:"برای ارتقای اسکله 1500 سکه و 1000 چوب لازم است."},400);
     const bres=await env.DB.batch([env.DB.prepare("UPDATE castle_state SET coins=coins-1500,wood=wood-1000 WHERE castle=? AND coins>=1500 AND wood>=1000").bind(state.castle),env.DB.prepare("UPDATE castle_state SET port_level=port_level+1 WHERE castle=? AND port_level=?").bind(state.castle,state.port_level)]);
     if(!bres[1]?.meta?.changes)return json({error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:state.port_level+1});
+  }
+
+  if (method==="GET" && path==="/api/war-expeditions/status") {
+    await ensureWarLogSchema(env);
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const fake=await env.DB.prepare("SELECT id FROM war_logs WHERE attacker_account_id=? AND week_key=? AND is_fake=1 LIMIT 1").bind(session.user_id,gameWeekKey()).first();
+    return json({fakeAvailable:!fake});
+  }
+  if (method==="GET" && path==="/api/war-logs") {
+    await ensureWarLogSchema(env);
+    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt FROM war_logs ORDER BY created_at DESC").all()).results;
+    return json({logs:rows});
+  }
+  if (method==="POST" && path==="/api/war-expeditions") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    await ensureWarLogSchema(env);
+    const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
+    const b=await body(request), type=String(b.type||""), source=String(b.source||"").trim(), destination=String(b.destination||"").trim(), arrivalTime=String(b.arrivalTime||"").trim(), isFake=!!b.fake;
+    if(!["land","sea"].includes(type))return json({error:"نوع لشکرکشی معتبر نیست."},400);
+    if(!findCastle("",source)&&!houses.some(r=>r.castles.some(c=>c.castle===source)))return json({error:"مبدا معتبر نیست."},400);
+    if(!findCastle("",destination)&&!houses.some(r=>r.castles.some(c=>c.castle===destination)))return json({error:"مقصد معتبر نیست."},400);
+    if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))return json({error:"تایم رسیدن باید به صورت HH:MM وارد شود."},400);
+    const accountId=state.owner_account_id, user=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(accountId).first();
+    if(!user)return json({error:"حساب کاربری پیدا نشد."},404);
+    const week=gameWeekKey();
+    if(isFake){
+      const used=await env.DB.prepare("SELECT id FROM war_logs WHERE attacker_account_id=? AND week_key=? AND is_fake=1 LIMIT 1").bind(accountId,week).first();
+      if(used)return json({error:"لشکرکشی فیک این هفته قبلاً استفاده شده است."},409);
+    }
+    const selected=b.assets&&typeof b.assets==="object"?b.assets:{};
+    const allowed={army:["castle_army","unit_key"],equipment:["castle_equipment","item_key"],fleet:["castle_fleet","ship_key"]};
+    const deductions=[];
+    let selectedTotal=0;
+    if(!isFake){
+      for(const kind of type==="sea"?["army","equipment","fleet"]:["army","equipment"]){
+        const group=selected[kind]&&typeof selected[kind]==="object"?selected[kind]:{};
+        for(const [key,raw] of Object.entries(group)){
+          const n=Math.floor(Number(raw));
+          if(!Number.isFinite(n)||n<0||n>1000000) return json({error:"تعداد واردشده معتبر نیست."},400);
+          if(!n)continue;
+          const def=allowed[kind]; if(!def)return json({error:"دارایی معتبر نیست."},400);
+          const row=await env.DB.prepare(`SELECT count FROM ${def[0]} WHERE castle=? AND ${def[1]}=?`).bind(state.castle,key).first();
+          const have=Number(row?.count||0);
+          if(n>have)return json({error:`تعداد ${key} بیشتر از موجودی قلعه است.`},400);
+          deductions.push({table:def[0],keyField:def[1],key,n});
+          selectedTotal+=n;
+        }
+      }
+      if(!selectedTotal)return json({error:"برای لشکرکشی واقعی حداقل یک نیرو، ادوات یا کشتی انتخاب کن."},400);
+    } else if(type==="sea" && Object.keys(selected.fleet||{}).length) {
+      // Fake expeditions do not consume any assets.
+    }
+    const statements=[];
+    if(!isFake){
+      for(const d of deductions){
+        statements.push(env.DB.prepare(`UPDATE ${d.table} SET count=count-? WHERE castle=? AND ${d.keyField}=? AND count>=?`).bind(d.n,state.castle,d.key,d.n));
+      }
+    }
+    const id=newId(),createdAt=new Date().toISOString(),lordName=WAR_LORDS[source]||"";
+    statements.push(env.DB.prepare("INSERT INTO war_logs(id,week_key,created_at,attacker_account_id,attacker_username,lord_name,type,source_castle,destination_castle,arrival_time,is_fake,assets_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,week,createdAt,accountId,user.username,lordName,type,source,destination,arrivalTime,isFake?1:0,JSON.stringify(isFake?{}:selected)));
+    const result=await env.DB.batch(statements);
+    for(let i=0;i<deductions.length;i++)if(!result[i]?.meta?.changes)return json({error:"تغییر همزمان دارایی انجام نشد؛ دوباره تلاش کن."},409);
+    return json({ok:true,id});
   }
 
   return json({error:"Not found"},404);
