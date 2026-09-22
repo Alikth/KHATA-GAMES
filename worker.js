@@ -392,6 +392,7 @@ async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
 
 async function handleApi(request, env, url) {
   const method=request.method, path=url.pathname;
+  if (method === "GET" && path === "/api/health") { await env.DB.prepare("SELECT 1 AS ok").first(); return json({ok:true,service:"khata-games"}); }
   if (method === "GET" && path === "/api/auth/status") {
     const s=await getSession(request,env); let user=null; if(s?.user_id) user=await env.DB.prepare("SELECT id,username FROM users WHERE id=?").bind(s.user_id).first();
     return json({authenticated:!!user,user:publicUser(user)});
