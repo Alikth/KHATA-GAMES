@@ -753,7 +753,7 @@ async function handleApi(request, env, url) {
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const rows=await tradeRowsForAccount(env,session.user_id);
     const incoming=rows.filter(x=>x.receiver_account_id===session.user_id);
-    return json({count:incoming.length});
+    const byCastle={}; incoming.forEach(x=>byCastle[x.receiver_castle]=(byCastle[x.receiver_castle]||0)+1); return json({count:incoming.length,byCastle});
   }
   if (method==="GET" && path==="/api/trades/incoming") {
     await ensureTradeSchema(env);
@@ -766,15 +766,17 @@ async function handleApi(request, env, url) {
     await ensureTradeSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
-    const b=await body(request), destination=String(b.destination||"").trim();
+    const b=await body(request), source=String(b.source||"").trim(), destination=String(b.destination||"").trim();
+    const sourceRow=source?await env.DB.prepare("SELECT * FROM castle_state WHERE castle=? AND owner_account_id=?").bind(source,session.user_id).first():state;
+    if(!sourceRow)return json({error:"قلعه مبدا متعلق به این حساب نیست."},403);
     const sendAssets=tradeAssets(b.sendAssets), receiveAssets=tradeAssets(b.receiveAssets);
-    if(!destination || destination===state.castle)return json({error:"مقصد تجارت را انتخاب کن."},400);
+    if(!destination || destination===sourceRow.castle)return json({error:"مقصد تجارت را انتخاب کن."},400);
     if(!hasAssets(sendAssets)||!hasAssets(receiveAssets))return json({error:"حداقل یک کالا برای ارسال و یک کالا برای دریافت انتخاب کن."},400);
     const dest=await env.DB.prepare("SELECT castle,owner_account_id AS accountId FROM castle_state WHERE castle=?").bind(destination).first();
     if(!dest?.accountId || dest.accountId===session.user_id)return json({error:"مقصد باید قلعه ثبت‌شده یک بازیکن دیگر باشد."},400);
-    for(const [k,v] of Object.entries(sendAssets))if(Number(state[k]||0)<v)return json({error:"موجودی کافی برای کالاهای ارسالی نیست."},400);
+    for(const [k,v] of Object.entries(sendAssets))if(Number(sourceRow[k]||0)<v)return json({error:"موجودی کافی برای کالاهای ارسالی نیست."},400);
     const id=newId();
-    await env.DB.prepare("INSERT INTO trade_requests(id,sender_account_id,sender_castle,receiver_account_id,receiver_castle,send_assets_json,receive_assets_json,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,session.user_id,state.castle,dest.accountId,destination,JSON.stringify(sendAssets),JSON.stringify(receiveAssets),"pending",new Date().toISOString()).run();
+    await env.DB.prepare("INSERT INTO trade_requests(id,sender_account_id,sender_castle,receiver_account_id,receiver_castle,send_assets_json,receive_assets_json,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,session.user_id,sourceRow.castle,dest.accountId,destination,JSON.stringify(sendAssets),JSON.stringify(receiveAssets),"pending",new Date().toISOString()).run();
     return json({ok:true,id});
   }
   if (method==="POST" && path.match(/^\/api\/trades\/[^/]+\/respond$/)) {
