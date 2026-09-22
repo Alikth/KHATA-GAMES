@@ -288,15 +288,27 @@ window.addEventListener("DOMContentLoaded", () => {
   async function renderMyCastles() {
     const root = $("myCastlesList"); if (!root || !currentUser) return;
     let mine = [];
-    try { mine = await api("/api/my-castles"); } catch { mine = players.filter(p => p.accountId === currentUser.id); }
+    let activeWars = [];
+    let tradeNotice = {byCastle:{}};
+    try { [mine, activeWars, tradeNotice] = await Promise.all([api("/api/my-castles"), api("/api/my-war-expeditions/active"), api("/api/trades/notifications")]); }
+    catch { mine = players.filter(p => p.accountId === currentUser.id); }
     if (!mine.length) {
       root.innerHTML = `<div class="my-castles-empty"><div class="empty-castle-icon">🏰</div><h3>NO CASTLES YET</h3><p>هنوز هیچ قلعه‌ای با این حساب ثبت نشده است.</p><button class="primary" type="button" data-action="go-register">انتخاب قلعه</button></div>`;
       return;
     }
     root.innerHTML = mine.map(p => {
       const r = houses.find(x => x.region === p.region), c = r?.castles.find(x => x.castle === p.castle);
-      return `<article class="my-castle-card"><div class="my-castle-art">${escapeHTML(c?.icon || "🏰")}</div><div class="my-castle-body"><span class="my-castle-region">${escapeHTML(r?.icon || "")} ${escapeHTML(p.region)}</span><h3>${escapeHTML(p.castle)}</h3><p>HOUSE ${escapeHTML(p.house)}</p><div class="my-castle-meta"><span>👤 ${escapeHTML(p.username)}</span><span class="owned-badge">YOUR CASTLE</span></div></div><div class="my-castle-actions"><button class="castle-open" type="button" data-action="my-castle-manage">🏰 مدیریت قلعه</button><button class="castle-open" type="button" data-action="war-expedition">⚔️ لشکرکشی</button></div></article>`;
+      const wars = (activeWars.expeditions||[]).filter(w => w.sourceCastle === p.castle);
+      const badge = Number(tradeNotice.byCastle?.[p.castle]||0);
+      const warHtml = wars.length ? '<div class="my-castle-war">'+wars.map(w => `<article class="active-war-card"><strong>⚔️ لشکرکشی به ${escapeHTML(w.destinationCastle)} — رسیدن ${escapeHTML(w.arrivalTime)}</strong><div>${w.type==='sea'?'دریایی':'زمینی'} ${w.fake?' · فیک':''}</div><button class="war-cancel-btn" type="button" data-action="cancel-war" data-war-id="${escapeHTML(w.id)}">لغو لشکرکشی</button></article>`).join('')+'</div>' : '';
+      return `<article class="my-castle-card"><div class="my-castle-art">${escapeHTML(c?.icon || "🏰")}</div><div class="my-castle-body"><span class="my-castle-region">${escapeHTML(r?.icon || "")} ${escapeHTML(p.region)}</span><h3>${escapeHTML(p.castle)}</h3><p>HOUSE ${escapeHTML(p.house)}</p><div class="my-castle-meta"><span>👤 ${escapeHTML(p.username)}</span><span class="owned-badge">YOUR CASTLE</span></div></div><div class="my-castle-actions"><button class="castle-open" type="button" data-action="my-castle-manage">🏰 مدیریت قلعه</button><button class="castle-open" type="button" data-action="war-expedition">⚔️ لشکرکشی</button><button class="castle-open trade-open" type="button" data-action="trade" data-castle="${escapeHTML(p.castle)}">⚖️ تجارت <span class="trade-badge-wrap"><span class="trade-badge ${badge?'':'hidden'}" data-trade-notification="${escapeHTML(p.castle)}">${badge||''}</span></span></button></div>${warHtml}</article>`;
     }).join("");
+    window.khataRefreshTradeNotifications?.();
+  }
+  async function cancelWarExpedition(id) {
+    if (!confirm("این لشکرکشی لغو شود؟ نیروها و ادوات انتخاب‌شده به قلعه بازمی‌گردند.")) return;
+    try { await api("/api/war-expeditions/" + encodeURIComponent(id) + "/cancel", {method:"POST", body:JSON.stringify({})}); await renderMyCastles(); await window.khataLoadWarLog?.(); showToast("لشکرکشی لغو شد."); }
+    catch(e){ showToast(e.message,true); }
   }
 
   async function openPage(page) {
@@ -372,6 +384,8 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (action === "castle") openCastleDetails(Number(target.dataset.region), Number(target.dataset.castle));
     else if (action === "my-castle-manage") window.khataOpenCastleManagement?.();
     else if (action === "war-expedition") window.khataOpenWarExpedition?.();
+    else if (action === "trade") window.khataOpenTrade?.(target.dataset.castle);
+    else if (action === "cancel-war") cancelWarExpedition(target.dataset.warId);
     else if (action === "claim") openClaim(Number(target.dataset.region), Number(target.dataset.castle));
     else if (action === "go-register") openPage("register").catch(() => {});
     else if (action === "delete-player") deletePlayer(target.dataset.id);
