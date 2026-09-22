@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/style.css?v=15">
   <link rel="stylesheet" href="/mobile-polish.css?v=1">
   <link rel="stylesheet" href="/castle-management.css?v=2">
+  <link rel="stylesheet" href="/war-expedition.css?v=1">
 </head>
 <body>
   <div class="ambient"></div>
@@ -55,12 +56,12 @@
       <div class="hero-copy"><p class="eyebrow">THE REALM AWAITS</p><h1>KILL <span>THE KING</span></h1><p class="subtitle">THE WAR OF WESTEROS</p></div>
     </header>
 
-    <nav class="nav"><button class="nav-btn active" data-page="register">⚔ ثبت‌نام</button><button class="nav-btn" data-page="season">📜 اطلاعات Season</button><button class="nav-btn" data-page="players">🗺️ خاندان‌ها</button><button class="nav-btn" data-page="myCastles">🏰 قلعه‌های من</button><button class="nav-btn" data-page="characters">⚔ Characters</button><button class="nav-btn" data-page="shop">🛒 Shop</button></nav>
+    <nav class="nav"><button class="nav-btn active" data-page="register">⚔ ثبت‌نام</button><button class="nav-btn" data-page="season">⚔️ لاگ وار</button><button class="nav-btn" data-page="players">🗺️ خاندان‌ها</button><button class="nav-btn" data-page="myCastles">🏰 قلعه‌های من</button><button class="nav-btn" data-page="characters">⚔ Characters</button><button class="nav-btn" data-page="shop">🛒 Shop</button></nav>
 
     <main>
       <section id="register" class="page active"><div class="page-title"><span>⚔</span><div><h2>CLAIM YOUR CASTLE</h2><p>قلعه خود را انتخاب کن، لرد.</p></div></div><div id="regions" class="regions"></div><div id="castles" class="castles hidden"></div></section>
       <section id="myCastles" class="page"><div class="page-title"><span>🏰</span><div><h2>MY CASTLES</h2><p>قلعه‌هایی که با حساب شما ثبت شده‌اند</p></div></div><div id="myCastlesList" class="my-castles-list"></div></section>
-      <section id="season" class="page"><div class="page-title"><span>📜</span><div><h2>SEASON INFORMATION</h2><p>اطلاعات فصل بازی</p></div></div><div class="season-card"><div class="season-number">SEASON <b>I</b></div><h3>THE WAR OF WESTEROS</h3><p>فصل اول KHATA GAMES در حال آماده‌سازی است.</p><div class="coming">MORE INFORMATION COMING SOON</div></div></section>
+      <section id="season" class="page"><div class="page-title"><span>⚔️</span><div><h2>WAR LOG</h2><p>لاگ لشکرکشی‌های ثبت‌شده</p></div></div><div id="warLogList" class="we-log"></div></section>
       <section id="players" class="page"><div class="page-title"><span>🗺️</span><div><h2>THE HOUSES OF WESTEROS</h2><p>اقلیم را روی نقشه انتخاب کن و خاندان‌های آن را ببین</p></div></div><div class="stats"><div><b id="playerCount">0</b><span>PLAYERS</span></div><div><b id="castleCount">30</b><span>CASTLES</span></div></div><div class="map-layout"><div class="map-shell"><div class="map-toolbar"><div><span class="map-live-dot"></span> WESTEROS REALM MAP</div><div class="map-controls" aria-label="کنترل نقشه"><button id="mapZoomOut" type="button" title="کوچک‌نمایی">−</button><button id="mapZoomReset" type="button" title="اندازه اصلی"><span id="mapZoomValue">100%</span></button><button id="mapZoomIn" type="button" title="بزرگ‌نمایی">+</button></div><small>برای دیدن جزئیات نقشه از کنترل بزرگ‌نمایی استفاده کن.</small></div><div id="westerosMap" class="westeros-map"><img src="/assets/westeros-west-only.jpg" alt="Westeros map"><div id="regionMarkers" class="region-markers"></div></div></div><aside id="regionPanel" class="region-panel"><div class="region-panel-empty"><div class="panel-crown">◐</div><h3>CHOOSE A REALM</h3><p>برای مشاهده خاندان‌ها و قلعه‌های هر اقلیم، یکی از دایره‌های روی نقشه را انتخاب کن.</p></div></aside></div><div class="map-legend"><span><i class="legend-dot free"></i> قلعه آزاد</span><span><i class="legend-dot claimed"></i> قلعه تصاحب شده</span><span>⚓ دارای بندر</span><span>🔱 اقلیم بالادست</span></div><div class="realm-list-title"><span>REGISTERED LORDS</span><em>لردهای ثبت‌شده بر اساس اقلیم</em></div><div id="playerList" class="player-list"></div></section>
       <section id="characters" class="page"><div class="page-title"><span>⚔</span><div><h2>CHARACTERS</h2><p>لردها و شخصیت‌های قلمرو</p></div></div><div id="khcs-region-tabs" class="khcs-region-tabs"></div><div id="khcs-character-root"></div></section>
       <section id="shop" class="page"><div class="page-title"><span>🛒</span><div><h2>THE SHOP</h2><p>فروشگاه قلمرو</p></div></div><div class="khcs-shop"><div id="khcs-shop-main" class="khcs-shop-main"></div><aside id="khcs-shop-side" class="khcs-shop-side"></aside></div></section>
@@ -70,11 +71,13 @@
 
   <div id="castleModal" class="modal hidden"><div class="modal-card castle-modal"><button class="close" id="closeCastleModal">×</button><div id="castleDetails"></div></div></div>
   <div id="castleManagementModal" class="castle-management-modal hidden"><div class="castle-management-shell"><div id="castleManagementRoot"></div></div></div>
+  <div id="warExpeditionModal" class="war-expedition-modal hidden"><div class="war-expedition-shell"><div class="we-head"><div><span class="cm-kicker">WAR EXPEDITION</span><h2>⚔️ لشکرکشی</h2><p>انتخاب نیرو، مسیر و تأیید نهایی</p></div><button id="weClose" class="we-close">×</button></div><div class="we-body"><section id="weTypeStep" class="we-step active"></section><section id="weFormStep" class="we-step"></section><section id="weConfirmStep" class="we-step"></section></div></div></div>
   <div id="registerModal" class="modal hidden"><div class="modal-card"><button class="close" id="closeModal">×</button><p class="eyebrow">HOUSE CLAIM</p><h2 id="selectedCastle"></h2><p id="selectedHouse" class="silver"></p><form id="registerForm"><label>Telegram Username</label><div class="telegram-input"><span>@</span><input id="username" maxlength="32" placeholder="YourUsername" autocomplete="off"></div><small>فقط Username تلگرام؛ آیدی عددی پذیرفته نمی‌شود.</small><button class="primary" type="submit">⚔ CLAIM CASTLE</button></form><div id="formMessage"></div></div></div>
   <footer>KHATA GAMES · THE REALM AWAITS</footer>
   <script src="/app.js?v=15"></script>
   <script src="/mobile-header.js?v=1"></script>
   <script src="/character-shop.js?v=11"></script>
   <script src="/castle-management.js?v=2"></script>
+  <script src="/war-expedition.js?v=1"></script>
 </body>
 </html>
