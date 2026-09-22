@@ -276,42 +276,33 @@ function costText(cost){ return Object.entries(cost).map(([k,v])=>`${RESOURCE_LA
 
 async function ensureEconomySchema(env) {
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS economy_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
-  // The economy was added after the original game schema. Keep this initializer
-  // idempotent so an existing/partially initialized D1 database can repair itself.
+  // CREATE TABLE IF NOT EXISTS is cheap enough for the economy entry point and
+  // guarantees that the two runtime support tables exist after an old deploy.
   for (const sql of ECONOMY_SCHEMA) await env.DB.prepare(sql).run();
+
+  const ready=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='seeded'").first();
+  const version=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='schema_version'").first();
+  if(ready?.value==="1" && version?.value==="2") return;
 
   const week=gameWeekKey();
   const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
-
   for (const r of houses) {
     for (const c of r.castles) {
       await env.DB.prepare("INSERT OR IGNORE INTO castle_state (castle,region) VALUES (?,?)").bind(c.castle,r.region).run();
-      // Missing markers are repaired at the current week so legacy castles do not
-      // receive an accidental backlog of production.
+      // Repair support rows once when migrating an older economy database.
       await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state (castle,last_week_key) VALUES (?,?)").bind(c.castle,week).run();
-      for (const [k,lvl] of Object.entries(defaults)) {
-        await env.DB.prepare("INSERT OR IGNORE INTO castle_production (castle,production_key,level) VALUES (?,?,?)").bind(c.castle,k,lvl).run();
-      }
+      for (const [k,lvl] of Object.entries(defaults)) await env.DB.prepare("INSERT OR IGNORE INTO castle_production (castle,production_key,level) VALUES (?,?,?)").bind(c.castle,k,lvl).run();
       const sp=SPECIAL_PRODUCTIONS[r.region];
       if(sp) await env.DB.prepare("INSERT OR IGNORE INTO castle_production (castle,production_key,level) VALUES (?,?,0)").bind(c.castle,sp.key).run();
-      for (const k of Object.keys(GENERAL_CAMPS)) {
-        await env.DB.prepare("INSERT OR IGNORE INTO castle_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,k).run();
-      }
-      for (const unit of ["swordsman","archer","spearman","cavalry"]) {
-        await env.DB.prepare("INSERT OR IGNORE INTO castle_army (castle,unit_key,count) VALUES (?,?,?)").bind(c.castle,unit,unit==="swordsman"?500:unit==="archer"?200:100).run();
-      }
-      for (const item of Object.keys(EQUIPMENT)) {
-        await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment (castle,item_key,count) VALUES (?,?,0)").bind(c.castle,item).run();
-      }
-      for (const ship of ["transport","warship"]) {
-        await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet (castle,ship_key,count) VALUES (?,?,1)").bind(c.castle,ship).run();
-      }
-      for (const spc of (SPECIAL_CAMPS[r.region]||[])) {
-        await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,spc.key).run();
-      }
+      for (const k of Object.keys(GENERAL_CAMPS)) await env.DB.prepare("INSERT OR IGNORE INTO castle_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,k).run();
+      for (const unit of ["swordsman","archer","spearman","cavalry"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_army (castle,unit_key,count) VALUES (?,?,?)").bind(c.castle,unit,unit==="swordsman"?500:unit==="archer"?200:100).run();
+      for (const item of Object.keys(EQUIPMENT)) await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment (castle,item_key,count) VALUES (?,?,0)").bind(c.castle,item).run();
+      for (const ship of ["transport","warship"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet (castle,ship_key,count) VALUES (?,?,1)").bind(c.castle,ship).run();
+      for (const spc of (SPECIAL_CAMPS[r.region]||[])) await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,spc.key).run();
     }
   }
   await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('seeded','1')").run();
+  await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('schema_version','2')").run();
 }
 
 async function loadCastleEconomy(env, castle) {
