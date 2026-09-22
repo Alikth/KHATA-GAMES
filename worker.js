@@ -292,8 +292,50 @@ async function ensureWarLogSchema(env){
     attacker_account_id TEXT NOT NULL, attacker_username TEXT NOT NULL, lord_name TEXT,
     type TEXT NOT NULL, source_castle TEXT NOT NULL, destination_castle TEXT NOT NULL,
     arrival_time TEXT NOT NULL, is_fake INTEGER NOT NULL DEFAULT 0,
-    assets_json TEXT NOT NULL DEFAULT '{}'
+    assets_json TEXT NOT NULL DEFAULT '{}', cancelled INTEGER NOT NULL DEFAULT 0,
+    cancelled_at TEXT, cancelled_by TEXT
   )`).run();
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled_at TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled_by TEXT").run();}catch{}
+}
+async function ensureTradeSchema(env){
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS trade_requests (
+    id TEXT PRIMARY KEY, sender_account_id TEXT NOT NULL, sender_castle TEXT NOT NULL,
+    receiver_account_id TEXT NOT NULL, receiver_castle TEXT NOT NULL,
+    send_assets_json TEXT NOT NULL DEFAULT '{}', receive_assets_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL, responded_at TEXT
+  )`).run();
+}
+function tradeAssets(raw){
+  const out={}; const allowed=RESOURCE_KEYS.filter(k=>k!=="peasants");
+  if(!raw || typeof raw!=="object") return out;
+  for(const [k,v] of Object.entries(raw)){
+    if(!allowed.includes(k)) continue;
+    const n=Math.floor(Number(v));
+    if(Number.isFinite(n)&&n>0&&n<=100000000) out[k]=n;
+  }
+  return out;
+}
+function hasAssets(obj){return Object.values(obj||{}).some(v=>Number(v)>0);}
+function warArrivalDate(createdAt,arrivalTime){
+  const d=new Date(createdAt); const m=/^(\d{2}):(\d{2})$/.exec(String(arrivalTime||""));
+  if(!m||Number.isNaN(d.getTime())) return null;
+  d.setUTCHours(Number(m[1]),Number(m[2]),0,0);
+  if(d.getTime()<=new Date(createdAt).getTime()) d.setUTCDate(d.getUTCDate()+1);
+  return d;
+}
+function warIsActive(row){
+  if(Number(row.cancelled)) return false;
+  const arrival=warArrivalDate(row.created_at||row.createdAt,row.arrival_time||row.arrivalTime);
+  return !!arrival && arrival.getTime()>Date.now();
+}
+async function castleOwner(env,castle){
+  return env.DB.prepare("SELECT owner_account_id AS accountId FROM castle_state WHERE castle=?").bind(castle).first();
+}
+async function tradeRowsForAccount(env,accountId){
+  await ensureTradeSchema(env);
+  return (await env.DB.prepare("SELECT * FROM trade_requests WHERE (sender_account_id=? OR receiver_account_id=?) AND status='pending' ORDER BY created_at DESC").bind(accountId,accountId).all()).results;
 }
 
 function gameWeekKey(date=new Date()) {
@@ -591,8 +633,38 @@ async function handleApi(request, env, url) {
   }
   if (method==="GET" && path==="/api/war-logs") {
     await ensureWarLogSchema(env);
-    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt FROM war_logs ORDER BY created_at DESC").all()).results;
+    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,cancelled,cancelled_at AS cancelledAt FROM war_logs ORDER BY created_at DESC").all()).results;
     return json({logs:rows});
+  }
+  if (method==="GET" && path==="/api/my-war-expeditions/active") {
+    await ensureWarLogSchema(env);
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled FROM war_logs WHERE attacker_account_id=? AND cancelled=0 ORDER BY created_at DESC").bind(session.user_id).all()).results.filter(warIsActive);
+    return json({expeditions:rows});
+  }
+  if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/cancel$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    await ensureWarLogSchema(env);
+    const session=await requireUser(request,env); if(!session)return json({error:"دسترسی لازم است."},401);
+    const id=decodeURIComponent(path.split("/")[3]);
+    const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=?").bind(id,session.user_id).first();
+    if(!row)return json({error:"لشکرکشی پیدا نشد."},404);
+    if(Number(row.cancelled))return json({error:"این لشکرکشی قبلاً لغو شده است."},409);
+    if(!warIsActive(row))return json({error:"زمان رسیدن این لشکرکشی گذشته است."},409);
+    const assets=JSON.parse(row.assets_json||"{}"); const updates=[];
+    if(!Number(row.is_fake)){
+      for(const kind of ["army","equipment","fleet"]){
+        for(const [key,raw] of Object.entries(assets[kind]||{})){
+          const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";
+          const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";
+          updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=?`).bind(Math.floor(Number(raw)||0),row.source_castle,key));
+        }
+      }
+    }
+    updates.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by=? WHERE id=? AND cancelled=0").bind(new Date().toISOString(),session.user_id,id));
+    const result=await env.DB.batch(updates);
+    if(!result[updates.length-1]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ دوباره تلاش کن."},409);
+    return json({ok:true});
   }
   if (method==="POST" && path==="/api/war-expeditions") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
@@ -646,6 +718,91 @@ async function handleApi(request, env, url) {
     return json({ok:true,id});
   }
 
+  if (method==="GET" && path==="/api/admin/war-expeditions") {
+    await ensureWarLogSchema(env);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    const rows=(await env.DB.prepare("SELECT id,attacker_account_id AS attackerAccountId,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,cancelled_at AS cancelledAt FROM war_logs ORDER BY created_at DESC").all()).results;
+    return json({expeditions:rows.map(x=>({...x,active:warIsActive(x)}))});
+  }
+  if (method==="POST" && path.match(/^\/api\/admin\/war-expeditions\/[^/]+\/cancel$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureWarLogSchema(env);
+    const id=decodeURIComponent(path.split("/")[4]);
+    const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
+    if(!row)return json({error:"لشکرکشی پیدا نشد."},404);
+    if(Number(row.cancelled))return json({error:"این لشکرکشی قبلاً لغو شده است."},409);
+    if(!warIsActive(row))return json({error:"زمان رسیدن این لشکرکشی گذشته است."},409);
+    const assets=JSON.parse(row.assets_json||"{}"); const updates=[];
+    if(!Number(row.is_fake)){
+      for(const kind of ["army","equipment","fleet"]){
+        for(const [key,raw] of Object.entries(assets[kind]||{})){
+          const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";
+          const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";
+          updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=?`).bind(Math.floor(Number(raw)||0),row.source_castle,key));
+        }
+      }
+    }
+    updates.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by=? WHERE id=? AND cancelled=0").bind(new Date().toISOString(),"admin",id));
+    const result=await env.DB.batch(updates);
+    if(!result[updates.length-1]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ دوباره تلاش کن."},409);
+    return json({ok:true});
+  }
+  if (method==="GET" && path==="/api/trades/notifications") {
+    await ensureTradeSchema(env);
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const rows=await tradeRowsForAccount(env,session.user_id);
+    const incoming=rows.filter(x=>x.receiver_account_id===session.user_id);
+    return json({count:incoming.length});
+  }
+  if (method==="GET" && path==="/api/trades/incoming") {
+    await ensureTradeSchema(env);
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const rows=await tradeRowsForAccount(env,session.user_id);
+    return json({requests:rows.filter(x=>x.receiver_account_id===session.user_id).map(x=>({...x,sendAssets:JSON.parse(x.send_assets_json||"{}"),receiveAssets:JSON.parse(x.receive_assets_json||"{}")}))});
+  }
+  if (method==="POST" && path==="/api/trades") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    await ensureTradeSchema(env);
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
+    const b=await body(request), destination=String(b.destination||"").trim();
+    const sendAssets=tradeAssets(b.sendAssets), receiveAssets=tradeAssets(b.receiveAssets);
+    if(!destination || destination===state.castle)return json({error:"مقصد تجارت را انتخاب کن."},400);
+    if(!hasAssets(sendAssets)||!hasAssets(receiveAssets))return json({error:"حداقل یک کالا برای ارسال و یک کالا برای دریافت انتخاب کن."},400);
+    const dest=await env.DB.prepare("SELECT castle,owner_account_id AS accountId FROM castle_state WHERE castle=?").bind(destination).first();
+    if(!dest?.accountId || dest.accountId===session.user_id)return json({error:"مقصد باید قلعه ثبت‌شده یک بازیکن دیگر باشد."},400);
+    for(const [k,v] of Object.entries(sendAssets))if(Number(state[k]||0)<v)return json({error:"موجودی کافی برای کالاهای ارسالی نیست."},400);
+    const id=newId();
+    await env.DB.prepare("INSERT INTO trade_requests(id,sender_account_id,sender_castle,receiver_account_id,receiver_castle,send_assets_json,receive_assets_json,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,session.user_id,state.castle,dest.accountId,destination,JSON.stringify(sendAssets),JSON.stringify(receiveAssets),"pending",new Date().toISOString()).run();
+    return json({ok:true,id});
+  }
+  if (method==="POST" && path.match(/^\/api\/trades\/[^/]+\/respond$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    await ensureTradeSchema(env);
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const id=decodeURIComponent(path.split("/")[3]), action=String((await body(request)).action||"");
+    if(!["accept","reject"].includes(action))return json({error:"عملیات تجارت معتبر نیست."},400);
+    const row=await env.DB.prepare("SELECT * FROM trade_requests WHERE id=? AND receiver_account_id=? AND status='pending'").bind(id,session.user_id).first();
+    if(!row)return json({error:"درخواست تجارت پیدا نشد."},404);
+    if(action==="reject"){await env.DB.prepare("UPDATE trade_requests SET status='rejected',responded_at=? WHERE id=? AND status='pending'").bind(new Date().toISOString(),id).run();return json({ok:true});}
+    const sendAssets=JSON.parse(row.send_assets_json||"{}"), receiveAssets=JSON.parse(row.receive_assets_json||"{}");
+    const sender=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=? AND owner_account_id=?").bind(row.sender_castle,row.sender_account_id).first();
+    const receiver=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=? AND owner_account_id=?").bind(row.receiver_castle,row.receiver_account_id).first();
+    if(!sender||!receiver)return json({error:"یکی از قلعه‌های این تجارت دیگر معتبر نیست."},409);
+    for(const [k,v] of Object.entries(sendAssets))if(Number(sender[k]||0)<v)return json({error:"موجودی فرستنده برای این تجارت کافی نیست."},409);
+    for(const [k,v] of Object.entries(receiveAssets))if(Number(receiver[k]||0)<v)return json({error:"موجودی گیرنده برای کالای پیشنهادی کافی نیست."},409);
+    const keys=[...new Set([...Object.keys(sendAssets),...Object.keys(receiveAssets)])];
+    const senderSets=[],receiverSets=[],senderBinds=[],receiverBinds=[];
+    for(const k of keys){const s=Number(sendAssets[k]||0),r=Number(receiveAssets[k]||0);senderSets.push(`${k}=${k}-?`);senderBinds.push(s-r);receiverSets.push(`${k}=${k}-?`);receiverBinds.push(r-s);}
+    const senderWhere=keys.map(k=>`${k}>=?`).join(" AND "), receiverWhere=keys.map(k=>`${k}>=?`).join(" AND ");
+    const q1=env.DB.prepare(`UPDATE castle_state SET ${senderSets.join(",")} WHERE castle=? AND ${senderWhere}`).bind(...senderBinds,row.sender_castle,...keys.map(k=>Number(sendAssets[k]||0)));
+    const q2=env.DB.prepare(`UPDATE castle_state SET ${receiverSets.join(",")} WHERE castle=? AND ${receiverWhere}`).bind(...receiverBinds,row.receiver_castle,...keys.map(k=>Number(receiveAssets[k]||0)));
+    const q3=env.DB.prepare("UPDATE trade_requests SET status='accepted',responded_at=? WHERE id=? AND status='pending'").bind(new Date().toISOString(),id);
+    const result=await env.DB.batch([q1,q2,q3]);
+    if(!result[0]?.meta?.changes||!result[1]?.meta?.changes||!result[2]?.meta?.changes)return json({error:"تجارت همزمان تغییر کرده؛ دوباره تلاش کن."},409);
+    return json({ok:true});
+  }
   return json({error:"Not found"},404);
 }
 
