@@ -28,7 +28,7 @@
     const destination=$('tradeDestination')?.value,err=$('tradeError');err.textContent='';
     if(!destination||!Object.keys(sendAssets).length||!Object.keys(receiveAssets).length){err.textContent='حداقل یک کالا برای ارسال و یک کالا برای دریافت انتخاب کن.';return;}
     const b=$('tradeSubmit');b.disabled=true;
-    try{await api('/api/trades',{method:'POST',body:JSON.stringify({destination,sendAssets,receiveAssets})});alert('درخواست تجارت ارسال شد.');close();}
+    try{await api('/api/trades',{method:'POST',body:JSON.stringify({source:sourceCastle,destination,sendAssets,receiveAssets})});alert('درخواست تجارت ارسال شد.');close();}
     catch(e){err.textContent=e.message;b.disabled=false;}
   }
   async function showIncoming(){
@@ -47,5 +47,6 @@
     try{const d=await api('/api/trades/notifications');document.querySelectorAll('[data-trade-notification]').forEach(x=>{x.textContent=d.count||'';x.classList.toggle('hidden',!d.count);});return d.count||0;}catch{return 0;}
   }
   document.addEventListener('click',e=>{const b=e.target.closest('[data-trade-response]');if(b)respond(b.dataset.tradeId,b.dataset.tradeResponse);if(e.target.id==='tradeModal'||e.target.id==='tradeClose')close();});
-  window.khataOpenTrade=open;window.khataRefreshTradeNotifications=refreshNotifications;
+  async function openRequests(){const m=modal();if(!m)return;m.classList.remove('hidden');document.body.classList.add('modal-open');$('tradeRoot').innerHTML='<div class="trade-modal-head"><div><span>TRADE REQUESTS</span><h2>📜 درخواست تجارت</h2></div><button id="tradeClose" class="trade-close">×</button></div><div class="trade-body"><div id="tradeIncoming" class="trade-incoming"></div></div>';$('tradeClose').onclick=close;await showIncoming();}
+  window.khataOpenTrade=open;window.khataOpenTradeRequests=openRequests;window.khataRefreshTradeNotifications=refreshNotifications;
 })();
