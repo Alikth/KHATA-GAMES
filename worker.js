@@ -377,7 +377,25 @@ async function runWeeklyUpdate(env) {
 
 async function requireCastleOwner(request,env){
   const s=await requireUser(request,env); if(!s)return null;
-  return await env.DB.prepare("SELECT * FROM castle_state WHERE owner_account_id=?").bind(s.user_id).first();
+
+  // players.account_id is the authoritative ownership record created by
+  // /api/register. Do not depend solely on the denormalized economy owner field:
+  // older castle rows may have a missing/stale owner_account_id.
+  const player=await env.DB.prepare(
+    "SELECT castle,region FROM players WHERE account_id=? ORDER BY created_at LIMIT 1"
+  ).bind(s.user_id).first();
+  if(!player)return null;
+
+  let state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(player.castle).first();
+  if(!state)return null;
+
+  // Repair the denormalized owner field so the rest of the castle API stays
+  // consistent with the actual account ownership.
+  if(state.owner_account_id!==s.user_id){
+    await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=?").bind(s.user_id,player.castle).run();
+    state={...state,owner_account_id:s.user_id};
+  }
+  return state;
 }
 function safeCost(cost){return Object.fromEntries(Object.entries(cost).filter(([k,v])=>RESOURCE_KEYS.includes(k)&&Number(v)>0));}
 async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
