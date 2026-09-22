@@ -20,9 +20,21 @@
   function assetRows(group,kind){
     return Object.entries(group||{}).map(([key,count])=>'<div class="we-asset"><div class="we-asset-head"><strong>'+esc(labels[key]||key)+'</strong><small>موجودی: '+fmt(count)+'</small></div><input type="number" min="0" max="'+Number(count||0)+'" value="0" data-kind="'+kind+'" data-key="'+esc(key)+'"></div>').join('');
   }
+  function timeOptions(){
+    const hours=Array.from({length:12},(_,i)=>'<option value="'+String(i+1).padStart(2,'0')+'">'+String(i+1).padStart(2,'0')+'</option>').join('');
+    const mins=Array.from({length:60},(_,i)=>'<option value="'+String(i).padStart(2,'0')+'">'+String(i).padStart(2,'0')+'</option>').join('');
+    return '<div class="we-time-picker"><select id="weHour" aria-label="ساعت">'+hours+'</select><span>:</span><select id="weMinute" aria-label="دقیقه">'+mins+'</select><select id="weAmPm" aria-label="صبح یا عصر"><option value="AM">AM</option><option value="PM">PM</option></select></div>';
+  }
+  function getArrivalTime(){
+    const hour=Number($('weHour')?.value), minute=$('weMinute')?.value, ampm=$('weAmPm')?.value;
+    if(!hour || !minute || !ampm) return '';
+    let h=hour%12;
+    if(ampm==='PM') h+=12;
+    return String(h).padStart(2,'0')+':'+minute;
+  }
   function renderForm(){
     const source=assets?.castle||'';
-    $('weFormStep').innerHTML='<h3>انتخاب نیرو و مسیر</h3><div class="we-note">مقدار هر نیرو/ادوات/کشتی را وارد کن. در تأیید نهایی، دقیقاً همان مقدار از دارایی قلعه کم می‌شود.</div><div id="weFakeBox">'+(fakeAvailable?'<button id="weFake" class="we-btn">⚔️ لشکرکشی فیک این هفته</button><div class="we-note">لشکرکشی فیک بدون کسر نیرو انجام می‌شود و هر پلیر فقط یک بار در هفته می‌تواند آن را انجام دهد.</div>':'<div class="we-note">لشکرکشی فیک این هفته قبلاً استفاده شده است.</div>')+'</div><div class="we-fields"><div class="we-field"><label>مبدا</label><select id="weSource">'+castlesOptions(source)+'</select></div><div class="we-field"><label>مقصد</label><select id="weDestination"><option value="">انتخاب مقصد</option>'+castlesOptions()+'</select></div></div><div class="we-assets">'+assetRows(assets?.army,'army')+assetRows(assets?.equipment,'equipment')+(type==='sea'?assetRows(assets?.fleet,'fleet'):'')+'</div><div class="we-field"><label>تایم رسیدن</label><input id="weArrival" type="time" required></div><div class="we-actions"><button id="weBackType" class="we-btn">بازگشت</button><button id="weToConfirm" class="we-btn primary">ادامه و تأیید نهایی</button></div><div id="weError" class="we-error"></div>';
+    $('weFormStep').innerHTML='<h3>انتخاب نیرو و مسیر</h3><div class="we-note">مقدار هر نیرو/ادوات/کشتی را وارد کن. در تأیید نهایی، دقیقاً همان مقدار از دارایی قلعه کم می‌شود.</div><div id="weFakeBox">'+(fakeAvailable?'<button id="weFake" class="we-btn">⚔️ لشکرکشی فیک این هفته</button><div class="we-note">لشکرکشی فیک بدون کسر نیرو انجام می‌شود و هر پلیر فقط یک بار در هفته می‌تواند آن را انجام دهد.</div>':'<div class="we-note">لشکرکشی فیک این هفته قبلاً استفاده شده است.</div>')+'</div><div class="we-fields"><div class="we-field"><label>مبدا</label><select id="weSource">'+castlesOptions(source)+'</select></div><div class="we-field"><label>مقصد</label><select id="weDestination"><option value="">انتخاب مقصد</option>'+castlesOptions()+'</select></div></div><div class="we-assets">'+assetRows(assets?.army,'army')+assetRows(assets?.equipment,'equipment')+(type==='sea'?assetRows(assets?.fleet,'fleet'):'')+'</div><div class="we-field"><label>تایم رسیدن</label>'+timeOptions()+'</div><div class="we-actions"><button id="weBackType" class="we-btn">بازگشت</button><button id="weToConfirm" class="we-btn primary">ادامه و تأیید نهایی</button></div><div id="weError" class="we-error"></div>';
     $('weFake')?.addEventListener('click',()=>{fake=!fake;$('weFake').textContent=fake?'✓ لشکرکشی فیک انتخاب شد':'⚔️ لشکرکشی فیک این هفته';document.querySelectorAll('#weFormStep input[type=number]').forEach(x=>{x.disabled=fake;x.value='0';});});
     $('weBackType').onclick=()=>{$('weFormStep').classList.remove('active');$('weTypeStep').classList.add('active');};
     $('weToConfirm').onclick=toConfirm;
@@ -32,8 +44,8 @@
   }
   function toConfirm(){
     const err=$('weError');err.textContent='';
-    const destination=$('weDestination').value, arrival=$('weArrival').value, source=$('weSource').value;
-    if(!destination||!arrival){err.textContent='مبدا، مقصد و تایم رسیدن را کامل کن.';return;}
+    const destination=$('weDestination').value, arrival=getArrivalTime(), source=$('weSource').value;
+    if(!source||!destination||!arrival){err.textContent='مبدا، مقصد و تایم رسیدن را کامل کن.';return;}
     if(!fake){values=collect();const total=Object.values(values).flatMap(x=>Object.values(x)).reduce((a,b)=>a+b,0);if(!total){err.textContent='برای لشکرکشی واقعی حداقل یک نیرو، ادوات یا کشتی انتخاب کن.';return;}}
     values=fake?{}:collect();
     const parts=[];for(const [kind,obj] of Object.entries(values))for(const [key,n] of Object.entries(obj))parts.push((labels[key]||key)+' × '+fmt(n));
@@ -45,7 +57,7 @@
   async function submit(){
     const b=$('weFinalYes');b.disabled=true;$('weConfirmError').textContent='';
     try{
-      const result=await api('/api/war-expeditions',{method:'POST',body:JSON.stringify({type,source:$('weSource').value,destination:$('weDestination').value,arrivalTime:$('weArrival').value,fake,assets:values})});
+      const result=await api('/api/war-expeditions',{method:'POST',body:JSON.stringify({type,source:$('weSource').value,destination:$('weDestination').value,arrivalTime:getArrivalTime(),fake,assets:values})});
       close();await loadWarLog();alert('لشکرکشی با موفقیت ثبت شد.');
     }catch(e){$('weConfirmError').textContent=e.message;b.disabled=false;}
   }
