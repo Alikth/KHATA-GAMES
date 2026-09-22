@@ -72,9 +72,26 @@
           <header class="admin-dashboard-head"><div><span class="admin-kicker">KHATA GAMES · CONTROL ROOM</span><h1>ROYAL ADMIN</h1><p>مدیریت کامل قلمرو، لردها و لشکرکشی‌ها</p></div><button class="danger" id="adminLogout">خروج از پنل</button></header>
           <div id="adminLoginBox" class="admin-login-box"><h2>ورود به مرکز مدیریت</h2><p>این بخش از فضای بازیکنان جداست.</p><input id="adminPassword" type="password" placeholder="Admin Password"><button class="primary" id="adminLogin">ENTER CONTROL ROOM</button><div id="adminMessage"></div></div>
           <div id="adminPanel" class="hidden">
-            <div class="admin-stats"><div><b id="adminLordCount">0</b><span>لردها</span></div><div><b id="adminWarCount">0</b><span>لشکرکشی‌ها</span></div><div><b id="adminActiveWarCount">0</b><span>لشکرکشی فعال</span></div></div>
-            <section class="admin-section"><div class="admin-section-head"><div><span>WAR EXPEDITIONS</span><h2>لشکرکشی‌ها</h2></div><button class="ghost" id="adminRefreshWars">↻ بروزرسانی</button></div><div id="adminWarList" class="admin-war-list"></div></section>
-            <section class="admin-section"><div class="admin-section-head"><div><span>LORDS</span><h2>لردها</h2></div></div><div class="admin-grid"><div class="admin-box"><h3>ADD LORD</h3><input id="adminUsername" placeholder="Telegram Username"><select id="adminRegion"></select><select id="adminCastle"></select><button class="primary" id="adminAdd">ADD PLAYER</button></div><div class="admin-box"><h3>REGISTERED LORDS</h3><div id="adminPlayers"></div></div></div></section>
+            <div class="admin-stats"><div><b id="adminLordCount">0</b><span>لردها</span></div><div><b id="adminWarCount">0</b><span>لشکرکشی‌ها</span></div><div><b id="adminActiveWarCount">0</b><span>لشکرکشی فعال</span></div><div><b id="adminTradeCount">0</b><span>تجارت‌ها</span></div></div>
+            <section class="admin-section">
+              <div class="admin-section-head"><div><span>GAME CONTROL</span><h2>کنترل بازی</h2></div></div>
+              <div class="admin-control-grid">
+                <div class="admin-control-card"><div><b>آپدیت هفتگی</b><small>اعمال بازدهی تولیدی‌ها و کمپ‌ها برای همه قلعه‌ها</small></div><button class="primary" id="adminWeeklyUpdate">⬆ آپ</button></div>
+                <div class="admin-control-card"><div><b>لشکرکشی</b><small id="adminWarLockState">باز است</small></div><button class="danger" id="adminWarLockBtn">🔒 قفل کردن لشکرکشی</button></div>
+                <div class="admin-control-card"><div><b>تجارت</b><small id="adminTradeLockState">باز است</small></div><button class="danger" id="adminTradeLockBtn">🔒 قفل کردن تجارت</button></div>
+              </div>
+            </section>
+            <section class="admin-section"><div class="admin-section-head"><div><span>WAR EXPEDITIONS</span><h2>گزارش لشکرکشی‌ها</h2></div><button class="ghost" id="adminRefreshWars">↻ بروزرسانی</button></div><div id="adminWarList" class="admin-war-list"></div></section>
+            <section class="admin-section"><div class="admin-section-head"><div><span>TRADE REPORT</span><h2>گزارش تجارت‌ها</h2></div><button class="ghost" id="adminRefreshTrades">↻ بروزرسانی</button></div><div id="adminTradeList" class="admin-trade-list"></div></section>
+            <section class="admin-section"><div class="admin-section-head"><div><span>LORDS</span><h2>لردها</h2></div></div>
+              <div class="admin-grid">
+                <div class="admin-box"><h3>ADD LORD</h3><input id="adminUsername" placeholder="Telegram Username"><select id="adminRegion"></select><select id="adminCastle"></select><button class="primary" id="adminAdd">ADD PLAYER</button></div>
+                <div class="admin-box"><h3>ADD CASTLE TO EXISTING PLAYER</h3><select id="adminAssignPlayer"></select><select id="adminAssignRegion"></select><select id="adminAssignCastle"></select><button class="primary" id="adminAssignCastleBtn">اضافه کردن قلعه</button></div>
+                <div class="admin-box"><h3>REGISTERED LORDS</h3><div id="adminPlayers"></div></div>
+              </div>
+            </section>
+            <section class="admin-section"><div class="admin-section-head"><div><span>CASTLE EDITOR</span><h2>مدیریت کامل دارایی قلعه</h2></div></div><div class="admin-box"><select id="adminCastleSelect"></select><div id="adminCastleEditor" class="admin-castle-editor"><div class="admin-empty">یک قلعه انتخاب کن.</div></div></div></section>
+            <section class="admin-section"><div class="admin-section-head"><div><span>FUTURE TOOLS</span><h2>سناریو و رول‌ها</h2></div></div><div class="admin-future-actions"><button class="primary" id="adminScenariosBtn">سناریوهای پلیرها</button><button class="ghost" id="adminRolesBtn">رول‌ها</button></div></section>
           </div>
         </div>
       </section>
