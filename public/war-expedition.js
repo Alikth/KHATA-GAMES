@@ -63,7 +63,7 @@
   }
   async function loadWarLog(){
     const d=await api('/api/war-logs');const root=$('warLogList');if(!root)return;
-    root.innerHTML=d.logs?.length?d.logs.map(x=>'<article class="we-log-banner"><strong>⚔️ '+esc(x.attackerUsername)+' از '+esc(x.sourceCastle)+' به '+esc(x.destinationCastle)+' در ساعت '+esc(x.arrivalTime)+' خواهد رسید</strong><div>لرد: '+esc(x.lordName||'—')+(x.fake?' · لشکرکشی فیک':'')+'</div><small>'+(x.type==='sea'?'دریایی':'زمینی')+'</small></article>').join(''):'<div class="war-log-empty">هنوز لشکرکشی‌ای ثبت نشده است.</div>';
+    root.innerHTML=d.logs?.length?d.logs.map(x=>'<article class="we-log-banner '+(Number(x.cancelled)?'cancelled':'')+'"><strong>⚔️ '+esc(x.attackerUsername)+' از '+esc(x.sourceCastle)+' به '+esc(x.destinationCastle)+' در ساعت '+esc(x.arrivalTime)+' خواهد رسید</strong><div>لرد: '+esc(x.lordName||'—')+(x.fake?' · لشکرکشی فیک':'')+(Number(x.cancelled)?' · <b class="we-cancelled-mark">✓ لغو شده</b>':'')+'</div><small>'+(x.type==='sea'?'دریایی':'زمینی')+'</small></article>').join(''):'<div class="war-log-empty">هنوز لشکرکشی‌ای ثبت نشده است.</div>';
   }
   async function open(){
     $('warExpeditionModal').classList.remove('hidden');document.body.classList.add('modal-open');reset();
