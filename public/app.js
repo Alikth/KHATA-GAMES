@@ -326,8 +326,24 @@ window.addEventListener("DOMContentLoaded", () => {
   $("adminRegion").addEventListener("change", updateAdminCastles);
 
   async function refreshAdmin() {
-    players = await api("/api/players"); renderPlayers(); renderMap(); updateAdminCastles();
+    const [lordList, warData] = await Promise.all([api("/api/players"), api("/api/admin/war-expeditions")]);
+    players = lordList; renderPlayers(); renderMap(); updateAdminCastles();
     $("adminPlayers").innerHTML = players.length ? players.map(p => `<div class="admin-row"><span>${escapeHTML(p.username)} · ${escapeHTML(p.castle)}</span><button class="delete" type="button" data-action="delete-player" data-id="${escapeHTML(p.id)}">DELETE</button></div>`).join("") : "<small>هیچ پلیری ثبت نشده.</small>";
+    const wars=warData.expeditions||[];
+    $("adminLordCount").textContent=players.length;
+    $("adminWarCount").textContent=wars.length;
+    $("adminActiveWarCount").textContent=wars.filter(x=>x.active).length;
+    $("adminWarList").innerHTML=wars.length?wars.map(x=>{
+      let assets={};try{assets=JSON.parse(x.assetsJson||"{}");}catch{}
+      const assetText=Object.entries(assets).flatMap(([kind,obj])=>Object.entries(obj||{}).map(([k,v])=>kind+': '+k+' × '+v)).join(' · ')||'بدون دارایی';
+      return `<article class="admin-war-card ${x.active?'active':''} ${Number(x.cancelled)?'cancelled':''}"><div class="admin-war-top"><div><span class="admin-war-status">${Number(x.cancelled)?'✓ لغو شده':x.active?'● فعال':'⌛ رسیده'}</span><h3>${escapeHTML(x.attackerUsername)} · ${escapeHTML(x.sourceCastle)} → ${escapeHTML(x.destinationCastle)}</h3></div><span>${escapeHTML(x.arrivalTime)}</span></div><div class="admin-war-details"><span>لرد: ${escapeHTML(x.lordName||'—')}</span><span>نوع: ${x.type==='sea'?'دریایی':'زمینی'}</span><span>${x.fake?'فیک':'واقعی'}</span><span>دارایی: ${escapeHTML(assetText)}</span><span>ثبت: ${escapeHTML(x.createdAt)}</span></div>${x.active&&!Number(x.cancelled)?'<button class="war-cancel-btn" type="button" data-action="admin-cancel-war" data-war-id="'+escapeHTML(x.id)+'">لغو لشکرکشی از طرف ادمین</button>':''}</article>`;
+    }).join(""):'<div class="admin-empty">هنوز لشکرکشی‌ای ثبت نشده است.</div>';
+  }
+
+  async function cancelAdminWar(id) {
+    if (!confirm("این لشکرکشی توسط ادمین لغو شود؟ نیروها و ادوات به قلعه مبدا بازگردانده می‌شوند.")) return;
+    try { await api("/api/admin/war-expeditions/"+encodeURIComponent(id)+"/cancel",{method:"POST",body:JSON.stringify({})}); await refreshAdmin(); await window.khataLoadWarLog?.(); showToast("لشکرکشی لغو شد."); }
+    catch(e){ showToast(e.message,true); }
   }
   $("adminLogin").onclick = async () => {
     const button = $("adminLogin"); button.disabled = true;
@@ -342,7 +358,7 @@ window.addEventListener("DOMContentLoaded", () => {
     finally { button.disabled = false; }
   };
   async function deletePlayer(id) { if (!confirm("این پلیر حذف شود؟")) return; try { await api("/api/admin/players/" + encodeURIComponent(id), { method: "DELETE" }); await refreshAdmin(); showToast("پلیر حذف شد."); } catch (e) { showToast(e.message, true); } }
-  $("adminLogout").onclick = async () => { try { await api("/api/admin/logout", { method: "POST" }); } catch {} currentUser = null; resetGameState(); showAuth(); setAuthTab("login"); };
+  $("adminLogout").onclick = async () => { try { await api("/api/admin/logout", { method: "POST" }); } catch {} currentUser = null; document.body.classList.remove("admin-mode"); resetGameState(); showAuth(); setAuthTab("login"); };
 
   $("adminLink")?.addEventListener("click", () => {
     if (!currentUser) {
@@ -358,7 +374,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function showAdminOnly() {
     $("authScreen").classList.add("hidden"); $("gameLobby").classList.add("hidden"); $("gameApp").classList.remove("hidden");
-    document.querySelectorAll(".page").forEach(x => x.classList.remove("active")); $("admin").classList.add("active");
+    document.querySelectorAll(".page").forEach(x => x.classList.remove("active")); $("admin").classList.add("active"); document.body.classList.add("admin-mode");
     document.querySelectorAll(".nav-btn").forEach(x => x.classList.remove("active")); window.scrollTo({ top: 0, behavior: "auto" });
   }
   async function checkAdminSession() {
@@ -386,6 +402,7 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (action === "war-expedition") window.khataOpenWarExpedition?.();
     else if (action === "trade") window.khataOpenTrade?.(target.dataset.castle);
     else if (action === "cancel-war") cancelWarExpedition(target.dataset.warId);
+    else if (action === "admin-cancel-war") cancelAdminWar(target.dataset.warId);
     else if (action === "claim") openClaim(Number(target.dataset.region), Number(target.dataset.castle));
     else if (action === "go-register") openPage("register").catch(() => {});
     else if (action === "delete-player") deletePlayer(target.dataset.id);
