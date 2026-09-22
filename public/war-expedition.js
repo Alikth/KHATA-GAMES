@@ -58,7 +58,7 @@
     const b=$('weFinalYes');b.disabled=true;$('weConfirmError').textContent='';
     try{
       const result=await api('/api/war-expeditions',{method:'POST',body:JSON.stringify({type,source:$('weSource').value,destination:$('weDestination').value,arrivalTime:getArrivalTime(),fake,assets:values})});
-      close();await loadWarLog();alert('لشکرکشی با موفقیت ثبت شد.');
+      close();await loadWarLog();await window.khataRefreshMyCastles?.();alert('لشکرکشی با موفقیت ثبت شد.');
     }catch(e){$('weConfirmError').textContent=e.message;b.disabled=false;}
   }
   async function loadWarLog(){
