@@ -85,4 +85,4 @@ export const houses = [
     { house: "Manwoody", castle: "Kingsgrave", icon: "🏯" },
     { house: "Yronwood", castle: "Yronwood", icon: "⚓" }
   ]}
- ];
+];
