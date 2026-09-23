@@ -13,7 +13,6 @@ import {
   normalizeUsername,
   validTelegramUsername,
   validAccountUsername,
-  findCastle,
   cookie,
   clearCookie,
   getCookie,
@@ -153,6 +152,11 @@ const ECONOMY_SCHEMA = [
     assets_json TEXT NOT NULL DEFAULT '{}'
   )`
 ];
+
+function findCastle(region, castle) {
+  const r = houses.find(x => x.region === region);
+  return r?.castles.find(x => x.castle === castle);
+}
 
 const GENERAL_PRODUCTIONS = {
   farm:{label:"🌾 مزرعه",max:50,cost:{coins:500,wood:100,stone:20,peasants:20},base:"grain",yield:500},
