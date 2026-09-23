@@ -317,12 +317,62 @@ window.addEventListener("DOMContentLoaded", () => {
 
   window.khataRefreshMyCastles = renderMyCastles;
 
+  const navSlideDemo = new URLSearchParams(location.search).get("navtest") === "1";
+  if (navSlideDemo) document.body.classList.add("nav-slide-demo");
+
+  async function animateNavPage(oldPage, newPage, direction) {
+    const main = document.querySelector("main");
+    if (!main || !oldPage || oldPage === newPage) {
+      document.querySelectorAll(".page").forEach(x => x.classList.toggle("active", x.id === newPage));
+      return;
+    }
+    const oldEl = document.getElementById(oldPage), newEl = document.getElementById(newPage);
+    if (!oldEl || !newEl) return;
+    const distance = direction > 0 ? "100%" : "-100%";
+    const leave = direction > 0 ? "-100%" : "100%";
+    const height = Math.max(oldEl.scrollHeight, newEl.scrollHeight, 900);
+    main.style.height = height + "px";
+    document.querySelectorAll(".page").forEach(x => x.classList.remove("active"));
+    oldEl.classList.add("nav-slide-page", "nav-slide-old");
+    newEl.classList.add("active", "nav-slide-page", "nav-slide-new");
+    newEl.style.transform = "translate3d(" + distance + ",0,0)";
+    newEl.style.opacity = "0";
+    oldEl.style.transform = "translate3d(0,0,0)";
+    oldEl.style.opacity = "1";
+    requestAnimationFrame(() => {
+      oldEl.style.transform = "translate3d(" + leave + ",0,0)";
+      oldEl.style.opacity = "0";
+      newEl.style.transform = "translate3d(0,0,0)";
+      newEl.style.opacity = "1";
+    });
+    await new Promise(resolve => setTimeout(resolve, 460));
+    oldEl.classList.remove("active", "nav-slide-page", "nav-slide-old");
+    newEl.classList.remove("nav-slide-page", "nav-slide-new");
+    oldEl.style.cssText = "";
+    newEl.style.cssText = "";
+    main.style.height = "";
+  }
+
   async function openPage(page) {
-    document.querySelectorAll(".nav-btn").forEach(x => x.classList.toggle("active", x.dataset.page === page));
-    document.querySelectorAll(".page").forEach(x => x.classList.toggle("active", x.id === page));
+    const current = document.querySelector(".nav-btn.active")?.dataset.page || "register";
+    const order = [...document.querySelectorAll(".nav-btn")].map(x => x.dataset.page);
+    const direction = order.indexOf(page) >= order.indexOf(current) ? 1 : -1;
+
+    if (navSlideDemo) {
+      document.querySelectorAll(".nav-btn").forEach(x => x.classList.toggle("active", x.dataset.page === page));
+    } else {
+      document.querySelectorAll(".nav-btn").forEach(x => x.classList.toggle("active", x.dataset.page === page));
+      document.querySelectorAll(".page").forEach(x => x.classList.toggle("active", x.id === page));
+    }
+
     if (page === "players") { players = await api("/api/players"); renderPlayers(); renderMap(); }
     if (page === "myCastles") { players = await api("/api/players"); await renderMyCastles(); }
     if (page === "season") { window.khataLoadWarLog?.(); }
+
+    if (navSlideDemo) {
+      await animateNavPage(current, page, direction);
+    }
+
     window.scrollTo({ top: document.querySelector("main")?.offsetTop || 0, behavior: "smooth" });
   }
   document.querySelectorAll(".nav-btn").forEach(btn => btn.addEventListener("click", () => openPage(btn.dataset.page).catch(e => showToast(e.message, true))));
