@@ -32,7 +32,7 @@ export const castleInfo = {
   "Sunspear": { location: "ساحل شرقی Dorne", description: "مقر خاندان Martell و مرکز سیاسی Dorne؛ شهری ساحلی که بر سرزمین‌های جنوب شرقی Dorne مشرف است." },
   "Kingsgrave": { location: "Dorne", description: "مقر خاندان Manwoody در Dorne و یکی از دژهای مهم خاندان‌های نجیب این منطقه." },
   "Yronwood": { location: "Dorne، شمال‌غربی Dorne", description: "مقر خاندان Yronwood و یکی از بزرگ‌ترین دژهای Dorne؛ بر مسیرهای مهم شمال‌غربی منطقه قرار دارد." }
-};;
+};
 
 export const houses = [
   { region: "The Wall", icon: "🌓", castles: [
@@ -85,4 +85,4 @@ export const houses = [
     { house: "Manwoody", castle: "Kingsgrave", icon: "🏯" },
     { house: "Yronwood", castle: "Yronwood", icon: "⚓" }
   ]}
-];;
+ ];
