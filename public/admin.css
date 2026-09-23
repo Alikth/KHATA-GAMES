@@ -13,3 +13,72 @@ body.admin-mode{background:#070809}.admin-mode .hero,.admin-mode .nav{display:no
 .admin-box>select{width:100%;box-sizing:border-box;background:#090a0d;color:#fff;border:1px solid #34373d;border-radius:9px;padding:11px;margin:6px 0}
 @media(max-width:900px){.admin-stats{grid-template-columns:repeat(2,1fr)}.admin-control-grid{grid-template-columns:1fr}.admin-war-assets{grid-template-columns:1fr}.admin-trade-assets{grid-template-columns:1fr}}
 @media(max-width:750px){.admin-stats{grid-template-columns:1fr}.admin-trade-head{flex-direction:column}.admin-dashboard{padding:18px}}
+
+/* v3 — compact animated control-room layout */
+.admin-dashboard{width:min(1180px,100%);padding:20px;overflow-x:hidden}
+.admin-dashboard-head{padding-bottom:18px;align-items:center}
+.admin-dashboard h1{font-size:32px}
+.admin-control-room{display:flex;flex-direction:row;direction:rtl;gap:16px;align-items:stretch;margin-top:18px}
+.admin-sidebar{width:205px;min-width:205px;display:flex;flex-direction:column;gap:8px;position:sticky;top:14px;align-self:flex-start}
+.admin-sidebar-title{padding:8px 12px 12px;border-bottom:1px solid rgba(199,164,86,.2);margin-bottom:3px}
+.admin-sidebar-title span{display:block;font-size:9px;letter-spacing:2.5px;color:#c7a456}
+.admin-sidebar-title b{display:block;margin-top:3px;font-family:Cinzel,serif;font-size:18px}
+.admin-menu-item{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 13px;background:rgba(16,18,22,.82);border:1px solid rgba(255,255,255,.08);border-radius:12px;color:#d7d8dc;cursor:pointer;text-align:right;transition:transform .28s ease,border-color .28s ease,background .28s ease,box-shadow .28s ease,color .28s ease}
+.admin-menu-item i{font-style:normal;font-size:18px;color:#c7a456;opacity:.65;transition:transform .3s ease,opacity .3s ease}
+.admin-menu-item:hover{transform:translateX(-3px);border-color:rgba(199,164,86,.38);background:#14161b}
+.admin-menu-item.active{border-color:rgba(199,164,86,.58);background:linear-gradient(90deg,rgba(199,164,86,.08),rgba(16,18,22,.98));box-shadow:0 8px 25px rgba(0,0,0,.22);color:#fff}
+.admin-menu-item.active i{opacity:1;transform:translateX(-3px)}
+.admin-panels{flex:1;min-width:0;position:relative}
+.admin-panel-view{display:none;min-width:0;animation:adminPanelReveal .48s cubic-bezier(.2,.8,.2,1) both}
+.admin-panel-view.active{display:block}
+@keyframes adminPanelReveal{from{opacity:0;clip-path:inset(0 100% 0 0);transform:translateX(-12px)}to{opacity:1;clip-path:inset(0 0 0 0);transform:translateX(0)}}
+.admin-panel-view .admin-section{margin-top:0;min-height:0}
+.admin-section{padding:18px;border-radius:15px}
+.admin-section-head{margin-bottom:14px}
+.admin-section-head h2{font-size:21px}
+.admin-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.admin-box{padding:14px}
+.admin-box h3{font-size:16px}
+.admin-stats{margin:0 0 14px;gap:9px}
+.admin-stats div{padding:12px;border-radius:11px}
+.admin-stats b{font-size:22px}
+.admin-control-grid{gap:9px}
+.admin-control-card{padding:12px;border-radius:11px}
+.admin-control-card small{font-size:11px}
+.admin-trade-card,.admin-war-card{padding:13px}
+.admin-castle-editor{margin-top:12px}
+.admin-future-actions{gap:9px}
+@media(max-width:760px){
+  .admin-dashboard{padding:12px}
+  .admin-dashboard-head{padding-bottom:12px}
+  .admin-dashboard h1{font-size:25px}
+  .admin-dashboard-head p{font-size:11px;margin:3px 0}
+  .admin-dashboard-head .danger{padding:8px 10px;font-size:11px}
+  .admin-control-room{gap:8px;margin-top:12px}
+  .admin-sidebar{width:116px;min-width:116px;gap:6px;top:8px}
+  .admin-sidebar-title{padding:5px 7px 8px}
+  .admin-sidebar-title span{font-size:7px;letter-spacing:1.5px}
+  .admin-sidebar-title b{font-size:14px}
+  .admin-menu-item{padding:10px 7px;font-size:11px;line-height:1.35;border-radius:10px}
+  .admin-menu-item i{font-size:15px}
+  .admin-section{padding:12px;border-radius:12px}
+  .admin-section-head{gap:7px;align-items:flex-start}
+  .admin-section-head h2{font-size:17px}
+  .admin-section-head>div>span{font-size:8px;letter-spacing:1.5px}
+  .admin-grid{grid-template-columns:1fr}
+  .admin-control-grid{grid-template-columns:1fr}
+  .admin-control-card{align-items:flex-start;flex-direction:column}
+  .admin-control-card button{width:100%}
+  .admin-stats{grid-template-columns:repeat(2,1fr)}
+  .admin-stats div{padding:9px}
+  .admin-stats b{font-size:19px}
+  .admin-stats span{font-size:10px}
+  .admin-war-top,.admin-trade-head{flex-direction:column}
+  .admin-trade-assets,.admin-war-assets{grid-template-columns:1fr}
+  .admin-editor-grid{grid-template-columns:1fr}
+}
+@media(max-width:390px){
+  .admin-sidebar{width:104px;min-width:104px}
+  .admin-menu-item{font-size:10px;padding:9px 6px}
+  .admin-section{padding:10px}
+}
