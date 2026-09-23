@@ -624,8 +624,10 @@ async function handleApi(request, env, url) {
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
     const b=await body(request), type=String(b.type||""), source=String(b.source||"").trim(), destination=String(b.destination||"").trim(), arrivalTime=String(b.arrivalTime||"").trim(), isFake=!!b.fake;
     if(!["land","sea"].includes(type))return json({error:"نوع لشکرکشی معتبر نیست."},400);
-    if(!findCastle("",source)&&!houses.some(r=>r.castles.some(c=>c.castle===source)))return json({error:"مبدا معتبر نیست."},400);
-    if(!findCastle("",destination)&&!houses.some(r=>r.castles.some(c=>c.castle===destination)))return json({error:"مقصد معتبر نیست."},400);
+    if(!findCastle("",source))return json({error:"مبدا معتبر نیست."},400);
+    if(!findCastle("",destination))return json({error:"مقصد معتبر نیست."},400);
+    if(source!==state.castle)return json({error:"مبدا باید قلعه ثبت‌شده خودت باشد."},403);
+    if(destination===source)return json({error:"مقصد باید با مبدا متفاوت باشد."},400);
     if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))return json({error:"تایم رسیدن باید به صورت HH:MM وارد شود."},400);
     const accountId=state.owner_account_id, user=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(accountId).first();
     if(!user)return json({error:"حساب کاربری پیدا نشد."},404);
