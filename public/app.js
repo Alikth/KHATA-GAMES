@@ -468,6 +468,18 @@ window.addEventListener("DOMContentLoaded", () => {
   $("adminScenariosBtn").onclick=()=>showToast('بخش سناریوها آماده می‌شود.');
   $("adminRolesBtn").onclick=()=>showToast('بخش رول‌ها آماده می‌شود.');
 
+  function openAdminPanel(target){
+    const panels=document.querySelectorAll("[data-admin-panel]");
+    const buttons=document.querySelectorAll("[data-admin-target]");
+    panels.forEach(p=>p.classList.toggle("active",p.dataset.adminPanel===target));
+    buttons.forEach(b=>b.classList.toggle("active",b.dataset.adminTarget===target));
+    const active=document.querySelector('[data-admin-panel="'+target+'"]');
+    if(active) active.scrollTop=0;
+  }
+  document.querySelectorAll("[data-admin-target]").forEach(btn=>{
+    btn.addEventListener("click",()=>openAdminPanel(btn.dataset.adminTarget));
+  });
+
   $("adminLogout").onclick = async () => { try { await api("/api/admin/logout", { method: "POST" }); } catch {} currentUser = null; document.body.classList.remove("admin-mode"); resetGameState(); showAuth(); setAuthTab("login"); };
 
   $("adminLink")?.addEventListener("click", () => {
