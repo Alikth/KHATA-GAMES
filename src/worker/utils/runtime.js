@@ -50,7 +50,6 @@ async function constantTimeSecretEqual(a, b) {
 function normalizeUsername(value) { return String(value || "").trim().replace(/^@+/, "").replace(/\s+/g, ""); }
 function validTelegramUsername(value) { return /^[A-Za-z0-9_]{5,32}$/.test(value); }
 function validAccountUsername(value) { return /^[A-Za-z0-9_]{3,24}$/.test(value); }
-function findCastle(region, castle) { const r = houses.find(x => x.region === region); return r?.castles.find(x => x.castle === castle); }
 function cookie(name, value, maxAge = SESSION_TTL / 1000) { return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(maxAge)}`; }
 function clearCookie(name) { return `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`; }
 function getCookie(request, name) { const raw = request.headers.get("Cookie") || ""; const m = raw.match(new RegExp(`(?:^|; )${name}=([^;]*)`)); return m ? decodeURIComponent(m[1]) : null; }
@@ -117,7 +116,6 @@ export {
   normalizeUsername,
   validTelegramUsername,
   validAccountUsername,
-  findCastle,
   cookie,
   clearCookie,
   getCookie,
