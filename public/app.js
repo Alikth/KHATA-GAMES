@@ -340,15 +340,21 @@ window.addEventListener("DOMContentLoaded", () => {
   function fillAdminRegions(){
     if(!$('adminRegion'))return;
     $('adminRegion').innerHTML=houses.map(r=>'<option value="'+escapeHTML(r.region)+'">'+escapeHTML(r.region)+'</option>').join('');
-    updateAdminCastles();
     if($('adminAssignRegion'))$('adminAssignRegion').innerHTML=houses.map(r=>'<option value="'+escapeHTML(r.region)+'">'+escapeHTML(r.region)+'</option>').join('');
+    updateAdminCastles();
     updateAdminAssignCastles();
   }
   function updateAdminCastles(){
     const r=houses.find(x=>x.region===$("adminRegion")?.value); if(!r||!$("adminCastle"))return;
-    const a=r.castles.filter(c=>!players.some(p=>p.region===r.region&&p.castle===c.castle));
-    $("adminCastle").innerHTML=a.length?a.map(c=>'<option value="'+escapeHTML(c.castle)+'">'+escapeHTML(c.castle)+' — '+escapeHTML(c.house)+'</option>').join(''):'<option value="">همه قلعه‌های این اقلیم گرفته شده‌اند</option>';
-    $("adminAdd").disabled=!a.length;
+    const occupied=new Set(players.filter(p=>p.region===r.region).map(p=>p.castle));
+    $("adminCastle").innerHTML=r.castles.length
+      ? r.castles.map(c=>occupied.has(c.castle)
+        ? '<option value="'+escapeHTML(c.castle)+'" disabled>'+escapeHTML(c.castle)+' — '+escapeHTML(c.house)+' — Full!</option>'
+        : '<option value="'+escapeHTML(c.castle)+'">'+escapeHTML(c.castle)+' — '+escapeHTML(c.house)+'</option>').join('')
+      : '<option value="">قلعه‌ای وجود ندارد</option>';
+    $("adminAdd").disabled=!r.castles.some(c=>!occupied.has(c.castle));
+    const firstFree=r.castles.find(c=>!occupied.has(c.castle));
+    if(firstFree) $("adminCastle").value=firstFree.castle;
   }
   function updateAdminAssignPlayers(){
     const select=$("adminAssignPlayer"); if(!select)return;
@@ -356,9 +362,19 @@ window.addEventListener("DOMContentLoaded", () => {
     select.innerHTML=list.length?list.map(p=>'<option value="'+escapeHTML(p.id)+'">'+escapeHTML(p.username)+' — '+escapeHTML(p.castle)+'</option>').join(''):'<option value="">پلیر دارای حسابی وجود ندارد</option>';
   }
   function updateAdminAssignCastles(){
-    const select=$("adminAssignCastle"),region=$("adminAssignRegion")?.value;if(!select||!region)return;
-    const r=houses.find(x=>x.region===region);const a=r?r.castles.filter(c=>!players.some(p=>p.region===region&&p.castle===c.castle)):[];
-    select.innerHTML=a.length?a.map(c=>'<option value="'+escapeHTML(c.castle)+'">'+escapeHTML(c.castle)+' — '+escapeHTML(c.house)+'</option>').join(''):'<option value="">قلعه آزاد وجود ندارد</option>';
+    const select=$("adminAssignCastle"),region=$("adminAssignRegion")?.value;
+    if(!select||!region)return;
+    const r=houses.find(x=>x.region===region);
+    if(!r){select.innerHTML='<option value="">اقلیم پیدا نشد</option>'; $("adminAssignCastleBtn").disabled=true; return;}
+    const occupied=new Set(players.filter(p=>p.region===region).map(p=>p.castle));
+    select.innerHTML=r.castles.length
+      ? r.castles.map(c=>occupied.has(c.castle)
+        ? '<option value="'+escapeHTML(c.castle)+'" disabled>'+escapeHTML(c.castle)+' — '+escapeHTML(c.house)+' — Full!</option>'
+        : '<option value="'+escapeHTML(c.castle)+'">'+escapeHTML(c.castle)+' — '+escapeHTML(c.house)+'</option>').join('')
+      : '<option value="">قلعه‌ای وجود ندارد</option>';
+    $("adminAssignCastleBtn").disabled=!r.castles.some(c=>!occupied.has(c.castle));
+    const firstFree=r.castles.find(c=>!occupied.has(c.castle));
+    if(firstFree) select.value=firstFree.castle;
   }
   function adminEditorInput(label,value,path,type="number"){
     return '<label class="admin-editor-field"><span>'+escapeHTML(label)+'</span><input type="'+type+'" '+(type==="number"?'min="0"':'')+' value="'+escapeHTML(value??"")+'" data-admin-path="'+escapeHTML(path)+'"></label>';
@@ -409,8 +425,8 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   async function refreshAdmin(){
-    const [lordList,adminLordList,warData,tradeData,controlData,castleData]=await Promise.all([api('/api/players'),api('/api/admin/players'),api('/api/admin/war-expeditions'),api('/api/admin/trades'),api('/api/admin/controls'),api('/api/admin/castles')]);
-    players=lordList;adminPlayers=adminLordList;renderPlayers();renderMap();updateAdminCastles();updateAdminAssignPlayers();updateAdminAssignCastles();
+    const [lordList,adminLordList,houseList,warData,tradeData,controlData,castleData]=await Promise.all([api('/api/players'),api('/api/admin/players'),api('/api/houses'),api('/api/admin/war-expeditions'),api('/api/admin/trades'),api('/api/admin/controls'),api('/api/admin/castles')]);
+    players=lordList;adminPlayers=adminLordList;houses=houseList;renderPlayers();renderMap();fillAdminRegions();updateAdminAssignPlayers();
     $("adminPlayers").innerHTML=players.length?players.map(p=>'<div class="admin-row"><span>'+escapeHTML(p.username)+' · '+escapeHTML(p.castle)+'</span><button class="delete" type="button" data-action="delete-player" data-id="'+escapeHTML(p.id)+'">DELETE</button></div>').join(''):'<small>هیچ پلیری ثبت نشده.</small>';
     const wars=warData.expeditions||[];
     $("adminLordCount").textContent=players.length;$("adminWarCount").textContent=wars.length;$("adminActiveWarCount").textContent=wars.filter(x=>x.active).length;
