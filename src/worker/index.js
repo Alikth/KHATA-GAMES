@@ -182,6 +182,11 @@ async function ensureEconomySchema(env) {
   // CREATE TABLE IF NOT EXISTS is cheap enough for the economy entry point and
   // guarantees that the two runtime support tables exist after an old deploy.
   for (const sql of ECONOMY_SCHEMA) await env.DB.prepare(sql).run();
+  await ensureDynamicCastleSchema(env);
+  for(const r of houses) for(const c of r.castles){
+    const naval=NAVAL_CASTLES.has(c.castle)?1:0;
+    await env.DB.prepare("UPDATE castle_state SET port_enabled=?, port_level=CASE WHEN ?=0 THEN 0 ELSE port_level END WHERE castle=?").bind(naval,naval,c.castle).run();
+  }
 
   const ready=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='seeded'").first();
   const version=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='schema_version'").first();
