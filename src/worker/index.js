@@ -47,6 +47,8 @@ import {
 } from "./data/game-rules.js";
 
 
+const COASTAL_CASTLES = new Set(["Karhold","Seagard","Gulltown","Pyke","Ten Towers","Hammerhorn","Casterly Rock","King's Landing","Dragonstone","Storm's End","Oldtown","Sunspear","Yronwood"]);
+
 const ECONOMY_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS castle_state (
     castle TEXT PRIMARY KEY, region TEXT NOT NULL, owner_account_id TEXT,
@@ -205,7 +207,8 @@ async function ensureEconomySchema(env) {
   const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
   for (const r of houses) {
     for (const c of r.castles) {
-      await env.DB.prepare("INSERT OR IGNORE INTO castle_state (castle,region) VALUES (?,?)").bind(c.castle,r.region).run();
+      await env.DB.prepare("INSERT OR IGNORE INTO castle_state (castle,region,port_enabled) VALUES (?,?,?)").bind(c.castle,r.region,COASTAL_CASTLES.has(c.castle)?1:0).run();
+      if(COASTAL_CASTLES.has(c.castle))await env.DB.prepare("UPDATE castle_state SET port_enabled=1 WHERE castle=?").bind(c.castle).run();
       // Repair support rows once when migrating an older economy database.
       await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state (castle,last_week_key) VALUES (?,?)").bind(c.castle,week).run();
       for (const [k,lvl] of Object.entries(defaults)) await env.DB.prepare("INSERT OR IGNORE INTO castle_production (castle,production_key,level) VALUES (?,?,?)").bind(c.castle,k,lvl).run();
@@ -540,6 +543,7 @@ async function handleApi(request, env, url) {
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
     const b=await body(request), type=String(b.type||""), source=String(b.source||"").trim(), destination=String(b.destination||"").trim(), durationMinutes=Math.floor(Number(b.durationMinutes||0)), isFake=!!b.fake, lordPresent=!!b.lordPresent;
     if(!["land","sea"].includes(type))return json({error:"نوع لشکرکشی معتبر نیست."},400);
+    if(type==="sea"&&!Number(state.port_enabled))return json({error:"این قلعه اسکله فعال ندارد."},400);
     if(type==="sea"&&!Number(state.port_enabled))return json({error:"این قلعه اسکله فعال ندارد."},400);
     const validCastleName=name=>houses.some(r=>r.castles.some(c=>c.castle===name));
     if(!(await castleExists(env,source)))return json({error:"مبدا معتبر نیست."},400);
