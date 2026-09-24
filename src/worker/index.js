@@ -477,6 +477,11 @@ async function handleApi(request, env, url) {
     if(!bres[1]?.meta?.changes)return json({error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:state.port_level+1});
   }
 
+  if (method==="GET" && path==="/api/game/status") {
+    await ensureGameControls(env);
+    const row=await env.DB.prepare("SELECT locked FROM game_controls WHERE control_key='game_running'").first();
+    return json({running:Number(row?.locked??1)===1});
+  }
   if (method==="GET" && path==="/api/war-expeditions/status") {
     await ensureWarLogSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
