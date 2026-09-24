@@ -466,102 +466,72 @@ async function handleApi(request, env, url) {
   }
 
   if (method==="GET" && path==="/api/war-expeditions/status") {
-    await ensureWarLogSchema(env);
+    await ensureWarLogSchema(env); await ensureWarRuntime(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const fake=await env.DB.prepare("SELECT id FROM war_logs WHERE attacker_account_id=? AND week_key=? AND is_fake=1 LIMIT 1").bind(session.user_id,gameWeekKey()).first();
-    return json({fakeAvailable:!fake});
+    const rt=await warRuntime(env); return json({fakeAvailable:!fake,gameRunning:rt.running});
   }
   if (method==="GET" && path==="/api/war-logs") {
-    await ensureWarLogSchema(env);
-    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,cancelled,cancelled_at AS cancelledAt FROM war_logs ORDER BY created_at DESC").all()).results;
+    await ensureWarLogSchema(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,cancelled,cancelled_at AS cancelledAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs ORDER BY created_at DESC").all()).results;
     return json({logs:rows});
   }
   if (method==="GET" && path==="/api/my-war-expeditions/active") {
-    await ensureWarLogSchema(env);
-    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
-    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled FROM war_logs WHERE attacker_account_id=? AND cancelled=0 ORDER BY created_at DESC").bind(session.user_id).all()).results.filter(warIsActive);
-    return json({expeditions:rows});
+    await ensureWarLogSchema(env); const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const rt=await warRuntime(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(session.user_id).all()).results;
+    return json({expeditions:rows.map(x=>({...x,active:warIsActive(x,rt),arrived:!warIsActive(x,rt)}))});
+  }
+  if (method==="GET" && path==="/api/my-war-expeditions/commands") {
+    await ensureWarLogSchema(env); const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    const rt=await warRuntime(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,source_castle AS sourceCastle,destination_castle AS destinationCastle,type,arrival_time AS arrivalTime,assets_json AS assetsJson,lord_present AS lordPresent,elapsed_seconds AS elapsedSeconds,duration_minutes AS durationMinutes FROM war_logs WHERE attacker_account_id=? AND source_castle=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(state.owner_account_id,state.castle).all()).results;
+    return json({commands:rows.filter(x=>!warIsActive(x,rt)).map(x=>({...x,arrived:true}))});
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/cancel$/)) {
-    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
-    await ensureWarLogSchema(env);
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403); await ensureWarLogSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"دسترسی لازم است."},401);
-    const id=decodeURIComponent(path.split("/")[3]);
-    const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=?").bind(id,session.user_id).first();
-    if(!row)return json({error:"لشکرکشی پیدا نشد."},404);
+    const id=decodeURIComponent(path.split("/")[3]), row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=?").bind(id,session.user_id).first();
+    if(!row)return json({error:"لشکرکشی پیدا نشد."},404); const rt=await warRuntime(env);
     if(Number(row.cancelled))return json({error:"این لشکرکشی قبلاً لغو شده است."},409);
-    if(!warIsActive(row))return json({error:"زمان رسیدن این لشکرکشی گذشته است."},409);
-    const assets=JSON.parse(row.assets_json||"{}"); const updates=[];
-    if(!Number(row.is_fake)){
-      for(const kind of ["army","equipment","fleet"]){
-        for(const [key,raw] of Object.entries(assets[kind]||{})){
-          const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";
-          const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";
-          updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=?`).bind(Math.floor(Number(raw)||0),row.source_castle,key));
-        }
-      }
-    }
-    updates.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by=? WHERE id=? AND cancelled=0").bind(new Date().toISOString(),session.user_id,id));
-    const result=await env.DB.batch(updates);
-    if(!result[updates.length-1]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ دوباره تلاش کن."},409);
-    return json({ok:true});
+    if(!warIsActive(row,rt))return json({error:"این لشکرکشی دیگر قابل لغو نیست."},409);
+    const assets=JSON.parse(row.assets_json||"{}"),updates=[];
+    if(!Number(row.is_fake))for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=?`).bind(Math.floor(Number(raw)||0),row.source_castle,key));}
+    updates.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by=?,run_started_at=NULL WHERE id=? AND cancelled=0").bind(new Date().toISOString(),session.user_id,id));
+    const result=await env.DB.batch(updates); if(!result[updates.length-1]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ دوباره تلاش کن."},409); return json({ok:true});
   }
   if (method==="POST" && path==="/api/war-expeditions") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(await isGameControlLocked(env,"war"))return json({error:"لشکرکشی‌ها فعلاً توسط ادمین قفل شده‌اند."},423);
-    await ensureWarLogSchema(env);
+    await ensureWarLogSchema(env); const rt=await warRuntime(env); if(!rt.running)return json({error:"بازی فعلاً متوقف است؛ شروع بازی را از ادمین صبر کن."},423);
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
-    const b=await body(request), type=String(b.type||""), source=String(b.source||"").trim(), destination=String(b.destination||"").trim(), arrivalTime=String(b.arrivalTime||"").trim(), isFake=!!b.fake;
+    const b=await body(request),type=String(b.type||""),source=String(b.source||"").trim(),destination=String(b.destination||"").trim(),arrivalTime=String(b.arrivalTime||"").trim(),isFake=!!b.fake,lordPresent=b.lordPresent!==false;
+    const durationMinutes=Math.floor(Number(b.durationMinutes||0));
     if(!["land","sea"].includes(type))return json({error:"نوع لشکرکشی معتبر نیست."},400);
-    const validCastleName=name=>houses.some(r=>r.castles.some(c=>c.castle===name));
-    if(!validCastleName(source))return json({error:"مبدا معتبر نیست."},400);
-    if(!validCastleName(destination))return json({error:"مقصد معتبر نیست."},400);
-    if(source!==state.castle)return json({error:"مبدا باید قلعه ثبت‌شده خودت باشد."},403);
-    if(destination===source)return json({error:"مقصد باید با مبدا متفاوت باشد."},400);
-    if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))return json({error:"تایم رسیدن باید به صورت HH:MM وارد شود."},400);
-    const accountId=state.owner_account_id, user=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(accountId).first();
-    if(!user)return json({error:"حساب کاربری پیدا نشد."},404);
-    const week=gameWeekKey();
-    if(isFake){
-      const used=await env.DB.prepare("SELECT id FROM war_logs WHERE attacker_account_id=? AND week_key=? AND is_fake=1 LIMIT 1").bind(accountId,week).first();
-      if(used)return json({error:"لشکرکشی فیک این هفته قبلاً استفاده شده است."},409);
-    }
-    const selected=b.assets&&typeof b.assets==="object"?b.assets:{};
-    const allowed={army:["castle_army","unit_key"],equipment:["castle_equipment","item_key"],fleet:["castle_fleet","ship_key"]};
-    const deductions=[];
-    let selectedTotal=0;
-    if(!isFake){
-      for(const kind of type==="sea"?["army","equipment","fleet"]:["army","equipment"]){
-        const group=selected[kind]&&typeof selected[kind]==="object"?selected[kind]:{};
-        for(const [key,raw] of Object.entries(group)){
-          const n=Math.floor(Number(raw));
-          if(!Number.isFinite(n)||n<0||n>1000000) return json({error:"تعداد واردشده معتبر نیست."},400);
-          if(!n)continue;
-          const def=allowed[kind]; if(!def)return json({error:"دارایی معتبر نیست."},400);
-          const row=await env.DB.prepare(`SELECT count FROM ${def[0]} WHERE castle=? AND ${def[1]}=?`).bind(state.castle,key).first();
-          const have=Number(row?.count||0);
-          if(n>have)return json({error:`تعداد ${key} بیشتر از موجودی قلعه است.`},400);
-          deductions.push({table:def[0],keyField:def[1],key,n});
-          selectedTotal+=n;
-        }
-      }
+    const sourceRow=await env.DB.prepare("SELECT castle,region FROM castle_state WHERE castle=?").bind(source).first(),destRow=await env.DB.prepare("SELECT castle,region,owner_account_id AS ownerAccountId FROM castle_state WHERE castle=?").bind(destination).first();
+    if(!sourceRow||!destRow)return json({error:"مبدا یا مقصد معتبر نیست."},400); if(source!==state.castle)return json({error:"مبدا باید قلعه ثبت‌شده خودت باشد."},403); if(destination===source)return json({error:"مقصد باید با مبدا متفاوت باشد."},400);
+    if(type==="sea" && (!await isNavalCastle(env,source) || !await isNavalCastle(env,destination)))return json({error:"لشکرکشی دریایی فقط بین قلعه‌های دریایی امکان‌پذیر است."},400);
+    if(!Number.isInteger(durationMinutes)||durationMinutes<1||durationMinutes>10080)return json({error:"مدت زمان لشکرکشی باید بین 1 دقیقه تا 7 روز باشد."},400);
+    if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))return json({error:"ساعت نمایش رسیدن باید به صورت HH:MM باشد."},400);
+    const accountId=state.owner_account_id,user=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(accountId).first();if(!user)return json({error:"حساب کاربری پیدا نشد."},404);
+    const week=gameWeekKey();if(isFake){const used=await env.DB.prepare("SELECT id FROM war_logs WHERE attacker_account_id=? AND week_key=? AND is_fake=1 LIMIT 1").bind(accountId,week).first();if(used)return json({error:"لشکرکشی فیک این هفته قبلاً استفاده شده است."},409);}
+    const selected=b.assets&&typeof b.assets==="object"?b.assets:{},allowed={army:["castle_army","unit_key"],equipment:["castle_equipment","item_key"],fleet:["castle_fleet","ship_key"]},deductions=[];let selectedTotal=0;
+    if(!isFake){for(const kind of type==="sea"?["army","equipment","fleet"]:["army","equipment"]){const group=selected[kind]&&typeof selected[kind]==="object"?selected[kind]:{};for(const [key,raw] of Object.entries(group)){const n=Math.floor(Number(raw));if(!Number.isFinite(n)||n<0||n>1000000)return json({error:"تعداد واردشده معتبر نیست."},400);if(!n)continue;const def=allowed[kind],row=await env.DB.prepare(`SELECT count FROM ${def[0]} WHERE castle=? AND ${def[1]}=?`).bind(state.castle,key).first();const have=Number(row?.count||0);if(n>have)return json({error:`تعداد ${key} بیشتر از موجودی قلعه است.`},400);deductions.push({table:def[0],keyField:def[1],key,n});selectedTotal+=n;}}
       if(!selectedTotal)return json({error:"برای لشکرکشی واقعی حداقل یک نیرو، ادوات یا کشتی انتخاب کن."},400);
-    } else if(type==="sea" && Object.keys(selected.fleet||{}).length) {
-      // Fake expeditions do not consume any assets.
     }
-    const statements=[];
-    if(!isFake){
-      for(const d of deductions){
-        statements.push(env.DB.prepare(`UPDATE ${d.table} SET count=count-? WHERE castle=? AND ${d.keyField}=? AND count>=?`).bind(d.n,state.castle,d.key,d.n));
-      }
-    }
+    const statements=[];for(const d of deductions)statements.push(env.DB.prepare(`UPDATE ${d.table} SET count=count-? WHERE castle=? AND ${d.keyField}=? AND count>=?`).bind(d.n,state.castle,d.key,d.n));
     const id=newId(),createdAt=new Date().toISOString(),lordName=WAR_LORDS[source]||"";
-    statements.push(env.DB.prepare("INSERT INTO war_logs(id,week_key,created_at,attacker_account_id,attacker_username,lord_name,type,source_castle,destination_castle,arrival_time,is_fake,assets_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,week,createdAt,accountId,user.username,lordName,type,source,destination,arrivalTime,isFake?1:0,JSON.stringify(isFake?{}:selected)));
-    const result=await env.DB.batch(statements);
-    for(let i=0;i<deductions.length;i++)if(!result[i]?.meta?.changes)return json({error:"تغییر همزمان دارایی انجام نشد؛ دوباره تلاش کن."},409);
-    return json({ok:true,id});
+    statements.push(env.DB.prepare("INSERT INTO war_logs(id,week_key,created_at,attacker_account_id,attacker_username,lord_name,type,source_castle,destination_castle,arrival_time,is_fake,assets_json,duration_minutes,elapsed_seconds,run_started_at,lord_present) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,week,createdAt,accountId,user.username,lordName,type,source,destination,arrivalTime,isFake?1:0,JSON.stringify(isFake?{}:selected),durationMinutes,0,createdAt,lordPresent?1:0));
+    const result=await env.DB.batch(statements);for(let i=0;i<deductions.length;i++)if(!result[i]?.meta?.changes)return json({error:"تغییر همزمان دارایی انجام نشد؛ دوباره تلاش کن."},409);return json({ok:true,id});
   }
-
+  if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/command$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);await ensureWarLogSchema(env);
+    const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const id=decodeURIComponent(path.split("/")[3]),b=await body(request),command=String(b.command||"");
+    if(!["attack","deploy","siege"].includes(command))return json({error:"دستور معتبر نیست."},400);
+    const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=?").bind(id,session.user_id).first();if(!row)return json({error:"لشکرکشی پیدا نشد."},404);
+    const rt=await warRuntime(env);if(Number(row.cancelled)||warIsActive(row,rt))return json({error:"این لشکرکشی هنوز به مقصد نرسیده است."},409);if(row.command)return json({error:"برای این لشکرکشی قبلاً دستور ثبت شده است."},409);
+    let defenderAssets={};if(command==="attack"||command==="siege"){const rows=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(row.destination_castle).all()).results;defenderAssets=Object.fromEntries(rows.map(x=>[x.unit_key,Number(x.count)]));}
+    await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=? WHERE id=? AND command IS NULL").bind(command,new Date().toISOString(),JSON.stringify(defenderAssets),id).run();
+    return json({ok:true,command});
+  }
   if (method==="GET" && path==="/api/admin/controls") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureGameControls(env);
