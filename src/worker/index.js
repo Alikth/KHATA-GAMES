@@ -555,6 +555,24 @@ async function handleApi(request, env, url) {
     return json({ok:true,id});
   }
 
+  if (method==="POST" && path==="/api/admin/game-control") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureGameControls(env);
+    const b=await body(request), action=String(b.action||"");
+    if(!["start","stop"].includes(action))return json({error:"عملیات معتبر نیست."},400);
+    const row=await env.DB.prepare("SELECT locked FROM game_controls WHERE control_key='game_running'").first();
+    const running=Number(row?.locked??1)===1;if((action==="start")===running)return json({ok:true,running});
+    if(action==="stop"){
+      const active=(await env.DB.prepare("SELECT id,remaining_seconds,last_resumed_at FROM war_logs WHERE cancelled=0 AND remaining_seconds>0").all()).results;
+      const updates=active.map(w=>{const left=Math.max(0,Number(w.remaining_seconds||0)-(w.last_resumed_at?Math.max(0,Date.now()-new Date(w.last_resumed_at).getTime())/1000:0));return env.DB.prepare("UPDATE war_logs SET remaining_seconds=?,last_resumed_at=NULL WHERE id=?").bind(Math.ceil(left),w.id);});
+      updates.push(env.DB.prepare("UPDATE game_controls SET locked=0 WHERE control_key='game_running'"));await env.DB.batch(updates);return json({ok:true,running:false});
+    }
+    await env.DB.prepare("UPDATE game_controls SET locked=1 WHERE control_key='game_running'").run();
+    const active=(await env.DB.prepare("SELECT id FROM war_logs WHERE cancelled=0 AND remaining_seconds>0").all()).results;
+    if(active.length)await env.DB.batch(active.map(w=>env.DB.prepare("UPDATE war_logs SET last_resumed_at=? WHERE id=? AND remaining_seconds>0").bind(new Date().toISOString(),w.id)));
+    return json({ok:true,running:true});
+  }
   if (method==="GET" && path==="/api/admin/controls") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureGameControls(env);
