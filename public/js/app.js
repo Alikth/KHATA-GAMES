@@ -393,7 +393,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const ADMIN_RESOURCE_LABELS = {peasants:"👥 رعیت",coins:"💰 سکه",wood:"🪵 چوب",stone:"🪨 سنگ",iron:"⛓ آهن",meat:"🥩 گوشت",fish:"🐟 ماهی",grain:"🌾 غلات",horses:"🐎 اسب",dragon_glass:"🌑 شیشه اژدها",wildfire:"🧪 وایلدفایر",tar:"🛢 قیر",grapes:"🍇 انگور"};
   const ADMIN_EQUIPMENT_LABELS = {ladder:"🪜 نردبان",ram:"🔩 دژکوب",catapult:"☄ منجنیق",scorpion:"🦂 اسکورپین",siege_tower:"🏗 برج محاصره"};
-  const ADMIN_ARMY_LABELS = {swordsman:"شمشیرزن",archer:"کماندار",spearman:"نیزه‌دار",cavalry:"سواره‌نظام",giant:"غول",giants:"غول"};
+  const ADMIN_ARMY_LABELS = {swordsman:"شمشیرزن",archer:"کماندار",spearman:"نیزه‌دار",cavalry:"سواره‌نظام",ranger:"رنجر",winter_soldier:"سرباز زمستان",vale_knight:"شوالیه ویل",crossbowman:"کراسبودار",red_cloak:"ردا سرخ",dragon_knight:"شوالیه اژدها",axeman:"تبر‌دار",flower_knight:"شوالیه گل",hammer_wielder:"پتک‌دار",dornish_spearman:"نیزه‌دار دورنیش",giant:"غول",giants:"غول"};
   const ADMIN_FLEET_LABELS = {transport:"کشتی ترابری",warship:"کشتی جنگی"};
 
   function adminConfirm(message){ return window.confirm(message); }
