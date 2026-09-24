@@ -544,6 +544,8 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/war-expeditions") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(await isGameControlLocked(env,"war"))return json({error:"لشکرکشی‌ها فعلاً توسط ادمین قفل شده‌اند."},423);
+    await ensureGameControls(env);const gameRunning=Number((await env.DB.prepare("SELECT locked FROM game_controls WHERE control_key='game_running'").first())?.locked??1)===1;
+    if(!gameRunning)return json({error:"بازی فعلاً متوقف است و لشکرکشی جدید امکان‌پذیر نیست."},423);
     await ensureWarLogSchema(env);
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
     const b=await body(request), type=String(b.type||""), source=String(b.source||"").trim(), destination=String(b.destination||"").trim(), durationMinutes=Math.floor(Number(b.durationMinutes||0)), isFake=!!b.fake, lordPresent=!!b.lordPresent;
