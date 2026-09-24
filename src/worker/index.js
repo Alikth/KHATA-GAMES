@@ -473,6 +473,12 @@ async function handleApi(request, env, url) {
     const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled FROM war_logs WHERE attacker_account_id=? AND cancelled=0 ORDER BY created_at DESC").bind(session.user_id).all()).results.filter(warIsActive);
     return json({expeditions:rows});
   }
+  if (method==="GET" && path==="/api/my-war-expeditions/arrived") {
+    await ensureWarLogSchema(env);
+    const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,lord_present AS lordPresent,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,created_at AS createdAt,assets_json AS assetsJson,command,command_at AS commandAt,cancelled FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND remaining_seconds<=0 ORDER BY created_at DESC").bind(session.user_id).all()).results;
+    return json({expeditions:rows});
+  }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/command$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const session=await requireUser(request,env);if(!session)return json({error:"دسترسی لازم است."},401);
