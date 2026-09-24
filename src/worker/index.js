@@ -134,6 +134,7 @@ async function ensureWarLogSchema(env){
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN command TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN command_at TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN casualties_json TEXT NOT NULL DEFAULT '{}'").run();}catch{}
+  try{await env.DB.prepare("UPDATE war_logs SET remaining_seconds=0 WHERE arrival_time NOT LIKE '____-__-__T%' AND last_resumed_at IS NULL").run();}catch{}
 }
 async function ensureTradeSchema(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS trade_requests (
