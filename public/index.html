@@ -82,7 +82,7 @@
                 <button class="admin-menu-item" type="button" data-admin-target="trade"><span>گزارش تجارت‌ها</span><i>←</i></button>
                 <button class="admin-menu-item" type="button" data-admin-target="lords"><span>لردها</span><i>←</i></button>
                 <button class="admin-menu-item" type="button" data-admin-target="registered"><span>Registered Lords</span><i>←</i></button>
-                <button class="admin-menu-item" type="button" data-admin-target="castle-editor"><span>مدیریت دارایی</span><i>←</i></button>
+                <button class="admin-menu-item" type="button" data-admin-target="castle-editor"><span>مدیریت دارایی</span><i>←</i></button><button class="admin-menu-item" type="button" data-admin-target="add-castle"><span>افزودن قلعه</span><i>←</i></button>
                 <button class="admin-menu-item" type="button" data-admin-target="future"><span>سناریو و رول‌ها</span><i>←</i></button>
               </aside>
               <div class="admin-panels">
@@ -126,6 +126,8 @@
                 <div class="admin-panel-view" data-admin-panel="castle-editor">
                   <section class="admin-section"><div class="admin-section-head"><div><span>CASTLE EDITOR</span><h2>مدیریت دارایی قلعه</h2></div></div><div class="admin-box"><select id="adminCastleSelect"></select><div id="adminCastleEditor" class="admin-castle-editor"><div class="admin-empty">یک قلعه انتخاب کن.</div></div></div></section>
                 </div>
+
+                <div class="admin-panel-view" data-admin-panel="add-castle"><section class="admin-section"><div class="admin-section-head"><div><span>ADD CASTLE</span><h2>افزودن قلعه به بازی</h2></div></div><div class="admin-box"><select id="adminNewCastleRegion"></select><input id="adminNewCastleName" placeholder="نام قلعه"><input id="adminNewCastleHouse" placeholder="نام خاندان"><input id="adminNewCastleIcon" placeholder="🏰" value="🏰"><input id="adminNewCastleLocation" placeholder="موقعیت"><textarea id="adminNewCastleDescription" placeholder="توضیحات"></textarea><button class="primary" id="adminCreateCastleBtn">اضافه کردن قلعه</button></div></section></div>
 
                 <div class="admin-panel-view" data-admin-panel="future">
                   <section class="admin-section"><div class="admin-section-head"><div><span>FUTURE TOOLS</span><h2>سناریو و رول‌ها</h2></div></div><div class="admin-future-actions"><button class="primary" id="adminScenariosBtn">سناریوهای پلیرها</button><button class="ghost" id="adminRolesBtn">رول‌ها</button></div></section>
