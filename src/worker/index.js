@@ -727,8 +727,8 @@ async function handleApi(request, env, url) {
   if (method==="GET" && path==="/api/admin/war-expeditions") {
     await ensureWarLogSchema(env);
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
-    const rows=(await env.DB.prepare("SELECT id,attacker_account_id AS attackerAccountId,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,cancelled_at AS cancelledAt FROM war_logs ORDER BY created_at DESC").all()).results;
-    return json({expeditions:rows.map(x=>({...x,active:warIsActive(x)}))});
+    const rows=(await env.DB.prepare("SELECT id,attacker_account_id AS attackerAccountId,attacker_username AS attackerUsername,lord_name AS lordName,lord_present AS lordPresent,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,duration_minutes AS durationMinutes,remaining_seconds AS remainingSeconds,last_resumed_at AS lastResumedAt,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,cancelled_at AS cancelledAt,command,command_at AS commandAt,casualties_json AS casualtiesJson FROM war_logs ORDER BY created_at DESC").all()).results;
+    return json({expeditions:rows.map(x=>({...x,active:warIsActive(x),remainingSeconds:Math.ceil(warRemainingSeconds(x)),arrivalAt:warArrivalISO(x)}))});
   }
   if (method==="POST" && path.match(/^\/api\/admin\/war-expeditions\/[^/]+\/cancel$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
