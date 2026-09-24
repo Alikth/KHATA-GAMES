@@ -352,7 +352,7 @@ async function handleApi(request, env, url) {
     if(!u || !(await verifyPassword(password,u.salt,u.hash))) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); await deleteSession(request,env); const sid=await createSession(env,u.id); return json({ok:true,user:publicUser(u)},200,{"set-cookie":cookie(SESSION_COOKIE_NAME,sid)});
   }
   if (method === "POST" && path === "/api/auth/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie(SESSION_COOKIE_NAME)}}); }
-  if (method === "GET" && path === "/api/houses") return json(houses);
+  if (method === "GET" && path === "/api/houses") return json(await getHouses(env));
   if (method === "GET" && path === "/api/players") return json(await players(env));
   const session=await getSession(request,env);
   const userSession=await requireUser(request,env);
@@ -360,7 +360,7 @@ async function handleApi(request, env, url) {
   if (method === "POST" && path === "/api/register") {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
     if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); const b=await body(request), username=normalizeUsername(b.username), region=String(b.region||"").trim(), castle=String(b.castle||"").trim();
-    if(!validTelegramUsername(username)) return json({error:"Username تلگرام معتبر نیست. فقط حروف، عدد و _ و بین ۵ تا ۳۲ کاراکتر."},400); const selected=findCastle(region,castle); if(!selected) return json({error:"قلمرو یا قلعه معتبر نیست."},400);
+    if(!validTelegramUsername(username)) return json({error:"Username تلگرام معتبر نیست. فقط حروف، عدد و _ و بین ۵ تا ۳۲ کاراکتر."},400); const selected=await getCastle(env,region,castle); if(!selected) return json({error:"قلمرو یا قلعه معتبر نیست."},400);
     if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first()) return json({error:"این قلعه قبلاً توسط یک لرد انتخاب شده است."},409);
     if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first()) return json({error:"این Telegram Username قبلاً ثبت شده است."},409);
     if(await env.DB.prepare("SELECT id FROM players WHERE account_id=?").bind(userSession.user_id).first()) return json({error:"این حساب قبلاً برای Kill The King یک قلعه انتخاب کرده است."},409);
@@ -390,7 +390,7 @@ async function handleApi(request, env, url) {
     const p={id:newId(),username:"@"+username,region,house:selected.house,castle,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,null,p.created_at).run(); await ensureEconomySchema(env); return json({player:p});
   }
   if(path.startsWith("/api/admin/players/")&&method==="DELETE"){ if(!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401); const id=decodeURIComponent(path.split("/").pop()); const old=await env.DB.prepare("SELECT castle FROM players WHERE id=?").bind(id).first(); const r=await env.DB.prepare("DELETE FROM players WHERE id=?").bind(id).run(); if(!r.meta.changes)return json({error:"پلیر پیدا نشد."},404); await ensureEconomySchema(env); if(old?.castle) await env.DB.prepare("UPDATE castle_state SET owner_account_id=NULL WHERE castle=?").bind(old.castle).run(); return json({ok:true}); }
-  if(method==="GET"&&path.startsWith("/api/castles/")){const name=decodeURIComponent(path.slice("/api/castles/".length));const info=castleInfo[name];if(!info)return json({error:"اطلاعات قلعه پیدا نشد."},404);return json(info);}
+  if(method==="GET"&&path.startsWith("/api/castles/")){const name=decodeURIComponent(path.slice("/api/castles/".length));const info=castleInfo[name];if(info)return json(info);await ensureCustomCastlesSchema(env);const custom=await env.DB.prepare("SELECT location,description FROM game_castles WHERE castle=?").bind(name).first();if(!custom)return json({error:"اطلاعات قلعه پیدا نشد."},404);return json(custom);}
 
   if (path.startsWith("/api/my-castle") || path.startsWith("/api/game/")) {
     await ensureEconomySchema(env);
@@ -542,8 +542,8 @@ async function handleApi(request, env, url) {
     if(!["land","sea"].includes(type))return json({error:"نوع لشکرکشی معتبر نیست."},400);
     if(type==="sea"&&!Number(state.port_enabled))return json({error:"این قلعه اسکله فعال ندارد."},400);
     const validCastleName=name=>houses.some(r=>r.castles.some(c=>c.castle===name));
-    if(!validCastleName(source))return json({error:"مبدا معتبر نیست."},400);
-    if(!validCastleName(destination))return json({error:"مقصد معتبر نیست."},400);
+    if(!(await castleExists(env,source)))return json({error:"مبدا معتبر نیست."},400);
+    if(!(await castleExists(env,destination)))return json({error:"مقصد معتبر نیست."},400);
     if(source!==state.castle)return json({error:"مبدا باید قلعه ثبت‌شده خودت باشد."},403);
     if(destination===source)return json({error:"مقصد باید با مبدا متفاوت باشد."},400);
     if(!Number.isInteger(durationMinutes)||durationMinutes<1||durationMinutes>10080)return json({error:"مدت لشکرکشی باید بین 1 دقیقه تا 7 روز باشد."},400);
@@ -651,7 +651,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path.match(/^\/api\/admin\/players\/[^/]+\/castles$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
-    const playerId=decodeURIComponent(path.split("/")[4]), b=await body(request), region=String(b.region||"").trim(), castle=String(b.castle||"").trim(), selected=findCastle(region,castle);
+    const playerId=decodeURIComponent(path.split("/")[4]), b=await body(request), region=String(b.region||"").trim(), castle=String(b.castle||"").trim(), selected=await getCastle(env,region,castle);
     if(!selected)return json({error:"قلمرو یا قلعه معتبر نیست."},400);
     const player=await env.DB.prepare("SELECT id,account_id AS accountId FROM players WHERE id=?").bind(playerId).first();
     if(!player?.accountId)return json({error:"این پلیر حساب کاربری معتبر ندارد."},400);
