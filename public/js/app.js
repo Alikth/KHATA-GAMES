@@ -293,10 +293,11 @@ window.addEventListener("DOMContentLoaded", () => {
   async function renderMyCastles() {
     const root = $("myCastlesList"); if (!root || !currentUser) return;
     let mine = [];
-    let activeWars = [];
+    let activeWars = {expeditions:[]};
     let tradeNotice = {byCastle:{}};
-    try { [mine, activeWars, tradeNotice] = await Promise.all([api("/api/my-castles"), api("/api/my-war-expeditions/active"), api("/api/trades/notifications")]); }
-    catch { mine = players.filter(p => p.accountId === currentUser.id); }
+    try { mine = await api("/api/my-castles"); } catch { mine = players.filter(p => p.accountId === currentUser.id); }
+    try { activeWars = await api("/api/my-war-expeditions/active"); } catch { activeWars = {expeditions:[]}; }
+    try { tradeNotice = await api("/api/trades/notifications"); } catch { tradeNotice = {byCastle:{}}; }
     if (!mine.length) {
       root.innerHTML = `<div class="my-castles-empty"><div class="empty-castle-icon">🏰</div><h3>NO CASTLES YET</h3><p>هنوز هیچ قلعه‌ای با این حساب ثبت نشده است.</p><button class="primary" type="button" data-action="go-register">انتخاب قلعه</button></div>`;
       return;
