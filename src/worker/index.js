@@ -107,6 +107,13 @@ async function ensureWarLogSchema(env){
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled_at TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled_by TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN lord_present INTEGER NOT NULL DEFAULT 0").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN duration_minutes INTEGER NOT NULL DEFAULT 60").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN remaining_seconds INTEGER NOT NULL DEFAULT 3600").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN last_resumed_at TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN command TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN command_at TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN casualties_json TEXT NOT NULL DEFAULT '{}'").run();}catch{}
 }
 async function ensureTradeSchema(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS trade_requests (
@@ -118,7 +125,7 @@ async function ensureTradeSchema(env){
 }
 async function ensureGameControls(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS game_controls (control_key TEXT PRIMARY KEY, locked INTEGER NOT NULL DEFAULT 0)`).run();
-  await env.DB.prepare("INSERT OR IGNORE INTO game_controls(control_key,locked) VALUES ('war',0),('trade',0)").run();
+  await env.DB.prepare("INSERT OR IGNORE INTO game_controls(control_key,locked) VALUES ('war',0),('trade',0),('game_running',1)").run();
 }
 async function isGameControlLocked(env,key){
   await ensureGameControls(env);
@@ -143,11 +150,13 @@ function warArrivalDate(createdAt,arrivalTime){
   if(d.getTime()<=new Date(createdAt).getTime()) d.setUTCDate(d.getUTCDate()+1);
   return d;
 }
-function warIsActive(row){
-  if(Number(row.cancelled)) return false;
-  const arrival=warArrivalDate(row.created_at||row.createdAt,row.arrival_time||row.arrivalTime);
-  return !!arrival && arrival.getTime()>Date.now();
+function warRemainingSeconds(row,now=Date.now()){
+  const stored=Number(row.remaining_seconds);
+  if(Number.isFinite(stored)&&stored>=0){const resumed=row.last_resumed_at?new Date(row.last_resumed_at).getTime():0;return Math.max(0,stored+(resumed?-(Math.max(0,now-resumed)/1000):0));}
+  const arrival=warArrivalDate(row.created_at||row.createdAt,row.arrival_time||row.arrivalTime);return arrival?Math.max(0,(arrival.getTime()-now)/1000):0;
 }
+function warIsActive(row){return !Number(row.cancelled)&&warRemainingSeconds(row)>0;}
+function warArrivalISO(row){const left=warRemainingSeconds(row);return left?new Date(Date.now()+left*1000).toISOString():null;}
 async function castleOwner(env,castle){
   return env.DB.prepare("SELECT owner_account_id AS accountId FROM castle_state WHERE castle=?").bind(castle).first();
 }
@@ -493,14 +502,14 @@ async function handleApi(request, env, url) {
     if(await isGameControlLocked(env,"war"))return json({error:"لشکرکشی‌ها فعلاً توسط ادمین قفل شده‌اند."},423);
     await ensureWarLogSchema(env);
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
-    const b=await body(request), type=String(b.type||""), source=String(b.source||"").trim(), destination=String(b.destination||"").trim(), arrivalTime=String(b.arrivalTime||"").trim(), isFake=!!b.fake;
+    const b=await body(request), type=String(b.type||""), source=String(b.source||"").trim(), destination=String(b.destination||"").trim(), durationMinutes=Math.floor(Number(b.durationMinutes||0)), isFake=!!b.fake, lordPresent=!!b.lordPresent;
     if(!["land","sea"].includes(type))return json({error:"نوع لشکرکشی معتبر نیست."},400);
     const validCastleName=name=>houses.some(r=>r.castles.some(c=>c.castle===name));
     if(!validCastleName(source))return json({error:"مبدا معتبر نیست."},400);
     if(!validCastleName(destination))return json({error:"مقصد معتبر نیست."},400);
     if(source!==state.castle)return json({error:"مبدا باید قلعه ثبت‌شده خودت باشد."},403);
     if(destination===source)return json({error:"مقصد باید با مبدا متفاوت باشد."},400);
-    if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))return json({error:"تایم رسیدن باید به صورت HH:MM وارد شود."},400);
+    if(!Number.isInteger(durationMinutes)||durationMinutes<1||durationMinutes>10080)return json({error:"مدت لشکرکشی باید بین 1 دقیقه تا 7 روز باشد."},400);
     const accountId=state.owner_account_id, user=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(accountId).first();
     if(!user)return json({error:"حساب کاربری پیدا نشد."},404);
     const week=gameWeekKey();
@@ -537,8 +546,10 @@ async function handleApi(request, env, url) {
         statements.push(env.DB.prepare(`UPDATE ${d.table} SET count=count-? WHERE castle=? AND ${d.keyField}=? AND count>=?`).bind(d.n,state.castle,d.key,d.n));
       }
     }
-    const id=newId(),createdAt=new Date().toISOString(),lordName=WAR_LORDS[source]||"";
-    statements.push(env.DB.prepare("INSERT INTO war_logs(id,week_key,created_at,attacker_account_id,attacker_username,lord_name,type,source_castle,destination_castle,arrival_time,is_fake,assets_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,week,createdAt,accountId,user.username,lordName,type,source,destination,arrivalTime,isFake?1:0,JSON.stringify(isFake?{}:selected)));
+    const id=newId(),createdAt=new Date().toISOString(),lordName=lordPresent?(WAR_LORDS[source]||""):"";
+    await ensureGameControls(env);
+    const running=Number((await env.DB.prepare("SELECT locked FROM game_controls WHERE control_key='game_running'").first())?.locked??1)===1;
+    statements.push(env.DB.prepare("INSERT INTO war_logs(id,week_key,created_at,attacker_account_id,attacker_username,lord_name,lord_present,type,source_castle,destination_castle,arrival_time,duration_minutes,remaining_seconds,last_resumed_at,is_fake,assets_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,week,createdAt,accountId,user.username,lordName,lordPresent?1:0,type,source,destination,new Date(Date.now()+durationMinutes*60000).toISOString(),durationMinutes,durationMinutes*60,running?createdAt:null,isFake?1:0,JSON.stringify(isFake?{}:selected)));
     const result=await env.DB.batch(statements);
     for(let i=0;i<deductions.length;i++)if(!result[i]?.meta?.changes)return json({error:"تغییر همزمان دارایی انجام نشد؛ دوباره تلاش کن."},409);
     return json({ok:true,id});
