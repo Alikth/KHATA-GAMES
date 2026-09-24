@@ -121,6 +121,15 @@ async function ensureWarLogSchema(env){
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled_at TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled_by TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN duration_minutes INTEGER NOT NULL DEFAULT 60").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN elapsed_seconds REAL NOT NULL DEFAULT 0").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN run_started_at TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN lord_present INTEGER NOT NULL DEFAULT 1").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN command TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN command_at TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN outcome TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN defender_assets_json TEXT NOT NULL DEFAULT '{}'").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN casualties_json TEXT NOT NULL DEFAULT '{}'").run();}catch{}
 }
 async function ensureTradeSchema(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS trade_requests (
@@ -150,18 +159,6 @@ function tradeAssets(raw){
   return out;
 }
 function hasAssets(obj){return Object.values(obj||{}).some(v=>Number(v)>0);}
-function warArrivalDate(createdAt,arrivalTime){
-  const d=new Date(createdAt); const m=/^(\d{2}):(\d{2})$/.exec(String(arrivalTime||""));
-  if(!m||Number.isNaN(d.getTime())) return null;
-  d.setUTCHours(Number(m[1]),Number(m[2]),0,0);
-  if(d.getTime()<=new Date(createdAt).getTime()) d.setUTCDate(d.getUTCDate()+1);
-  return d;
-}
-function warIsActive(row){
-  if(Number(row.cancelled)) return false;
-  const arrival=warArrivalDate(row.created_at||row.createdAt,row.arrival_time||row.arrivalTime);
-  return !!arrival && arrival.getTime()>Date.now();
-}
 async function castleOwner(env,castle){
   return env.DB.prepare("SELECT owner_account_id AS accountId FROM castle_state WHERE castle=?").bind(castle).first();
 }
