@@ -665,11 +665,11 @@ document.addEventListener("click", async e => {
     if (typeof window.khataOpenCastleManagement === "function") {
       await window.khataOpenCastleManagement();
     } else {
-      const src = document.querySelector('script[src*="/js/castle-management.js"]');
+      const src = document.querySelector('script[src*="/js/castle-management-fixed.js"]');
       if (src) {
         await new Promise((resolve, reject) => {
           const tag = document.createElement("script");
-          tag.src = src.src.split("?")[0] + "?v=5";
+          tag.src = src.src.split("?")[0] + "?v=1";
           tag.onload = resolve;
           tag.onerror = reject;
           document.head.appendChild(tag);
