@@ -655,6 +655,67 @@ window.addEventListener("DOMContentLoaded", () => {
   boot();
 });
 
+// Fallback handlers for My Castles controls. These live outside the main initializer so they still work if an unrelated optional initializer fails.
+document.addEventListener("click", async e => {
+  const manage = e.target.closest('[data-action="my-castle-manage"]');
+  if (manage && !e.__khataMyCastleHandled) {
+    e.__khataMyCastleHandled = true;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (typeof window.khataOpenCastleManagement === "function") {
+      await window.khataOpenCastleManagement();
+    } else {
+      const src = document.querySelector('script[src*="/js/castle-management.js"]');
+      if (src) {
+        await new Promise((resolve, reject) => {
+          const tag = document.createElement("script");
+          tag.src = src.src.split("?")[0] + "?v=5";
+          tag.onload = resolve;
+          tag.onerror = reject;
+          document.head.appendChild(tag);
+        });
+        await window.khataOpenCastleManagement?.();
+      }
+    }
+    return;
+  }
+  const cancel = e.target.closest('[data-action="cancel-war"]');
+  if (cancel && !e.__khataMyCastleHandled) {
+    e.__khataMyCastleHandled = true;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const id = cancel.dataset.warId;
+    if (!id || !confirm("این لشکرکشی لغو شود؟ نیروها و ادوات انتخاب‌شده به قلعه بازمی‌گردند.")) return;
+    cancel.disabled = true;
+    cancel.textContent = "در حال لغو...";
+    try {
+      const res = await fetch("/api/war-expeditions/" + encodeURIComponent(id) + "/cancel", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "لغو لشکرکشی انجام نشد.");
+      if (typeof window.khataRefreshMyCastles === "function") await window.khataRefreshMyCastles();
+      window.khataLoadWarLog?.();
+      showMyCastleFallbackToast("لشکرکشی لغو شد و نیروها و ادوات به قلعه مبدأ برگشتند.");
+    } catch (err) {
+      cancel.disabled = false;
+      cancel.textContent = "لغو لشکرکشی";
+      showMyCastleFallbackToast(err.message || "لغو لشکرکشی انجام نشد.", true);
+    }
+  }
+});
+function showMyCastleFallbackToast(message, isError=false) {
+  const root = document.getElementById("toast") || (() => {
+    const x = document.createElement("div"); x.id = "toast"; x.className = "toast"; document.body.appendChild(x); return x;
+  })();
+  root.className = "toast " + (isError ? "toast-error " : "") + "show";
+  root.textContent = message;
+  clearTimeout(window.__khataFallbackToastTimer);
+  window.__khataFallbackToastTimer = setTimeout(() => root.classList.remove("show"), 3600);
+}
+
 // Small cinematic blood-drop effect at every click, disabled for keyboard and touch precision.
 document.addEventListener("click", e => {
   if (window.matchMedia("(pointer: coarse)").matches) return;
