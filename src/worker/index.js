@@ -473,6 +473,18 @@ async function handleApi(request, env, url) {
     const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled FROM war_logs WHERE attacker_account_id=? AND cancelled=0 ORDER BY created_at DESC").bind(session.user_id).all()).results.filter(warIsActive);
     return json({expeditions:rows});
   }
+  if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/command$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    const session=await requireUser(request,env);if(!session)return json({error:"دسترسی لازم است."},401);
+    const id=decodeURIComponent(path.split("/")[3]),b=await body(request),command=String(b.command||"");
+    if(!["attack","deployment","siege"].includes(command))return json({error:"دستور معتبر نیست."},400);
+    const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=?").bind(id,session.user_id).first();
+    if(!row)return json({error:"لشکرکشی پیدا نشد."},404);
+    if(Number(row.cancelled))return json({error:"این لشکرکشی لغو شده است."},409);
+    if(warIsActive(row))return json({error:"هنوز زمان رسیدن لشکرکشی نرسیده است."},409);
+    await env.DB.prepare("UPDATE war_logs SET command=?,command_at=? WHERE id=?").bind(command,new Date().toISOString(),id).run();
+    return json({ok:true});
+  }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/cancel$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     await ensureWarLogSchema(env);
