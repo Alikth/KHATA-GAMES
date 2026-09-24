@@ -388,6 +388,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (page === "players") { players = await api("/api/players"); renderPlayers(); renderMap(); }
     if (page === "myCastles") { players = await api("/api/players"); await renderMyCastles(); }
     if (page === "season") { window.khataLoadWarLog?.(); }
+    if (page === "warsLive") { window.khataLoadWarsLive?.(); }
 
     if (navSlideDemo) {
       await animateNavPage(current, page, direction);
