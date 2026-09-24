@@ -883,6 +883,7 @@ async function handleApi(request, env, url) {
     if(!hasAssets(sendAssets)||!hasAssets(receiveAssets))return json({error:"حداقل یک کالا برای ارسال و یک کالا برای دریافت انتخاب کن."},400);
     const dest=await env.DB.prepare("SELECT castle,owner_account_id AS accountId FROM castle_state WHERE castle=?").bind(destination).first();
     if(!dest?.accountId || dest.accountId===session.user_id)return json({error:"مقصد باید قلعه ثبت‌شده یک بازیکن دیگر باشد."},400);
+    if(await isCastleUnderSiege(env,destination))return json({error:"این قلعه در محاصره است و امکان تجارت ندارد."},423);
     for(const [k,v] of Object.entries(sendAssets))if(Number(sourceRow[k]||0)<v)return json({error:"موجودی کافی برای کالاهای ارسالی نیست."},400);
     const id=newId();
     await env.DB.prepare("INSERT INTO trade_requests(id,sender_account_id,sender_castle,receiver_account_id,receiver_castle,send_assets_json,receive_assets_json,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,session.user_id,sourceRow.castle,dest.accountId,destination,JSON.stringify(sendAssets),JSON.stringify(receiveAssets),"pending",new Date().toISOString()).run();
@@ -894,7 +895,6 @@ async function handleApi(request, env, url) {
     await ensureTradeSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]), action=String((await body(request)).action||"");
-    if(await isCastleUnderSiege(env,row.sender_castle)||await isCastleUnderSiege(env,row.receiver_castle))return json({error:"این تجارت به دلیل محاصره یکی از قلعه‌ها قابل انجام نیست."},423);
     if(!["accept","reject"].includes(action))return json({error:"عملیات تجارت معتبر نیست."},400);
     const row=await env.DB.prepare("SELECT * FROM trade_requests WHERE id=? AND receiver_account_id=? AND status='pending'").bind(id,session.user_id).first();
     if(!row)return json({error:"درخواست تجارت پیدا نشد."},404);
@@ -902,6 +902,7 @@ async function handleApi(request, env, url) {
     const sendAssets=JSON.parse(row.send_assets_json||"{}"), receiveAssets=JSON.parse(row.receive_assets_json||"{}");
     const sender=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=? AND owner_account_id=?").bind(row.sender_castle,row.sender_account_id).first();
     const receiver=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=? AND owner_account_id=?").bind(row.receiver_castle,row.receiver_account_id).first();
+    if(await isCastleUnderSiege(env,row.sender_castle)||await isCastleUnderSiege(env,row.receiver_castle))return json({error:"این تجارت به دلیل محاصره یکی از قلعه‌ها قابل انجام نیست."},423);
     if(!sender||!receiver)return json({error:"یکی از قلعه‌های این تجارت دیگر معتبر نیست."},409);
     for(const [k,v] of Object.entries(sendAssets))if(Number(sender[k]||0)<v)return json({error:"موجودی فرستنده برای این تجارت کافی نیست."},409);
     for(const [k,v] of Object.entries(receiveAssets))if(Number(receiver[k]||0)<v)return json({error:"موجودی گیرنده برای کالای پیشنهادی کافی نیست."},409);
