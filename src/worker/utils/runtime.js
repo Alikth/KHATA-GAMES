@@ -3,6 +3,7 @@
 const SESSION_TTL = 8 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_PASSWORD_LENGTH = 128;
+const SESSION_COOKIE_NAME = "__Host-khata_session";
 const SECURITY_HEADERS = {
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
   "X-Content-Type-Options": "nosniff",
@@ -25,7 +26,7 @@ async function body(request) {
 }
 function sameOrigin(request) {
   const origin = request.headers.get("Origin");
-  if (!origin) return true;
+  if (!origin) return false;
   return origin === new URL(request.url).origin;
 }
 async function sha256Base64Url(value) {
@@ -65,7 +66,7 @@ async function verifyPassword(password, salt, storedHash) {
   const a = bytes(made.hash), b = bytes(storedHash); if (a.length !== b.length) return false; let diff = 0; for (let i=0;i<a.length;i++) diff |= a[i]^b[i]; return diff === 0;
 }
 async function getSession(request, env) {
-  const token = getCookie(request, "khata_session"); if (!token) return null;
+  const token = getCookie(request, SESSION_COOKIE_NAME); if (!token) return null;
   const sid = await sha256Base64Url(token);
   const row = await env.DB.prepare("SELECT * FROM sessions WHERE id = ? AND expires_at > ?").bind(sid, Date.now()).first();
   return row || null;
@@ -82,7 +83,7 @@ async function createSession(env, userId, admin = 0) {
   return token;
 }
 async function deleteSession(request, env) {
-  const token=getCookie(request,"khata_session");
+  const token=getCookie(request,SESSION_COOKIE_NAME);
   if(token){ const sid=await sha256Base64Url(token); await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(sid).run(); }
 }
 async function cleanupExpiredSessions(env) {
@@ -103,6 +104,7 @@ async function players(env) { return (await env.DB.prepare("SELECT id, username,
 
 export {
   SESSION_TTL,
+  SESSION_COOKIE_NAME,
   MAX_BODY_BYTES,
   MAX_PASSWORD_LENGTH,
   SECURITY_HEADERS,
