@@ -297,7 +297,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let arrivedWars = [];
     let siegePrompts = [];
     let tradeNotice = {byCastle:{}};
-    try { [mine, activeWars, arrivedWars, tradeNotice, siegePrompts] = await Promise.all([api("/api/my-castles"), api("/api/my-war-expeditions/active"), api("/api/my-war-expeditions/arrived"), api("/api/trades/notifications"), api("/api/my-siege-prompts")]); }
+    try { [mine, activeWars, arrivedWars, tradeNotice, siegePrompts] = await Promise.all([api("/api/my-castles"), api("/api/my-war-expeditions/active"), api("/api/my-war-expeditions/arrived"), api("/api/trades/notifications"), api("/api/my-siege-prompts")]); siegePrompts = Array.isArray(siegePrompts) ? siegePrompts : (siegePrompts?.prompts || []); }
     catch { mine = players.filter(p => p.accountId === currentUser.id); }
     if (!mine.length) {
       root.innerHTML = `<div class="my-castles-empty"><div class="empty-castle-icon">🏰</div><h3>NO CASTLES YET</h3><p>هنوز هیچ قلعه‌ای با این حساب ثبت نشده است.</p><button class="primary" type="button" data-action="go-register">انتخاب قلعه</button></div>`;
