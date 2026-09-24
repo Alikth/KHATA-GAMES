@@ -699,12 +699,12 @@ async function handleApi(request, env, url) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureCustomCastlesSchema(env);await ensureEconomySchema(env);
-    const b=await body(request),region=String(b.region||"").trim(),castle=String(b.castle||"").trim(),house=String(b.house||"").trim(),icon=String(b.icon||"🏰").trim(),location=String(b.location||"").trim(),description=String(b.description||"").trim();
+    const b=await body(request),region=String(b.region||"").trim(),castle=String(b.castle||"").trim(),house=String(b.house||"").trim(),icon=String(b.icon||"🏰").trim(),location=String(b.location||"").trim(),description=String(b.description||"").trim(),portEnabled=!!b.portEnabled;
     if(!houses.some(r=>r.region===region))return json({error:"اقلیم معتبر نیست."},400);
     if(!castle||castle.length>80||!house||house.length>80)return json({error:"نام قلعه و خاندان معتبر نیست."},400);
     if(await castleExists(env,castle))return json({error:"این نام قلعه قبلاً استفاده شده است."},409);
     await env.DB.prepare("INSERT INTO game_castles(castle,region,house,icon,location,description,created_at) VALUES(?,?,?,?,?,?,?)").bind(castle,region,house,icon||"🏰",location,description,new Date().toISOString()).run();
-    await env.DB.prepare("INSERT OR IGNORE INTO castle_state(castle,region,port_enabled) VALUES(?,?,0)").bind(castle,region).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO castle_state(castle,region,port_enabled) VALUES(?,?,?)").bind(castle,region,portEnabled?1:0).run();
     const week=gameWeekKey();
     await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state(castle,last_week_key) VALUES(?,?)").bind(castle,week).run();
     const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
