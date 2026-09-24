@@ -516,6 +516,7 @@ async function handleApi(request, env, url) {
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
     const b=await body(request), type=String(b.type||""), source=String(b.source||"").trim(), destination=String(b.destination||"").trim(), durationMinutes=Math.floor(Number(b.durationMinutes||0)), isFake=!!b.fake, lordPresent=!!b.lordPresent;
     if(!["land","sea"].includes(type))return json({error:"نوع لشکرکشی معتبر نیست."},400);
+    if(type==="sea"&&!Number(state.port_enabled))return json({error:"این قلعه اسکله فعال ندارد."},400);
     const validCastleName=name=>houses.some(r=>r.castles.some(c=>c.castle===name));
     if(!validCastleName(source))return json({error:"مبدا معتبر نیست."},400);
     if(!validCastleName(destination))return json({error:"مقصد معتبر نیست."},400);
