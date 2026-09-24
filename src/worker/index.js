@@ -471,7 +471,7 @@ async function handleApi(request, env, url) {
     const rt=await warRuntime(env); return json({fakeAvailable:!fake,gameRunning:rt.running});
   }
   if (method==="GET" && path==="/api/war-logs") {
-    await ensureWarLogSchema(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,cancelled,cancelled_at AS cancelledAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs ORDER BY created_at DESC").all()).results;
+    await ensureWarLogSchema(env); const rows=(await env.DB.prepare("SELECT id,attacker_account_id AS attackerAccountId,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,cancelled,cancelled_at AS cancelledAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs ORDER BY created_at DESC").all()).results;
     return json({logs:rows});
   }
   if (method==="GET" && path==="/api/my-war-expeditions/active") {
