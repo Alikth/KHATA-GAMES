@@ -315,6 +315,20 @@ window.addEventListener("DOMContentLoaded", () => {
     catch(e){ showToast(e.message,true); }
   }
 
+  async function cancelAdminWar(id) {
+    if (!id) return;
+    if (!confirm("این لشکرکشی از طرف ادمین لغو شود؟ نیروها و ادوات انتخاب‌شده به قلعه مبدأ بازمی‌گردند.")) return;
+    try {
+      await api("/api/admin/war-expeditions/" + encodeURIComponent(id) + "/cancel", {method:"POST", body:JSON.stringify({})});
+      await refreshAdmin();
+      await window.khataLoadWarLog?.();
+      await window.khataRefreshMyCastles?.();
+      showToast("لشکرکشی لغو شد و دارایی‌ها به قلعه مبدأ برگشت.");
+    } catch(e) {
+      showToast(e.message,true);
+    }
+  }
+
   window.khataRefreshMyCastles = renderMyCastles;
 
   const navSlideDemo = new URLSearchParams(location.search).get("navtest") === "1";
