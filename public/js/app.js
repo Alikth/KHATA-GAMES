@@ -414,6 +414,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if($('adminAssignRegion'))$('adminAssignRegion').innerHTML=houses.map(r=>'<option value="'+escapeHTML(r.region)+'">'+escapeHTML(r.region)+'</option>').join('');
     updateAdminCastles();
     updateAdminAssignCastles();
+    if($('adminNewCastleRegion'))$('adminNewCastleRegion').innerHTML=houses.map(r=>'<option value="'+escapeHTML(r.region)+'">'+escapeHTML(r.region)+'</option>').join('');
   }
   function updateAdminCastles(){
     const r=houses.find(x=>x.region===$("adminRegion")?.value); if(!r||!$("adminCastle"))return;
@@ -532,6 +533,12 @@ window.addEventListener("DOMContentLoaded", () => {
     if(!adminConfirm('آپدیت هفتگی انجام شود؟ بازدهی تولیدی‌ها و کمپ‌ها و تولید بندر برای همه قلعه‌ها اعمال می‌شود و این عملیات برای هفته جاری ثبت خواهد شد.'))return;
     try{await api('/api/admin/weekly-update',{method:'POST',body:JSON.stringify({})});showToast('آپدیت هفتگی انجام شد.');await refreshAdmin();}catch(e){showToast(e.message,true);}
   }
+  async function createAdminCastle(){
+    const region=$("adminNewCastleRegion")?.value,name=$("adminNewCastleName")?.value.trim(),house=$("adminNewCastleHouse")?.value.trim(),icon=$("adminNewCastleIcon")?.value.trim()||"🏰",location=$("adminNewCastleLocation")?.value.trim(),description=$("adminNewCastleDescription")?.value.trim();
+    if(!region||!name||!house)return showToast("اقلیم، نام قلعه و خاندان را کامل کن.",true);
+    if(!adminConfirm("قلعه «"+name+"» به بازی اضافه شود؟"))return;
+    try{await api("/api/admin/castles",{method:"POST",body:JSON.stringify({region,castle:name,house,icon,location,description})});$("adminNewCastleName").value="";$("adminNewCastleHouse").value="";$("adminNewCastleLocation").value="";$("adminNewCastleDescription").value="";await refreshAdmin();showToast("قلعه اضافه شد.");}catch(e){showToast(e.message,true);}
+  }
   async function assignAdminCastle(){
     const player=$("adminAssignPlayer").value,region=$("adminAssignRegion").value,castle=$("adminAssignCastle").value;
     if(!player||!castle)return showToast('پلیر و قلعه را انتخاب کن.',true);
@@ -551,6 +558,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("adminTradeLockBtn").onclick=()=>toggleAdminControl('trade');
   $("adminWeeklyUpdate").onclick=runAdminWeeklyUpdate;
   $("adminAssignCastleBtn").onclick=assignAdminCastle;
+  $("adminCreateCastleBtn").onclick=createAdminCastle;
   $("adminScenariosBtn").onclick=()=>showToast('بخش سناریوها آماده می‌شود.');
   $("adminRolesBtn").onclick=()=>showToast('بخش رول‌ها آماده می‌شود.');
 
