@@ -200,3 +200,7 @@ body.nav-slide-demo .page.nav-slide-old{z-index:2}
 @media (prefers-reduced-motion:reduce){
   body.nav-slide-demo .page.nav-slide-page{transition:none}
 }
+
+/* Lobby card separation fix */
+.game-grid{align-items:stretch;isolation:isolate;row-gap:28px}.game-card{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100%;background:rgba(8,10,12,.96);border-radius:3px}.game-card+.game-card{margin-top:0}.locked-game{border-color:#2c3236;background:rgba(7,9,11,.98)}.locked-game .game-content{background:linear-gradient(180deg,#0d1012,#080a0c)}.locked-game .coming-art{border-bottom:1px solid #292f33}.game-art{flex:0 0 auto}.game-content{position:relative;z-index:1;flex:1}
+@media(max-width:600px){.game-grid{gap:26px}.game-card{box-shadow:0 18px 55px rgba(0,0,0,.78)}.game-card+.game-card{margin-top:0}.locked-game{border-top:1px solid #454b4f}}
