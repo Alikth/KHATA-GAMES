@@ -528,6 +528,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }catch(e){showToast(e.message,true);}
   }
 
+  async function toggleAdminControl(key){
     const button=key==='war'?$("adminWarLockBtn"):$("adminTradeLockBtn");const currentlyLocked=button.textContent.includes('باز کردن');
     const action=currentlyLocked?'باز کردن':'قفل کردن';
     if(!adminConfirm(action+' '+(key==='war'?'لشکرکشی':'تجارت')+' انجام شود؟'))return;
