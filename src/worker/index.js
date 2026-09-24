@@ -136,6 +136,9 @@ async function ensureWarLogSchema(env){
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN command_at TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN casualties_json TEXT NOT NULL DEFAULT '{}'").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN siege_resolved INTEGER NOT NULL DEFAULT 0").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN siege_day_key TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN siege_attacker_decision INTEGER").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN siege_defender_decision INTEGER").run();}catch{}
   try{await env.DB.prepare("UPDATE war_logs SET remaining_seconds=0 WHERE arrival_time NOT LIKE '____-__-__T%' AND last_resumed_at IS NULL").run();}catch{}
 }
 async function ensureTradeSchema(env){
@@ -485,6 +488,36 @@ async function handleApi(request, env, url) {
     const row=await env.DB.prepare("SELECT locked FROM game_controls WHERE control_key='game_running'").first();
     return json({running:Number(row?.locked??1)===1});
   }
+  if (method==="GET" && path==="/api/my-siege-prompts") {
+    const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    await ensureWarLogSchema(env);await ensureEconomySchema(env);
+    const day=gameDayKey();
+    const rows=(await env.DB.prepare("SELECT w.id,w.attacker_account_id AS attackerAccountId,w.attacker_username AS attackerUsername,w.source_castle AS sourceCastle,w.destination_castle AS destinationCastle,w.siege_day_key AS siegeDayKey,w.siege_attacker_decision AS attackerDecision,w.siege_defender_decision AS defenderDecision,c.owner_account_id AS defenderAccountId FROM war_logs w LEFT JOIN castle_state c ON c.castle=w.destination_castle WHERE w.command='siege' AND w.cancelled=0 AND w.siege_resolved=0").all()).results;
+    const prompts=rows.flatMap(x=>{
+      const out=[];
+      if(x.attackerAccountId===session.user_id && x.siegeDayKey===day && x.attackerDecision===null)out.push({...x,role:"attacker"});
+      if(x.defenderAccountId===session.user_id && x.siegeDayKey===day && x.defenderDecision===null)out.push({...x,role:"defender"});
+      return out;
+    });
+    return json({prompts});
+  }
+  if (method==="POST" && path.match(/^\/api\/my-siege-prompts\/[^/]+\/decision$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    const session=await requireUser(request,env);if(!session)return json({error:"دسترسی لازم است."},401);
+    await ensureWarLogSchema(env);await ensureEconomySchema(env);
+    const id=decodeURIComponent(path.split("/")[3]),b=await body(request),attack=b.attack===true;
+    const role=String(b.role||"");
+    if(!["attacker","defender"].includes(role))return json({error:"نقش معتبر نیست."},400);
+    const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND command='siege' AND cancelled=0 AND siege_resolved=0").bind(id).first();
+    if(!row)return json({error:"محاصره فعال پیدا نشد."},404);
+    const destination=await env.DB.prepare("SELECT owner_account_id FROM castle_state WHERE castle=?").bind(row.destination_castle).first();
+    if(role==="attacker"&&row.attacker_account_id!==session.user_id)return json({error:"دسترسی ندارید."},403);
+    if(role==="defender"&&destination?.owner_account_id!==session.user_id)return json({error:"دسترسی ندارید."},403);
+    if(row.siege_day_key!==gameDayKey())return json({error:"این نوبت محاصره مربوط به زمان شروع فعلی نیست."},409);
+    const col=role==="attacker"?"siege_attacker_decision":"siege_defender_decision";
+    await env.DB.prepare("UPDATE war_logs SET "+col+"=? WHERE id=? AND "+col+" IS NULL").bind(attack?1:0,id).run();
+    return json({ok:true});
+  }
   if (method==="GET" && path==="/api/war-expeditions/status") {
     await ensureWarLogSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
@@ -517,7 +550,7 @@ async function handleApi(request, env, url) {
     if(!row)return json({error:"لشکرکشی پیدا نشد."},404);
     if(Number(row.cancelled))return json({error:"این لشکرکشی لغو شده است."},409);
     if(warIsActive(row))return json({error:"هنوز زمان رسیدن لشکرکشی نرسیده است."},409);
-    await env.DB.prepare("UPDATE war_logs SET command=?,command_at=? WHERE id=?").bind(command,new Date().toISOString(),id).run();
+    await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,siege_resolved=CASE WHEN ?='siege' THEN 0 ELSE siege_resolved END,siege_day_key=CASE WHEN ?='siege' THEN ? ELSE siege_day_key END,siege_attacker_decision=CASE WHEN ?='siege' THEN NULL ELSE siege_attacker_decision END,siege_defender_decision=CASE WHEN ?='siege' THEN NULL ELSE siege_defender_decision END WHERE id=?").bind(command,new Date().toISOString(),command,command,gameDayKey(),command,command,id).run();
     return json({ok:true});
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/cancel$/)) {
@@ -619,6 +652,7 @@ async function handleApi(request, env, url) {
       updates.push(env.DB.prepare("UPDATE game_controls SET locked=0 WHERE control_key='game_running'"));await env.DB.batch(updates);return json({ok:true,running:false});
     }
     await env.DB.prepare("UPDATE game_controls SET locked=1 WHERE control_key='game_running'").run();
+    await env.DB.prepare("UPDATE war_logs SET siege_day_key=?,siege_attacker_decision=NULL,siege_defender_decision=NULL WHERE command='siege' AND cancelled=0 AND siege_resolved=0").bind(gameDayKey()).run();
     const active=(await env.DB.prepare("SELECT id FROM war_logs WHERE cancelled=0 AND remaining_seconds>0").all()).results;
     if(active.length)await env.DB.batch(active.map(w=>env.DB.prepare("UPDATE war_logs SET last_resumed_at=? WHERE id=? AND remaining_seconds>0").bind(new Date().toISOString(),w.id)));
     return json({ok:true,running:true});
