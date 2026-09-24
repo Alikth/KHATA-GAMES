@@ -538,10 +538,10 @@ window.addEventListener("DOMContentLoaded", () => {
     try{const result=await api('/api/admin/weekly-update',{method:'POST',body:JSON.stringify({})});if(result.alerts?.length){showToast(result.alerts.map(x=>x.message).join(' · '),true);}else{showToast('آپدیت هفتگی انجام شد.');}await refreshAdmin();}catch(e){showToast(e.message,true);}
   }
   async function createAdminCastle(){
-    const region=$("adminNewCastleRegion")?.value,name=$("adminNewCastleName")?.value.trim(),house=$("adminNewCastleHouse")?.value.trim(),icon=$("adminNewCastleIcon")?.value.trim()||"🏰",location=$("adminNewCastleLocation")?.value.trim(),description=$("adminNewCastleDescription")?.value.trim();
+    const region=$("adminNewCastleRegion")?.value,name=$("adminNewCastleName")?.value.trim(),house=$("adminNewCastleHouse")?.value.trim(),icon=$("adminNewCastleIcon")?.value.trim()||"🏰",location=$("adminNewCastleLocation")?.value.trim(),description=$("adminNewCastleDescription")?.value.trim(),portEnabled=!!$("adminNewCastlePort")?.checked;
     if(!region||!name||!house)return showToast("اقلیم، نام قلعه و خاندان را کامل کن.",true);
     if(!adminConfirm("قلعه «"+name+"» به بازی اضافه شود؟"))return;
-    try{await api("/api/admin/castles",{method:"POST",body:JSON.stringify({region,castle:name,house,icon,location,description})});$("adminNewCastleName").value="";$("adminNewCastleHouse").value="";$("adminNewCastleLocation").value="";$("adminNewCastleDescription").value="";await refreshAdmin();showToast("قلعه اضافه شد.");}catch(e){showToast(e.message,true);}
+    try{await api("/api/admin/castles",{method:"POST",body:JSON.stringify({region,castle:name,house,icon,location,description,portEnabled})});$("adminNewCastleName").value="";$("adminNewCastleHouse").value="";$("adminNewCastleLocation").value="";$("adminNewCastleDescription").value="";$("adminNewCastlePort").checked=false;await refreshAdmin();showToast("قلعه اضافه شد.");}catch(e){showToast(e.message,true);}
   }
   async function assignAdminCastle(){
     const player=$("adminAssignPlayer").value,region=$("adminAssignRegion").value,castle=$("adminAssignCastle").value;
