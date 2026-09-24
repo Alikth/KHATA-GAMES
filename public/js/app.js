@@ -295,8 +295,9 @@ window.addEventListener("DOMContentLoaded", () => {
     let mine = [];
     let activeWars = [];
     let arrivedWars = [];
+    let siegePrompts = [];
     let tradeNotice = {byCastle:{}};
-    try { [mine, activeWars, arrivedWars, tradeNotice] = await Promise.all([api("/api/my-castles"), api("/api/my-war-expeditions/active"), api("/api/my-war-expeditions/arrived"), api("/api/trades/notifications")]); }
+    try { [mine, activeWars, arrivedWars, tradeNotice, siegePrompts] = await Promise.all([api("/api/my-castles"), api("/api/my-war-expeditions/active"), api("/api/my-war-expeditions/arrived"), api("/api/trades/notifications"), api("/api/my-siege-prompts")]); }
     catch { mine = players.filter(p => p.accountId === currentUser.id); }
     if (!mine.length) {
       root.innerHTML = `<div class="my-castles-empty"><div class="empty-castle-icon">🏰</div><h3>NO CASTLES YET</h3><p>هنوز هیچ قلعه‌ای با این حساب ثبت نشده است.</p><button class="primary" type="button" data-action="go-register">انتخاب قلعه</button></div>`;
@@ -307,11 +308,12 @@ window.addEventListener("DOMContentLoaded", () => {
       const wars = (activeWars.expeditions||[]).filter(w => w.sourceCastle === p.castle);
       const arrived = (arrivedWars.expeditions||[]).filter(w => w.sourceCastle === p.castle && !w.command);
       const badge = Number(tradeNotice.byCastle?.[p.castle]||0);
-      const warHtml = (wars.length || arrived.length) ? '<div class="my-castle-war">'+wars.map(w => `<article class="active-war-card"><strong>⚔️ لشکرکشی به ${escapeHTML(w.destinationCastle)} — ${Math.ceil(Number(w.remainingSeconds||0)/60)} دقیقه باقی‌مانده</strong><div>${w.type==='sea'?'دریایی':'زمینی'} ${w.fake?' · فیک':''}</div><button class="war-cancel-btn" type="button" data-action="cancel-war" data-war-id="${escapeHTML(w.id)}">لغو لشکرکشی</button></article>`).join('')+arrived.map(w=>`<article class="active-war-card arrived-war-card"><strong>⚔️ لشکرکشی به ${escapeHTML(w.destinationCastle)} رسید.</strong><div>دستور خود را وارد کنید</div><div class="war-command-actions"><button type="button" data-action="war-command" data-command="attack" data-war-id="${escapeHTML(w.id)}">حمله</button><button type="button" data-action="war-command" data-command="deployment" data-war-id="${escapeHTML(w.id)}">استقرار</button><button type="button" data-action="war-command" data-command="siege" data-war-id="${escapeHTML(w.id)}">محاصره</button></div></article>`).join('')+'</div>' : '';
+      const castleSieges=siegePrompts.filter(x=>x.destinationCastle===p.castle||x.sourceCastle===p.castle); const warHtml=(wars.length||arrived.length||castleSieges.length)?'<div class="my-castle-war">'+wars.map(w=>`<article class="active-war-card"><strong>⚔️ لشکرکشی به ${escapeHTML(w.destinationCastle)} — ${Math.ceil(Number(w.remainingSeconds||0)/60)} دقیقه باقی‌مانده</strong><div>${w.type==='sea'?'دریایی':'زمینی'} ${w.fake?' · فیک':''}</div><button class="war-cancel-btn" type="button" data-action="cancel-war" data-war-id="${escapeHTML(w.id)}">لغو لشکرکشی</button></article>`).join('')+arrived.map(w=>`<article class="active-war-card arrived-war-card"><strong>⚔️ لشکرکشی به ${escapeHTML(w.destinationCastle)} رسید.</strong><div>دستور خود را وارد کنید</div><div class="war-command-actions"><button type="button" data-action="war-command" data-command="attack" data-war-id="${escapeHTML(w.id)}">حمله</button><button type="button" data-action="war-command" data-command="deployment" data-war-id="${escapeHTML(w.id)}">استقرار</button><button type="button" data-action="war-command" data-command="siege" data-war-id="${escapeHTML(w.id)}">محاصره</button></div></article>`).join('')+castleSieges.map(x=>`<article class="active-war-card siege-prompt-card"><strong>🏰 محاصره ${escapeHTML(x.destinationCastle)}</strong><div>${x.role==='attacker'?'دستور حمله به قلعه را صادر می‌کنی؟':'به محاصره حمله می‌کنی؟'}</div><div class="war-command-actions"><button type="button" data-action="siege-decision" data-siege-id="${escapeHTML(x.id)}" data-siege-role="${escapeHTML(x.role)}" data-siege-attack="true">بله</button><button type="button" data-action="siege-decision" data-siege-id="${escapeHTML(x.id)}" data-siege-role="${escapeHTML(x.role)}" data-siege-attack="false">خیر</button></div></article>`).join('')+'</div>':'';
       return `<article class="my-castle-card"><div class="my-castle-art">${escapeHTML(c?.icon || "🏰")}</div><div class="my-castle-body"><span class="my-castle-region">${escapeHTML(r?.icon || "")} ${escapeHTML(p.region)}</span><h3>${escapeHTML(p.castle)}</h3><p>HOUSE ${escapeHTML(p.house)}</p><div class="my-castle-meta"><span>👤 ${escapeHTML(p.username)}</span><span class="owned-badge">YOUR CASTLE</span></div></div><div class="my-castle-actions"><button class="castle-open" type="button" data-action="my-castle-manage">🏰 مدیریت قلعه</button><button class="castle-open" type="button" data-action="war-expedition">⚔️ لشکرکشی</button><button class="castle-open trade-open" type="button" data-action="trade" data-castle="${escapeHTML(p.castle)}">⚖️ تجارت <span class="trade-badge-wrap"><span class="trade-badge ${badge?'':'hidden'}" data-trade-notification="${escapeHTML(p.castle)}">${badge||''}</span></span></button><button class="castle-open trade-request-open" type="button" data-action="trade-requests">📜 درخواست تجارت</button></div>${warHtml}</article>`;
     }).join("");
     window.khataRefreshTradeNotifications?.();
   }
+  async function issueSiegeDecision(id,role,attack){try{await api("/api/my-siege-prompts/"+encodeURIComponent(id)+"/decision",{method:"POST",body:JSON.stringify({role,attack})});await renderMyCastles();await window.khataLoadWarLog?.();showToast("تصمیم محاصره ثبت شد.");}catch(e){showToast(e.message,true);}}
   async function issueWarCommand(id,command){
     try{await api("/api/war-expeditions/"+encodeURIComponent(id)+"/command",{method:"POST",body:JSON.stringify({command})});await renderMyCastles();await window.khataLoadWarLog?.();showToast("دستور ثبت شد.");}
     catch(e){showToast(e.message,true);}
@@ -338,8 +340,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
   window.khataRefreshMyCastles = renderMyCastles;
 
-  const navSlideDemo = new URLSearchParams(location.search).get("navtest") === "1";
-  if (navSlideDemo) document.body.classList.add("nav-slide-demo");
+  const navSlideDemo = true;
+  document.body.classList.add("nav-slide-demo");
 
   async function animateNavPage(oldPage, newPage, direction) {
     const main = document.querySelector("main");
@@ -532,7 +534,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   async function runAdminWeeklyUpdate(){
     if(!adminConfirm('آپدیت هفتگی انجام شود؟ بازدهی تولیدی‌ها و کمپ‌ها و تولید بندر برای همه قلعه‌ها اعمال می‌شود و این عملیات برای هفته جاری ثبت خواهد شد.'))return;
-    try{await api('/api/admin/weekly-update',{method:'POST',body:JSON.stringify({})});showToast('آپدیت هفتگی انجام شد.');await refreshAdmin();}catch(e){showToast(e.message,true);}
+    try{const result=await api('/api/admin/weekly-update',{method:'POST',body:JSON.stringify({})});if(result.alerts?.length){showToast(result.alerts.map(x=>x.message).join(' · '),true);}else{showToast('آپدیت هفتگی انجام شد.');}await refreshAdmin();}catch(e){showToast(e.message,true);}
   }
   async function createAdminCastle(){
     const region=$("adminNewCastleRegion")?.value,name=$("adminNewCastleName")?.value.trim(),house=$("adminNewCastleHouse")?.value.trim(),icon=$("adminNewCastleIcon")?.value.trim()||"🏰",location=$("adminNewCastleLocation")?.value.trim(),description=$("adminNewCastleDescription")?.value.trim();
@@ -652,7 +654,8 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (action === "trade") window.khataOpenTrade?.(target.dataset.castle);
     else if (action === "trade-requests") window.khataOpenTradeRequests?.();
     else if (action === "cancel-war") cancelWarExpedition(target.dataset.warId);
-    else if (action === "war-command") issueWarCommand(target.dataset.warId,target.dataset.command);
+    else if (action === "siege-decision") { issueSiegeDecision(target.dataset.siegeId,target.dataset.siegeRole,target.dataset.siegeAttack==="true"); return; }
+      if (action === "war-command") issueWarCommand(target.dataset.warId,target.dataset.command);
     else if (action === "admin-cancel-war") cancelAdminWar(target.dataset.warId);
     else if (action === "admin-open-casualty") openAdminCasualty(target.dataset.warId);
     else if (action === "claim") openClaim(Number(target.dataset.region), Number(target.dataset.castle));
