@@ -341,8 +341,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
   window.khataRefreshMyCastles = renderMyCastles;
 
-  const navSlideDemo = true;
-  document.body.classList.add("nav-slide-demo");
+  const navSlideDemo = new URLSearchParams(location.search).get("navtest") === "1";
+  if (navSlideDemo) document.body.classList.add("nav-slide-demo");
 
   async function animateNavPage(oldPage, newPage, direction) {
     const main = document.querySelector("main");
