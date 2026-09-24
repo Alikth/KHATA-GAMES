@@ -30,7 +30,6 @@ import {
   publicUser,
   players
 } from "./utils/runtime.js";
-import { sendTelegramMessage } from "./utils/telegram.js";
 
 /* Cloudflare build retry marker */
 import { castleInfo, houses } from "./data/game-data.js";
@@ -351,17 +350,6 @@ async function handleApi(request, env, url) {
     return json({ok:true},200,{"set-cookie":cookie(SESSION_COOKIE_NAME,sid)});
   }
   if (method === "POST" && path === "/api/admin/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie(SESSION_COOKIE_NAME)}}); }
-  if (method === "POST" && path === "/api/admin/telegram/test") {
-    if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
-    if (!session?.is_admin) return json({error:"دسترسی مدیر لازم است."},401);
-    try {
-      await sendTelegramMessage(env, "🤖 KHATA GAMES\n\nاتصال ربات تلگرام با سایت با موفقیت برقرار شد.");
-      return json({ok:true});
-    } catch (e) {
-      console.error("Telegram test failed:", e);
-      return json({error:"ارسال پیام تلگرام انجام نشد."},502);
-    }
-  }
   if (method === "GET" && path === "/api/admin/status") return json({admin:!!session?.is_admin});
   if (path === "/api/admin/players" && method === "GET") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
