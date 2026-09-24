@@ -405,6 +405,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if(!$('adminRegion'))return;
     $('adminRegion').innerHTML=houses.map(r=>'<option value="'+escapeHTML(r.region)+'">'+escapeHTML(r.region)+'</option>').join('');
     if($('adminAssignRegion'))$('adminAssignRegion').innerHTML=houses.map(r=>'<option value="'+escapeHTML(r.region)+'">'+escapeHTML(r.region)+'</option>').join('');
+    if($('adminNewCastleRegion'))$('adminNewCastleRegion').innerHTML=houses.map(r=>'<option value="'+escapeHTML(r.region)+'">'+escapeHTML(r.region)+'</option>').join('');
     updateAdminCastles();
     updateAdminAssignCastles();
   }
@@ -517,6 +518,17 @@ window.addEventListener("DOMContentLoaded", () => {
     try{await api('/api/admin/players/'+encodeURIComponent(player)+'/castles',{method:'POST',body:JSON.stringify({region,castle})});await refreshAdmin();showToast('قلعه به لیست پلیر اضافه شد.');}catch(e){showToast(e.message,true);}
   }
 
+  async function setAdminGameRuntime(action){try{await api('/api/admin/game-runtime',{method:'POST',body:JSON.stringify({action})});await refreshAdmin();showToast(action==='start'?'بازی شروع شد.':'بازی متوقف شد.');}catch(e){showToast(e.message,true);}}
+  async function saveAdminCasualties(id){
+    const payload={attacker:{army:{},equipment:{}},defender:{army:{}}};
+    document.querySelectorAll('[data-cas-side]').forEach(el=>{const n=String(el.value||'').trim();if(n==='')return;const side=el.dataset.casSide,kind=el.dataset.casKind,key=el.dataset.casKey;payload[side][kind]??={};payload[side][kind][key]=Math.floor(Number(n));});
+    if(!Object.values(payload.attacker.army).length&&!Object.values(payload.attacker.equipment).length&&!Object.values(payload.defender.army).length)return showToast('حداقل یک مقدار وارد کن.',true);
+    if(!adminConfirm('تلفات ثبت شود؟'))return;
+    try{await api('/api/admin/war-expeditions/'+encodeURIComponent(id)+'/casualties',{method:'POST',body:JSON.stringify(payload)});await refreshAdmin();showToast('تلفات ثبت شد.');}catch(e){showToast(e.message,true);}
+  }
+  async function setAdminOutcome(id,outcome){if(!adminConfirm(outcome==='attacker'?'پیروزی مهاجم ثبت شود؟':'پیروزی مدافع ثبت شود؟'))return;try{await api('/api/admin/war-expeditions/'+encodeURIComponent(id)+'/outcome',{method:'POST',body:JSON.stringify({outcome})});await refreshAdmin();await window.khataLoadWarLog?.();showToast('نتیجه ثبت شد.');}catch(e){showToast(e.message,true);}}
+  async function addAdminCastle(){const name=$('adminNewCastleName').value.trim(),region=$('adminNewCastleRegion').value,naval=$('adminNewCastleNaval').checked;if(!name)return showToast('نام قلعه را وارد کن.',true);if(!adminConfirm('قلعه «'+name+'» ثبت شود؟'))return;try{await api('/api/admin/castles',{method:'POST',body:JSON.stringify({name,region,naval})});$('adminNewCastleName').value='';$('adminNewCastleNaval').checked=false;await refreshAdmin();showToast('قلعه با موفقیت اضافه شد.');}catch(e){showToast(e.message,true);}}
+
   $("adminRegion").addEventListener("change",updateAdminCastles);
   $("adminAssignRegion")?.addEventListener("change",updateAdminAssignCastles);
   $("adminAssignPlayer")?.addEventListener("change",updateAdminAssignCastles);
@@ -524,6 +536,10 @@ window.addEventListener("DOMContentLoaded", () => {
   $("adminRefreshWars").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
   $("adminRefreshTrades").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
   $("adminWarLockBtn").onclick=()=>toggleAdminControl('war');
+  $("adminGameStart").onclick=()=>setAdminGameRuntime('start');
+  $("adminGameStop").onclick=()=>setAdminGameRuntime('stop');
+  $("adminRefreshCasualties").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
+  $("adminNewCastleBtn").onclick=addAdminCastle;
   $("adminTradeLockBtn").onclick=()=>toggleAdminControl('trade');
   $("adminWeeklyUpdate").onclick=runAdminWeeklyUpdate;
   $("adminAssignCastleBtn").onclick=assignAdminCastle;
@@ -620,6 +636,8 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (action === "trade-requests") window.khataOpenTradeRequests?.();
     else if (action === "cancel-war") cancelWarExpedition(target.dataset.warId);
     else if (action === "admin-cancel-war") cancelAdminWar(target.dataset.warId);
+    else if (action === "admin-outcome") setAdminOutcome(target.dataset.warId,target.dataset.outcome);
+    else if (action === "save-casualties") saveAdminCasualties(target.dataset.warId);
     else if (action === "claim") openClaim(Number(target.dataset.region), Number(target.dataset.castle));
     else if (action === "go-register") openPage("register").catch(() => {});
     else if (action === "delete-player") deletePlayer(target.dataset.id);
