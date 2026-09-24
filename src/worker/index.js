@@ -642,6 +642,28 @@ async function handleApi(request, env, url) {
     const rows=(await env.DB.prepare("SELECT t.*, su.username AS sender_username, ru.username AS receiver_username FROM trade_requests t LEFT JOIN users su ON su.id=t.sender_account_id LEFT JOIN users ru ON ru.id=t.receiver_account_id ORDER BY t.created_at DESC").all()).results;
     return json({trades:rows.map(x=>({...x,sendAssets:JSON.parse(x.send_assets_json||"{}"),receiveAssets:JSON.parse(x.receive_assets_json||"{}")}))});
   }
+  if (method==="POST" && path==="/api/admin/castles") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureCustomCastlesSchema(env);await ensureEconomySchema(env);
+    const b=await body(request),region=String(b.region||"").trim(),castle=String(b.castle||"").trim(),house=String(b.house||"").trim(),icon=String(b.icon||"🏰").trim(),location=String(b.location||"").trim(),description=String(b.description||"").trim();
+    if(!houses.some(r=>r.region===region))return json({error:"اقلیم معتبر نیست."},400);
+    if(!castle||castle.length>80||!house||house.length>80)return json({error:"نام قلعه و خاندان معتبر نیست."},400);
+    if(await castleExists(env,castle))return json({error:"این نام قلعه قبلاً استفاده شده است."},409);
+    await env.DB.prepare("INSERT INTO game_castles(castle,region,house,icon,location,description,created_at) VALUES(?,?,?,?,?,?,?)").bind(castle,region,house,icon||"🏰",location,description,new Date().toISOString()).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO castle_state(castle,region,port_enabled) VALUES(?,?,0)").bind(castle,region).run();
+    const week=gameWeekKey();
+    await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state(castle,last_week_key) VALUES(?,?)").bind(castle,week).run();
+    const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
+    for(const [k,lvl] of Object.entries(defaults))await env.DB.prepare("INSERT OR IGNORE INTO castle_production(castle,production_key,level) VALUES(?,?,?)").bind(castle,k,lvl).run();
+    const sp=SPECIAL_PRODUCTIONS[region];if(sp)await env.DB.prepare("INSERT OR IGNORE INTO castle_production(castle,production_key,level) VALUES(?,?,0)").bind(castle,sp.key).run();
+    for(const k of Object.keys(GENERAL_CAMPS))await env.DB.prepare("INSERT OR IGNORE INTO castle_camps(castle,camp_key,level) VALUES(?,?,0)").bind(castle,k).run();
+    for(const unit of ["swordsman","archer","spearman","cavalry"])await env.DB.prepare("INSERT OR IGNORE INTO castle_army(castle,unit_key,count) VALUES(?,?,?)").bind(castle,unit,unit==="swordsman"?500:unit==="archer"?200:100).run();
+    for(const item of Object.keys(EQUIPMENT))await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment(castle,item_key,count) VALUES(?,?,0)").bind(castle,item).run();
+    for(const ship of ["transport","warship"])await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet(castle,ship_key,count) VALUES(?,?,1)").bind(castle,ship).run();
+    for(const spc of (SPECIAL_CAMPS[region]||[]))await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps(castle,camp_key,level) VALUES(?,?,0)").bind(castle,spc.key).run();
+    return json({ok:true,castle:{castle,region,house,icon,location,description}});
+  }
   if (method==="GET" && path==="/api/admin/castles") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureEconomySchema(env);
