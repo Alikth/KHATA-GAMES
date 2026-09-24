@@ -2,6 +2,7 @@
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const fmt=n=>Number(n||0).toLocaleString('en-US');
+  const arrivalLabel=x=>x.arrivalAt?new Date(x.arrivalAt).toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'}):'—';
   const labels={
     swordsman:'🗡 شمشیرزن',archer:'🏹 کماندار',spearman:'🔱 نیزه‌دار',cavalry:'🏇 سواره‌نظام',
     ranger:'🥷 رنجر',winter_soldier:'🐺 سرباز زمستان',vale_knight:'⚔️ شوالیه ویل',crossbowman:'🏹 کراسبو‌دار',
@@ -53,7 +54,7 @@
   }
   async function loadWarLog(){
     const d=await api('/api/war-logs');const root=$('warLogList');if(!root)return;
-    root.innerHTML=d.logs?.length?d.logs.map(x=>'<article class="we-log-banner '+(Number(x.cancelled)?'cancelled':'')+'"><strong>⚔️ '+esc(x.attackerUsername)+' از '+esc(x.sourceCastle)+' به '+esc(x.destinationCastle)+' · '+fmt(Math.ceil(Number(x.remainingSeconds||0)/60))+' دقیقه باقی‌مانده</strong><div>لرد: '+(x.lordPresent?esc(x.lordName||'—'):'بدون حضور لرد')+(x.fake?' · لشکرکشی فیک':'')+(Number(x.cancelled)?' · <b class="we-cancelled-mark">✓ لغو شده</b>':'')+'</div><small>'+(x.type==='sea'?'دریایی':'زمینی')+'</small></article>').join(''):'<div class="war-log-empty">هنوز لشکرکشی‌ای ثبت نشده است.</div>';
+    root.innerHTML=d.logs?.length?d.logs.map(x=>'<article class="we-log-banner '+(Number(x.cancelled)?'cancelled':'')+'"><strong>⚔️ '+esc(x.attackerUsername)+' از '+esc(x.sourceCastle)+' به '+esc(x.destinationCastle)+' · '+fmt(Math.ceil(Number(x.remainingSeconds||0)/60))+' دقیقه باقی‌مانده · حدود '+esc(arrivalLabel(x))+'</strong><div>لرد: '+(x.lordPresent?esc(x.lordName||'—'):'بدون حضور لرد')+(x.fake?' · لشکرکشی فیک':'')+(Number(x.cancelled)?' · <b class="we-cancelled-mark">✓ لغو شده</b>':'')+'</div><small>'+(x.type==='sea'?'دریایی':'زمینی')+'</small></article>').join(''):'<div class="war-log-empty">هنوز لشکرکشی‌ای ثبت نشده است.</div>';
   }
   async function open(){
     $('warExpeditionModal').classList.remove('hidden');document.body.classList.add('modal-open');reset();
