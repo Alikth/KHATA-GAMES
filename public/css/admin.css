@@ -365,3 +365,5 @@ body.admin-mode{background:#070809}.admin-mode .hero,.admin-mode .nav{display:no
     font-size:12px !important;
   }
 }
+
+.admin-food-alerts{grid-column:1/-1}.admin-food-alert-box{background:#190b0d;border:1px solid #7b343b;color:#e6b0b3;padding:12px 14px;margin-bottom:10px;font-size:10px;line-height:1.9}.admin-food-alert-box b{display:block;color:#f0c0c3;margin-bottom:4px}
