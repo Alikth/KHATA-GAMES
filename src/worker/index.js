@@ -704,7 +704,7 @@ async function handleApi(request, env, url) {
     if(!castle||castle.length>80||!house||house.length>80)return json({error:"نام قلعه و خاندان معتبر نیست."},400);
     if(await castleExists(env,castle))return json({error:"این نام قلعه قبلاً استفاده شده است."},409);
     await env.DB.prepare("INSERT INTO game_castles(castle,region,house,icon,location,description,created_at) VALUES(?,?,?,?,?,?,?)").bind(castle,region,house,icon||"🏰",location,description,new Date().toISOString()).run();
-    await env.DB.prepare("undefined").bind(castle,region,portEnabled?1:0).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO castle_state(castle,region,port_enabled) VALUES(?,?,?)").bind(castle,region,portEnabled?1:0).run();
     const week=gameWeekKey();
     await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state(castle,last_week_key) VALUES(?,?)").bind(castle,week).run();
     const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
