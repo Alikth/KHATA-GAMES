@@ -532,6 +532,38 @@ async function handleApi(request, env, url) {
     await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=? WHERE id=? AND command IS NULL").bind(command,new Date().toISOString(),JSON.stringify(defenderAssets),id).run();
     return json({ok:true,command});
   }
+  if (method==="GET" && path==="/api/admin/game-runtime") {
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401); const rt=await warRuntime(env); return json({running:rt.running});
+  }
+  if (method==="POST" && path==="/api/admin/game-runtime") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    const action=String((await body(request)).action||""); if(action==="start"){await resumeWars(env);return json({ok:true,running:true});} if(action==="stop"){await freezeWars(env);return json({ok:true,running:false});} return json({error:"عملیات بازی معتبر نیست."},400);
+  }
+  if (method==="POST" && path==="/api/admin/castles") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureEconomySchema(env);const b=await body(request),name=String(b.name||"").trim(),region=String(b.region||"").trim(),naval=!!b.naval;
+    if(!name||name.length>100)return json({error:"نام قلعه معتبر نیست."},400);if(!GAME_REGIONS.includes(region))return json({error:"اقلیم معتبر نیست."},400);
+    const exists=await env.DB.prepare("SELECT castle FROM castle_state WHERE castle=? UNION SELECT name FROM dynamic_castles WHERE name=?").bind(name,name).first();if(exists)return json({error:"این قلعه قبلاً ثبت شده است."},409);
+    await env.DB.prepare("INSERT INTO dynamic_castles(name,region,naval,created_at) VALUES (?,?,?,?)").bind(name,region,naval?1:0,new Date().toISOString()).run();
+    await initializeCastleEconomy(env,name,region,naval);return json({ok:true,castle:{name,region,naval}});
+  }
+  if (method==="POST" && path.match(/^\/api\/admin\/war-expeditions\/[^/]+\/outcome$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);await ensureWarLogSchema(env);
+    const id=decodeURIComponent(path.split("/")[4]),outcome=String((await body(request)).outcome||"");if(!["attacker","defender"].includes(outcome))return json({error:"نتیجه معتبر نیست."},400);
+    const row=await env.DB.prepare("SELECT id,command FROM war_logs WHERE id=?").bind(id).first();if(!row||row.command!=="attack")return json({error:"این گزارش حمله قابل نتیجه‌گذاری نیست."},404);
+    await env.DB.prepare("UPDATE war_logs SET outcome=? WHERE id=?").bind(outcome,id).run();return json({ok:true,outcome});
+  }
+  if (method==="POST" && path.match(/^\/api\/admin\/war-expeditions\/[^/]+\/casualties$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);await ensureWarLogSchema(env);
+    const id=decodeURIComponent(path.split("/")[4]),row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();if(!row||row.command!=="attack")return json({error:"این حمله برای ثبت تلفات آماده نیست."},404);
+    let stored={},defender={};try{stored=JSON.parse(row.assets_json||"{}");defender=JSON.parse(row.defender_assets_json||"{}");}catch{}
+    const b=await body(request),att=b.attacker&&typeof b.attacker==="object"?b.attacker:{},def=b.defender&&typeof b.defender==="object"?b.defender:{};
+    const qs=[],saved={attacker:{army:{},equipment:{}},defender:{army:{}}};
+    for(const kind of ["army","equipment"]){for(const [key,raw] of Object.entries(att[kind]||{})){if(!Object.prototype.hasOwnProperty.call(stored[kind]||{},key))return json({error:"واحد مهاجم نامعتبر است."},400);const n=Math.floor(Number(raw));if(!Number.isFinite(n)||n<0||n>1000000000)return json({error:"مقدار تلفات مهاجم نامعتبر است."},400);const table=kind==="army"?"castle_army":"castle_equipment",field=kind==="army"?"unit_key":"item_key";qs.push(env.DB.prepare(`UPDATE ${table} SET count=? WHERE castle=? AND ${field}=?`).bind(n,row.source_castle,key));saved.attacker[kind][key]=n;}}
+    for(const [key,raw] of Object.entries(def.army||{})){if(!Object.prototype.hasOwnProperty.call(defender,key))return json({error:"واحد مدافع نامعتبر است."},400);const n=Math.floor(Number(raw));if(!Number.isFinite(n)||n<0||n>1000000000)return json({error:"مقدار تلفات مدافع نامعتبر است."},400);qs.push(env.DB.prepare("UPDATE castle_army SET count=count+? WHERE castle=? AND unit_key=?").bind(n,row.destination_castle,key));saved.defender.army[key]=n;}
+    if(!qs.length)return json({error:"حداقل یک مقدار وارد کن."},400);qs.push(env.DB.prepare("UPDATE war_logs SET casualties_json=? WHERE id=?").bind(JSON.stringify(saved),id));await env.DB.batch(qs);return json({ok:true});
+  }
+
   if (method==="GET" && path==="/api/admin/controls") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureGameControls(env);
