@@ -266,6 +266,7 @@ window.addEventListener("DOMContentLoaded", () => {
   let mapScale = 1;
   function renderMap() {
     const root = $("regionMarkers"); if (!root) return;
+    $("castleCount").textContent = houses.reduce((n,r) => n + r.castles.length, 0);
     root.innerHTML = houses.map((r, idx) => {
       const pos = regionLocations[r.region], count = players.filter(p => p.region === r.region).length; if (!pos) return "";
       return `<button class="region-marker ${count ? "has-players" : ""}" style="left:${pos[0]}%;top:${pos[1]}%" data-index="${idx}" aria-label="${escapeHTML(r.region)}"><span class="region-label">${escapeHTML(regionShort[r.region] || r.region)}</span><span class="region-orb">${escapeHTML(r.icon)}</span><span class="region-count">${count}/${r.castles.length}</span></button>`;
