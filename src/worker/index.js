@@ -645,9 +645,15 @@ async function handleApi(request, env, url) {
     const week=gameWeekKey();
     const done=await env.DB.prepare("SELECT week_key FROM game_week_runs WHERE week_key=?").bind(week).first();
     if(done)return json({error:"آپدیت این هفته قبلاً انجام شده است.",week,already:true},409);
-    await runWeeklyUpdate(env,true);
+    const alerts=await runWeeklyUpdate(env,true);
     await env.DB.prepare("INSERT INTO game_week_runs(week_key,processed_at) VALUES(?,?)").bind(week,new Date().toISOString()).run();
-    return json({ok:true,week});
+    return json({ok:true,week,alerts});
+  }
+  if (method==="GET" && path==="/api/admin/food-alerts") {
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureEconomySchema(env);
+    const rows=(await env.DB.prepare("SELECT id,castle,message,amount,created_at AS createdAt FROM game_notifications WHERE kind='food_shortage' ORDER BY created_at DESC LIMIT 50").all()).results;
+    return json({alerts:rows});
   }
   if (method==="GET" && path==="/api/admin/trades") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
@@ -834,6 +840,8 @@ async function handleApi(request, env, url) {
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
     const b=await body(request), source=String(b.source||"").trim(), destination=String(b.destination||"").trim();
+    if(await isCastleUnderSiege(env,source))return json({error:"این قلعه در محاصره است و امکان تجارت ندارد."},423);
+    
     const sourceRow=source?await env.DB.prepare("SELECT * FROM castle_state WHERE castle=? AND owner_account_id=?").bind(source,session.user_id).first():state;
     if(!sourceRow)return json({error:"قلعه مبدا متعلق به این حساب نیست."},403);
     const sendAssets=tradeAssets(b.sendAssets), receiveAssets=tradeAssets(b.receiveAssets);
@@ -852,6 +860,7 @@ async function handleApi(request, env, url) {
     await ensureTradeSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]), action=String((await body(request)).action||"");
+    if(await isCastleUnderSiege(env,row.sender_castle)||await isCastleUnderSiege(env,row.receiver_castle))return json({error:"این تجارت به دلیل محاصره یکی از قلعه‌ها قابل انجام نیست."},423);
     if(!["accept","reject"].includes(action))return json({error:"عملیات تجارت معتبر نیست."},400);
     const row=await env.DB.prepare("SELECT * FROM trade_requests WHERE id=? AND receiver_account_id=? AND status='pending'").bind(id,session.user_id).first();
     if(!row)return json({error:"درخواست تجارت پیدا نشد."},404);
