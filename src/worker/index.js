@@ -692,6 +692,38 @@ async function handleApi(request, env, url) {
     return json({items:[]});
   }
 
+  if (method==="POST" && path.match(/^\/api\/admin\/war-expeditions\/[^/]+\/casualties$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureWarLogSchema(env);await ensureEconomySchema(env);
+    const id=decodeURIComponent(path.split("/")[4]),row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
+    if(!row)return json({error:"لشکرکشی پیدا نشد."},404);
+    if(Number(row.cancelled))return json({error:"لشکرکشی لغو شده است."},409);
+    if(warIsActive(row))return json({error:"ابتدا باید لشکرکشی به مقصد برسد."},409);
+    if(String(row.command||"")!=="attack")return json({error:"تلفات فقط بعد از دستور حمله قابل ثبت است."},409);
+    if(String(row.casualties_json||"{}")!=="{}")return json({error:"تلفات این نبرد قبلاً ثبت شده است."},409);
+    const b=await body(request),attacker=b.attacker&&typeof b.attacker==="object"?b.attacker:{},defender=b.defender&&typeof b.defender==="object"?b.defender:{};
+    const original=JSON.parse(row.assets_json||"{}"),updates=[],saved={attacker:{},defender:{}};
+    const tables={army:["castle_army","unit_key"],equipment:["castle_equipment","item_key"],fleet:["castle_fleet","ship_key"]};
+    for(const side of ["attacker","defender"]){
+      const source=side==="attacker"?attacker:defender,castle=side==="attacker"?row.destination_castle:row.destination_castle,base=side==="attacker"?original:{};
+      for(const kind of ["army","equipment","fleet"]){
+        const table=tables[kind][0],field=tables[kind][1],requested=source[kind]&&typeof source[kind]==="object"?source[kind]:{};
+        const keys=side==="attacker"?Object.keys(base[kind]||{}):Object.keys(requested);
+        for(const key of keys){
+          const current=side==="attacker"?Math.floor(Number(base[kind]?.[key]||0)):Math.floor(Number((await env.DB.prepare("SELECT count FROM "+table+" WHERE castle=? AND "+field+"=?").bind(castle,key).first())?.count||0));
+          const left=Math.floor(Number(requested[key]));
+          if(!Number.isFinite(left)||left<0||left>current)return json({error:"مقدار باقی‌مانده تلفات معتبر نیست."},400);
+          saved[side][kind]??={};saved[side][kind][key]=left;
+          if(side==="attacker"&&left>0)updates.push(env.DB.prepare("INSERT INTO "+table+"(castle,"+field+",count) VALUES (?,?,?) ON CONFLICT(castle,"+field+") DO UPDATE SET count=count+excluded.count").bind(row.destination_castle,key,left));
+          if(side==="defender")updates.push(env.DB.prepare("UPDATE "+table+" SET count=? WHERE castle=? AND "+field+"=?").bind(left,castle,key));
+        }
+      }
+    }
+    updates.push(env.DB.prepare("UPDATE war_logs SET casualties_json=? WHERE id=? AND casualties_json='{}'").bind(JSON.stringify(saved),id));
+    const result=await env.DB.batch(updates);if(!result[updates.length-1]?.meta?.changes)return json({error:"ثبت تلفات همزمان انجام نشد؛ دوباره تلاش کن."},409);
+    return json({ok:true});
+  }
   if (method==="GET" && path==="/api/admin/war-expeditions") {
     await ensureWarLogSchema(env);
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
