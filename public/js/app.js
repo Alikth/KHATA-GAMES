@@ -266,6 +266,7 @@ window.addEventListener("DOMContentLoaded", () => {
   let mapScale = 1;
   function renderMap() {
     const root = $("regionMarkers"); if (!root) return;
+    $("castleCount").textContent = houses.reduce((n,r) => n + r.castles.length, 0);
     root.innerHTML = houses.map((r, idx) => {
       const pos = regionLocations[r.region], count = players.filter(p => p.region === r.region).length; if (!pos) return "";
       return `<button class="region-marker ${count ? "has-players" : ""}" style="left:${pos[0]}%;top:${pos[1]}%" data-index="${idx}" aria-label="${escapeHTML(r.region)}"><span class="region-label">${escapeHTML(regionShort[r.region] || r.region)}</span><span class="region-orb">${escapeHTML(r.icon)}</span><span class="region-count">${count}/${r.castles.length}</span></button>`;
@@ -302,7 +303,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     root.innerHTML = mine.map(p => {
       const r = houses.find(x => x.region === p.region), c = r?.castles.find(x => x.castle === p.castle);
-      const wars = (activeWars.expeditions||[]).filter(w => w.sourceCastle === p.castle);
+      const wars = (activeWars.expeditions||[]).filter(w => w.sourceCastle === p.castle && w.active);
       const badge = Number(tradeNotice.byCastle?.[p.castle]||0);
       const warHtml = wars.length ? '<div class="my-castle-war">'+wars.map(w => `<article class="active-war-card"><strong>⚔️ لشکرکشی به ${escapeHTML(w.destinationCastle)} — رسیدن ${escapeHTML(w.arrivalTime)}</strong><div>${w.type==='sea'?'دریایی':'زمینی'} ${w.fake?' · فیک':''}</div><button class="war-cancel-btn" type="button" data-action="cancel-war" data-war-id="${escapeHTML(w.id)}">لغو لشکرکشی</button></article>`).join('')+'</div>' : '';
       return `<article class="my-castle-card"><div class="my-castle-art">${escapeHTML(c?.icon || "🏰")}</div><div class="my-castle-body"><span class="my-castle-region">${escapeHTML(r?.icon || "")} ${escapeHTML(p.region)}</span><h3>${escapeHTML(p.castle)}</h3><p>HOUSE ${escapeHTML(p.house)}</p><div class="my-castle-meta"><span>👤 ${escapeHTML(p.username)}</span><span class="owned-badge">YOUR CASTLE</span></div></div><div class="my-castle-actions"><button class="castle-open" type="button" data-action="my-castle-manage">🏰 مدیریت قلعه</button><button class="castle-open" type="button" data-action="war-expedition">⚔️ لشکرکشی</button><button class="castle-open trade-open" type="button" data-action="trade" data-castle="${escapeHTML(p.castle)}">⚖️ تجارت <span class="trade-badge-wrap"><span class="trade-badge ${badge?'':'hidden'}" data-trade-notification="${escapeHTML(p.castle)}">${badge||''}</span></span></button><button class="castle-open trade-request-open" type="button" data-action="trade-requests">📜 درخواست تجارت</button></div>${warHtml}</article>`;
@@ -393,7 +394,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const ADMIN_RESOURCE_LABELS = {peasants:"👥 رعیت",coins:"💰 سکه",wood:"🪵 چوب",stone:"🪨 سنگ",iron:"⛓ آهن",meat:"🥩 گوشت",fish:"🐟 ماهی",grain:"🌾 غلات",horses:"🐎 اسب",dragon_glass:"🌑 شیشه اژدها",wildfire:"🧪 وایلدفایر",tar:"🛢 قیر",grapes:"🍇 انگور"};
   const ADMIN_EQUIPMENT_LABELS = {ladder:"🪜 نردبان",ram:"🔩 دژکوب",catapult:"☄ منجنیق",scorpion:"🦂 اسکورپین",siege_tower:"🏗 برج محاصره"};
-  const ADMIN_ARMY_LABELS = {swordsman:"شمشیرزن",archer:"کماندار",spearman:"نیزه‌دار",cavalry:"سواره‌نظام",giant:"غول",giants:"غول"};
+  const ADMIN_ARMY_LABELS = {swordsman:"شمشیرزن",archer:"کماندار",spearman:"نیزه‌دار",cavalry:"سواره‌نظام",ranger:"رنجر",winter_soldier:"سرباز زمستان",vale_knight:"شوالیه ویل",crossbowman:"کراسبودار",red_cloak:"ردا سرخ",dragon_knight:"شوالیه اژدها",axeman:"تبر‌دار",flower_knight:"شوالیه گل",hammer_wielder:"پتک‌دار",dornish_spearman:"نیزه‌دار دورنیش",giant:"غول",giants:"غول"};
   const ADMIN_FLEET_LABELS = {transport:"کشتی ترابری",warship:"کشتی جنگی"};
 
   function adminConfirm(message){ return window.confirm(message); }
@@ -405,6 +406,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if(!$('adminRegion'))return;
     $('adminRegion').innerHTML=houses.map(r=>'<option value="'+escapeHTML(r.region)+'">'+escapeHTML(r.region)+'</option>').join('');
     if($('adminAssignRegion'))$('adminAssignRegion').innerHTML=houses.map(r=>'<option value="'+escapeHTML(r.region)+'">'+escapeHTML(r.region)+'</option>').join('');
+    if($('adminNewCastleRegion'))$('adminNewCastleRegion').innerHTML=houses.map(r=>'<option value="'+escapeHTML(r.region)+'">'+escapeHTML(r.region)+'</option>').join('');
     updateAdminCastles();
     updateAdminAssignCastles();
   }
@@ -489,18 +491,16 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   async function refreshAdmin(){
-    const [lordList,adminLordList,houseList,warData,tradeData,controlData,castleData]=await Promise.all([api('/api/players'),api('/api/admin/players'),api('/api/houses'),api('/api/admin/war-expeditions'),api('/api/admin/trades'),api('/api/admin/controls'),api('/api/admin/castles')]);
+    const [lordList,adminLordList,houseList,warData,tradeData,controlData,castleData,runtimeData]=await Promise.all([api('/api/players'),api('/api/admin/players'),api('/api/houses'),api('/api/admin/war-expeditions'),api('/api/admin/trades'),api('/api/admin/controls'),api('/api/admin/castles'),api('/api/admin/game-runtime')]);
     players=lordList;adminPlayers=adminLordList;houses=houseList;renderPlayers();renderMap();fillAdminRegions();updateAdminAssignPlayers();
     $("adminPlayers").innerHTML=players.length?players.map(p=>'<div class="admin-row"><span>'+escapeHTML(p.username)+' · '+escapeHTML(p.castle)+'</span><button class="delete" type="button" data-action="delete-player" data-id="'+escapeHTML(p.id)+'">DELETE</button></div>').join(''):'<small>هیچ پلیری ثبت نشده.</small>';
-    const wars=warData.expeditions||[];
-    $("adminLordCount").textContent=players.length;$("adminWarCount").textContent=wars.length;$("adminActiveWarCount").textContent=wars.filter(x=>x.active).length;
-    $("adminWarList").innerHTML=wars.length?wars.map(x=>{let assets={};try{assets=JSON.parse(x.assetsJson||'{}');}catch{};const lines=Object.entries(assets).map(([kind,obj])=>'<div><b>'+escapeHTML(kind==='army'?'نیروها':kind==='equipment'?'ادوات':'ناوگان')+'</b>'+adminAssetLines(obj,kind==='army'?ADMIN_ARMY_LABELS:kind==='equipment'?ADMIN_EQUIPMENT_LABELS:ADMIN_FLEET_LABELS)+'</div>').join('');return '<article class="admin-war-card '+(x.active?'active ':'')+(Number(x.cancelled)?'cancelled':'')+'"><div class="admin-war-top"><div><span class="admin-war-status">'+(Number(x.cancelled)?'✓ لغو شده':x.active?'● فعال':'⌛ رسیده')+'</span><h3>'+escapeHTML(x.attackerUsername)+' · '+escapeHTML(x.sourceCastle)+' → '+escapeHTML(x.destinationCastle)+'</h3></div><span>'+escapeHTML(x.arrivalTime)+'</span></div><div class="admin-war-details"><span>آیدی پلیر: '+escapeHTML(x.attackerAccountId||'—')+'</span><span>لرد: '+escapeHTML(x.lordName||'—')+'</span><span>نوع: '+(x.type==='sea'?'دریایی':'زمینی')+'</span><span>'+((x.fake)?'فیک':'واقعی')+'</span><span>ثبت: '+escapeHTML(x.createdAt)+'</span></div><div class="admin-war-assets">'+(lines||'<div class="admin-muted">بدون دارایی</div>')+'</div>'+(x.active&&!Number(x.cancelled)?'<button class="war-cancel-btn" type="button" data-action="admin-cancel-war" data-war-id="'+escapeHTML(x.id)+'">لغو لشکرکشی از طرف ادمین</button>':'')+'</article>';}).join(''):'<div class="admin-empty">هنوز لشکرکشی‌ای ثبت نشده است.</div>';
-    const trades=tradeData.trades||[];
-    $("adminTradeCount").textContent=trades.length;
-    $("adminTradeList").innerHTML=trades.length?trades.map(x=>'<article class="admin-trade-card"><div class="admin-trade-head"><div><b>'+escapeHTML(x.sender_username||'—')+'</b> · '+escapeHTML(x.sender_castle)+' → <b>'+escapeHTML(x.receiver_username||'—')+'</b> · '+escapeHTML(x.receiver_castle)+'</div><span>'+escapeHTML(x.status)+'</span></div><div class="admin-trade-ids">فرستنده ID: '+escapeHTML(x.sender_account_id)+' · گیرنده ID: '+escapeHTML(x.receiver_account_id)+' · درخواست ID: '+escapeHTML(x.id)+'</div><div class="admin-trade-assets"><div><strong>ارسال</strong>'+adminAssetLines(x.sendAssets,ADMIN_RESOURCE_LABELS)+'</div><div><strong>دریافت</strong>'+adminAssetLines(x.receiveAssets,ADMIN_RESOURCE_LABELS)+'</div></div><small>'+escapeHTML(x.created_at)+(x.responded_at?' · پاسخ: '+escapeHTML(x.responded_at):'')+'</small></article>').join(''):'<div class="admin-empty">هنوز تجارتی ثبت نشده است.</div>';
-    const controls=controlData.controls||{};$("adminWarLockBtn").textContent=controls.war?'🔓 باز کردن لشکرکشی':'🔒 قفل کردن لشکرکشی';$("adminTradeLockBtn").textContent=controls.trade?'🔓 باز کردن تجارت':'🔒 قفل کردن تجارت';$("adminWarLockState").textContent=controls.war?'قفل است':'باز است';$("adminTradeLockState").textContent=controls.trade?'قفل است':'باز است';
-    const castles=castleData.castles||[];$("adminCastleSelect").innerHTML=castles.map(c=>'<option value="'+escapeHTML(c.castle)+'">'+escapeHTML(c.castle)+' — '+escapeHTML(c.region)+' — '+escapeHTML(c.username||'آزاد')+'</option>').join('');
-    if(castles.length)await loadAdminCastleAssets(castles[0].castle);
+    const wars=warData.expeditions||[];$("adminLordCount").textContent=players.length;$("adminWarCount").textContent=wars.length;$("adminActiveWarCount").textContent=wars.filter(x=>x.active).length;
+    $("adminWarList").innerHTML=wars.length?wars.map(x=>{let assets={};try{assets=JSON.parse(x.assetsJson||'{}');}catch{};const lines=Object.entries(assets).map(([kind,obj])=>'<div><b>'+escapeHTML(kind==='army'?'نیروها':kind==='equipment'?'ادوات':'ناوگان')+'</b>'+adminAssetLines(obj,kind==='army'?ADMIN_ARMY_LABELS:kind==='equipment'?ADMIN_EQUIPMENT_LABELS:ADMIN_FLEET_LABELS)+'</div>').join('');let outcome=x.outcome?'<div class="admin-war-result">نتیجه: '+(x.outcome==='attacker'?'پیروزی مهاجم':'پیروزی مدافع')+'</div>':x.command==='attack'?'<div class="admin-future-actions"><button class="primary" data-action="admin-outcome" data-war-id="'+escapeHTML(x.id)+'" data-outcome="attacker">پیروزی مهاجم</button><button class="danger" data-action="admin-outcome" data-war-id="'+escapeHTML(x.id)+'" data-outcome="defender">پیروزی مدافع</button></div>':'';let command=x.command?'<div class="admin-war-command">دستور صادرشده: '+escapeHTML(x.command==='attack'?'حمله':x.command==='deploy'?'استقرار':'محاصره')+'</div>':(!x.active&&!Number(x.cancelled)?'<div class="admin-war-command">رسیده و منتظر دستور</div>':'');return '<article class="admin-war-card '+(x.active?'active ':'')+(Number(x.cancelled)?'cancelled':'')+'"><div class="admin-war-top"><div><span class="admin-war-status">'+(Number(x.cancelled)?'✓ لغو شده':x.command? '✓ دستور ثبت شده':x.active?'● فعال':'⌛ رسیده')+'</span><h3>'+escapeHTML(x.attackerUsername)+' · '+escapeHTML(x.sourceCastle)+' → '+escapeHTML(x.destinationCastle)+'</h3></div><span>'+escapeHTML(x.arrivalTime)+'</span></div><div class="admin-war-details"><span>آیدی پلیر: '+escapeHTML(x.attackerAccountId||'—')+'</span><span>لرد: '+escapeHTML(x.lordName||'—')+'</span><span>نوع: '+(x.type==='sea'?'دریایی':'زمینی')+'</span><span>'+((x.fake)?'فیک':'واقعی')+'</span><span>'+((x.lordPresent)?'لرد حاضر':'لرد غایب')+'</span><span>مدت: '+escapeHTML(String(x.durationMinutes||0))+' دقیقه</span></div><div class="admin-war-assets">'+(lines||'<div class="admin-muted">بدون دارایی</div>')+'</div>'+command+outcome+(x.active&&!Number(x.cancelled)?'<button class="war-cancel-btn" type="button" data-action="admin-cancel-war" data-war-id="'+escapeHTML(x.id)+'">لغو لشکرکشی از طرف ادمین</button>':'')+'</article>';}).join(''):'<div class="admin-empty">هنوز لشکرکشی‌ای ثبت نشده است.</div>';
+    const attackWars=wars.filter(x=>x.command==='attack'&&!Number(x.cancelled));
+    $("adminCasualtyList").innerHTML=attackWars.length?attackWars.map(x=>{let a={},d={},saved={};try{a=JSON.parse(x.assetsJson||'{}');d=JSON.parse(x.defenderAssetsJson||'{}');saved=JSON.parse(x.casualtiesJson||'{}');}catch{};const done=Object.keys(saved||{}).length>0;const attackerArmy=Object.entries(a.army||{}).map(([k,v])=>'<label class="casualty-field"><span>'+escapeHTML(ADMIN_ARMY_LABELS[k]||k)+' · آورده مهاجم: '+Number(v)+'</span><input type="number" min="0" '+(done?'disabled':'')+' data-cas-side="attacker" data-cas-kind="army" data-cas-key="'+escapeHTML(k)+'"></label>').join('');const attackerEq=Object.entries(a.equipment||{}).map(([k,v])=>'<label class="casualty-field"><span>'+escapeHTML(ADMIN_EQUIPMENT_LABELS[k]||k)+' · آورده مهاجم: '+Number(v)+'</span><input type="number" min="0" '+(done?'disabled':'')+' data-cas-side="attacker" data-cas-kind="equipment" data-cas-key="'+escapeHTML(k)+'"></label>').join('');const defenderArmy=Object.entries(d).map(([k,v])=>'<label class="casualty-field"><span>'+escapeHTML(ADMIN_ARMY_LABELS[k]||k)+' · موجودی زمان حمله: '+Number(v)+'</span><input type="number" min="0" '+(done?'disabled':'')+' data-cas-side="defender" data-cas-kind="army" data-cas-key="'+escapeHTML(k)+'"></label>').join('');return '<article class="admin-war-card"><div class="admin-war-top"><div><span class="admin-war-status">⚔️ حمله</span><h3>'+escapeHTML(x.attackerUsername)+' · '+escapeHTML(x.sourceCastle)+' → '+escapeHTML(x.destinationCastle)+'</h3></div></div><div class="casualty-columns"><div><h4>مهاجم — مقدار نهایی دارایی</h4>'+attackerArmy+attackerEq+'</div><div><h4>مدافع — مقدار افزوده به دارایی فعلی</h4>'+defenderArmy+'</div></div>'+(done?'<div class="admin-war-result">✓ تلفات ثبت شده است.</div>':'<button class="primary" data-action="save-casualties" data-war-id="'+escapeHTML(x.id)+'">ثبت تلفات</button>')+'</article>';}).join(''):'<div class="admin-empty">هنوز دستوری با عنوان حمله برای ثبت تلفات وجود ندارد.</div>';
+    const trades=tradeData.trades||[];$("adminTradeCount").textContent=trades.length;$("adminTradeList").innerHTML=trades.length?trades.map(x=>'<article class="admin-trade-card"><div class="admin-trade-head"><div><b>'+escapeHTML(x.sender_username||'—')+'</b> · '+escapeHTML(x.sender_castle)+' → <b>'+escapeHTML(x.receiver_username||'—')+'</b> · '+escapeHTML(x.receiver_castle)+'</div><span>'+escapeHTML(x.status)+'</span></div><div class="admin-trade-ids">فرستنده ID: '+escapeHTML(x.sender_account_id)+' · گیرنده ID: '+escapeHTML(x.receiver_account_id)+' · درخواست ID: '+escapeHTML(x.id)+'</div><div class="admin-trade-assets"><div><strong>ارسال</strong>'+adminAssetLines(x.sendAssets,ADMIN_RESOURCE_LABELS)+'</div><div><strong>دریافت</strong>'+adminAssetLines(x.receiveAssets,ADMIN_RESOURCE_LABELS)+'</div></div><small>'+escapeHTML(x.created_at)+(x.responded_at?' · پاسخ: '+escapeHTML(x.responded_at):'')+'</small></article>').join(''):'<div class="admin-empty">هنوز تجارتی ثبت نشده است.</div>';
+    const controls=controlData.controls||{};$("adminWarLockBtn").textContent=controls.war?'🔓 باز کردن لشکرکشی':'🔒 قفل کردن لشکرکشی';$("adminTradeLockBtn").textContent=controls.trade?'🔓 باز کردن تجارت':'🔒 قفل کردن تجارت';$("adminWarLockState").textContent=controls.war?'قفل است':'باز است';$("adminTradeLockState").textContent=controls.trade?'قفل است':'باز است';$("adminGameRunState").textContent=runtimeData.running?'در حال اجرا':'متوقف';
+    const castles=castleData.castles||[];$("adminCastleSelect").innerHTML=castles.map(c=>'<option value="'+escapeHTML(c.castle)+'">'+escapeHTML(c.castle)+' — '+escapeHTML(c.region)+' — '+escapeHTML(c.username||'آزاد')+'</option>').join('');if(castles.length)await loadAdminCastleAssets(castles[0].castle);
   }
   async function toggleAdminControl(key){
     const button=key==='war'?$("adminWarLockBtn"):$("adminTradeLockBtn");const currentlyLocked=button.textContent.includes('باز کردن');
@@ -519,6 +519,17 @@ window.addEventListener("DOMContentLoaded", () => {
     try{await api('/api/admin/players/'+encodeURIComponent(player)+'/castles',{method:'POST',body:JSON.stringify({region,castle})});await refreshAdmin();showToast('قلعه به لیست پلیر اضافه شد.');}catch(e){showToast(e.message,true);}
   }
 
+  async function setAdminGameRuntime(action){try{await api('/api/admin/game-runtime',{method:'POST',body:JSON.stringify({action})});await refreshAdmin();showToast(action==='start'?'بازی شروع شد.':'بازی متوقف شد.');}catch(e){showToast(e.message,true);}}
+  async function saveAdminCasualties(id){
+    const payload={attacker:{army:{},equipment:{}},defender:{army:{}}};
+    document.querySelectorAll('[data-cas-side]').forEach(el=>{const n=String(el.value||'').trim();if(n==='')return;const side=el.dataset.casSide,kind=el.dataset.casKind,key=el.dataset.casKey;payload[side][kind]??={};payload[side][kind][key]=Math.floor(Number(n));});
+    if(!Object.values(payload.attacker.army).length&&!Object.values(payload.attacker.equipment).length&&!Object.values(payload.defender.army).length)return showToast('حداقل یک مقدار وارد کن.',true);
+    if(!adminConfirm('تلفات ثبت شود؟'))return;
+    try{await api('/api/admin/war-expeditions/'+encodeURIComponent(id)+'/casualties',{method:'POST',body:JSON.stringify(payload)});await refreshAdmin();showToast('تلفات ثبت شد.');}catch(e){showToast(e.message,true);}
+  }
+  async function setAdminOutcome(id,outcome){if(!adminConfirm(outcome==='attacker'?'پیروزی مهاجم ثبت شود؟':'پیروزی مدافع ثبت شود؟'))return;try{await api('/api/admin/war-expeditions/'+encodeURIComponent(id)+'/outcome',{method:'POST',body:JSON.stringify({outcome})});await refreshAdmin();await window.khataLoadWarLog?.();showToast('نتیجه ثبت شد.');}catch(e){showToast(e.message,true);}}
+  async function addAdminCastle(){const name=$('adminNewCastleName').value.trim(),region=$('adminNewCastleRegion').value,naval=$('adminNewCastleNaval').checked;if(!name)return showToast('نام قلعه را وارد کن.',true);if(!adminConfirm('قلعه «'+name+'» ثبت شود؟'))return;try{await api('/api/admin/castles',{method:'POST',body:JSON.stringify({name,region,naval})});$('adminNewCastleName').value='';$('adminNewCastleNaval').checked=false;await refreshAdmin();showToast('قلعه با موفقیت اضافه شد.');}catch(e){showToast(e.message,true);}}
+
   $("adminRegion").addEventListener("change",updateAdminCastles);
   $("adminAssignRegion")?.addEventListener("change",updateAdminAssignCastles);
   $("adminAssignPlayer")?.addEventListener("change",updateAdminAssignCastles);
@@ -526,6 +537,10 @@ window.addEventListener("DOMContentLoaded", () => {
   $("adminRefreshWars").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
   $("adminRefreshTrades").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
   $("adminWarLockBtn").onclick=()=>toggleAdminControl('war');
+  $("adminGameStart").onclick=()=>setAdminGameRuntime('start');
+  $("adminGameStop").onclick=()=>setAdminGameRuntime('stop');
+  $("adminRefreshCasualties").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
+  $("adminNewCastleBtn").onclick=addAdminCastle;
   $("adminTradeLockBtn").onclick=()=>toggleAdminControl('trade');
   $("adminWeeklyUpdate").onclick=runAdminWeeklyUpdate;
   $("adminAssignCastleBtn").onclick=assignAdminCastle;
@@ -622,6 +637,8 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (action === "trade-requests") window.khataOpenTradeRequests?.();
     else if (action === "cancel-war") cancelWarExpedition(target.dataset.warId);
     else if (action === "admin-cancel-war") cancelAdminWar(target.dataset.warId);
+    else if (action === "admin-outcome") setAdminOutcome(target.dataset.warId,target.dataset.outcome);
+    else if (action === "save-casualties") saveAdminCasualties(target.dataset.warId);
     else if (action === "claim") openClaim(Number(target.dataset.region), Number(target.dataset.castle));
     else if (action === "go-register") openPage("register").catch(() => {});
     else if (action === "delete-player") deletePlayer(target.dataset.id);

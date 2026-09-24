@@ -365,3 +365,5 @@ body.admin-mode{background:#070809}.admin-mode .hero,.admin-mode .nav{display:no
     font-size:12px !important;
   }
 }
+
+.admin-war-command{margin-top:10px;padding:9px 11px;border-radius:9px;background:rgba(199,164,86,.07);border:1px solid rgba(199,164,86,.2);color:#d9c99f}.admin-war-result{margin-top:10px;padding:9px 11px;border-radius:9px;background:rgba(55,120,75,.12);border:1px solid rgba(90,160,110,.25);color:#cde4d3}.casualty-columns{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0}.casualty-columns>div{background:#0d0f12;border:1px solid rgba(255,255,255,.06);border-radius:11px;padding:12px}.casualty-field{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px;color:#bbb}.casualty-field input{width:100px!important;margin:0!important}@media(max-width:760px){.casualty-columns{grid-template-columns:1fr}.casualty-field{align-items:flex-start;flex-direction:column}.casualty-field input{width:100%!important}}
