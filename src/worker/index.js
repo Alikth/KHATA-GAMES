@@ -57,6 +57,7 @@ const ECONOMY_SCHEMA = [
     meat INTEGER NOT NULL DEFAULT 500, fish INTEGER NOT NULL DEFAULT 500, grain INTEGER NOT NULL DEFAULT 6000,
     horses INTEGER NOT NULL DEFAULT 0, dragon_glass INTEGER NOT NULL DEFAULT 0, wildfire INTEGER NOT NULL DEFAULT 0,
     tar INTEGER NOT NULL DEFAULT 0, grapes INTEGER NOT NULL DEFAULT 50,
+    food_debt INTEGER NOT NULL DEFAULT 0,
     workshop_level INTEGER NOT NULL DEFAULT 0, port_level INTEGER NOT NULL DEFAULT 0, port_enabled INTEGER NOT NULL DEFAULT 0,
     special_item TEXT, equipment_day TEXT, equipment_week TEXT,
     UNIQUE(castle)
@@ -121,7 +122,7 @@ async function ensureWarLogSchema(env){
     attacker_account_id TEXT NOT NULL, attacker_username TEXT NOT NULL, lord_name TEXT,
     type TEXT NOT NULL, source_castle TEXT NOT NULL, destination_castle TEXT NOT NULL,
     arrival_time TEXT NOT NULL, is_fake INTEGER NOT NULL DEFAULT 0,
-    assets_json TEXT NOT NULL DEFAULT '{}', cancelled INTEGER NOT NULL DEFAULT 0,
+    assets_json TEXT NOT NULL DEFAULT '{}', cancelled INTEGER NOT NULL DEFAULT 0, siege_resolved INTEGER NOT NULL DEFAULT 0,
     cancelled_at TEXT, cancelled_by TEXT
   )`).run();
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0").run();}catch{}
@@ -134,6 +135,7 @@ async function ensureWarLogSchema(env){
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN command TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN command_at TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN casualties_json TEXT NOT NULL DEFAULT '{}'").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN siege_resolved INTEGER NOT NULL DEFAULT 0").run();}catch{}
   try{await env.DB.prepare("UPDATE war_logs SET remaining_seconds=0 WHERE arrival_time NOT LIKE '____-__-__T%' AND last_resumed_at IS NULL").run();}catch{}
 }
 async function ensureTradeSchema(env){
@@ -202,7 +204,9 @@ async function ensureEconomySchema(env) {
 
   const ready=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='seeded'").first();
   const version=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='schema_version'").first();
-  if(ready?.value==="1" && version?.value==="2") return;
+  if(ready?.value==="1" && version?.value==="3") return;
+  try{await env.DB.prepare("ALTER TABLE castle_state ADD COLUMN food_debt INTEGER NOT NULL DEFAULT 0").run();}catch{}
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS game_notifications (id TEXT PRIMARY KEY, kind TEXT NOT NULL, castle TEXT NOT NULL, message TEXT NOT NULL, amount INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)").run();
 
   const week=gameWeekKey();
   const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
@@ -223,7 +227,7 @@ async function ensureEconomySchema(env) {
     }
   }
   await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('seeded','1')").run();
-  await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('schema_version','2')").run();
+  await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('schema_version','3')").run();
 }
 
 async function loadCastleEconomy(env, castle) {
@@ -246,56 +250,54 @@ async function loadCastleEconomy(env, castle) {
   let parsedSpecialItem=null; try{parsedSpecialItem=state.special_item?JSON.parse(state.special_item):null;}catch{parsedSpecialItem=null;}
   const sp=SPECIAL_PRODUCTIONS[state.region]||null;
   const specialProduction=sp?{key:sp.key,level:Number(production[sp.key]?.level||0),label:sp.label,max:sp.max,cost:sp.cost,base:sp.base,yield:sp.yield}:null;
-  return {castle:state.castle,region:state.region,ownerAccountId:state.owner_account_id,resources:Object.fromEntries(RESOURCE_KEYS.map(k=>[k,Number(state[k]||0)])),production,camps:campMap,specialCamps:specialCampMap,specialProduction,army:armyMap,equipment:equipmentMap,fleet:fleetMap,workshop:{level:Number(state.workshop_level),maxLevel:5,upgradeCost:EQUIPMENT_UPGRADE_COST},port:{enabled:!!state.port_enabled,level:Number(state.port_level),maxLevel:15,weeklyYieldPerShipType:Number(state.port_level)},specialItem:parsedSpecialItem,gameWeek:gameWeekKey()};
+  return {castle:state.castle,region:state.region,ownerAccountId:state.owner_account_id,foodDebt:Number(state.food_debt||0),resources:Object.fromEntries(RESOURCE_KEYS.map(k=>[k,Number(state[k]||0)])),production,camps:campMap,specialCamps:specialCampMap,specialProduction,army:armyMap,equipment:equipmentMap,fleet:fleetMap,workshop:{level:Number(state.workshop_level),maxLevel:5,upgradeCost:EQUIPMENT_UPGRADE_COST},port:{enabled:!!state.port_enabled,level:Number(state.port_level),maxLevel:15,weeklyYieldPerShipType:Number(state.port_level)},specialItem:parsedSpecialItem,gameWeek:gameWeekKey()};
 }
 
+async function isCastleUnderSiege(env,castle){
+  await ensureWarLogSchema(env);
+  return !!(await env.DB.prepare("SELECT id FROM war_logs WHERE destination_castle=? AND command='siege' AND cancelled=0 AND siege_resolved=0 LIMIT 1").bind(castle).first());
+}
 async function runWeeklyUpdate(env, force=false) {
-  const week=gameWeekKey();
+  const week=gameWeekKey(), alerts=[];
   const rows=(await env.DB.prepare("SELECT * FROM castle_state").all()).results;
   for(const s of rows){
     const marker=await env.DB.prepare("SELECT last_week_key FROM castle_week_state WHERE castle=?").bind(s.castle).first();
     if(!force && marker?.last_week_key===week) continue;
+    const underSiege=await isCastleUnderSiege(env,s.castle);
     const prods=(await env.DB.prepare("SELECT production_key,level FROM castle_production WHERE castle=?").bind(s.castle).all()).results;
     const camps=(await env.DB.prepare("SELECT camp_key,level FROM castle_camps WHERE castle=?").bind(s.castle).all()).results;
     const scamps=(await env.DB.prepare("SELECT camp_key,level FROM castle_special_camps WHERE castle=?").bind(s.castle).all()).results;
     const army=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(s.castle).all()).results;
     const changes={}; const add=(k,v)=>changes[k]=(changes[k]||0)+v;
-    for(const p of prods){
-      const def=GENERAL_PRODUCTIONS[p.production_key]; if(!def||!p.level) continue;
-      let gain=Number(p.level)*def.yield;
-      if(p.production_key==="farm"&&Number(p.level)===1) gain=300;
-      gain*=REGION_MULTIPLIERS[s.region]?.[p.production_key]||1;
-      add(def.base,gain);
+    if(!underSiege){
+      for(const p of prods){const def=GENERAL_PRODUCTIONS[p.production_key];if(!def||!p.level)continue;let gain=Number(p.level)*def.yield;if(p.production_key==='farm'&&Number(p.level)===1)gain=300;gain*=REGION_MULTIPLIERS[s.region]?.[p.production_key]||1;add(def.base,gain);}
+      const sp=SPECIAL_PRODUCTIONS[s.region];
+      if(sp){const lvl=Number(prods.find(x=>x.production_key===sp.key)?.level||0);if(lvl)add(sp.base,lvl*sp.yield);}
     }
-    const sp=SPECIAL_PRODUCTIONS[s.region];
-    if(sp){const lvl=Number(prods.find(x=>x.production_key===sp.key)?.level||0);if(lvl)add(sp.base,lvl*sp.yield);}
     for(const c of camps){const d=GENERAL_CAMPS[c.camp_key];if(d&&c.level)add(d.unit,c.level*d.yield);}
     for(const c of scamps){const d=(SPECIAL_CAMPS[s.region]||[]).find(x=>x.key===c.camp_key);if(d&&c.level)add(d.unit,c.level*d.yield);}
     const a=Object.fromEntries(army.map(x=>[x.unit_key,Number(x.count)]));
-    const grainNeed=(a.swordsman||0)+(a.archer||0)+(a.spearman||0)+((a.cavalry||0)*2)+Object.entries(a).filter(([key])=>!["swordsman","archer","spearman","cavalry","giants"].includes(key)).reduce((sum,[,count])=>sum+Number(count||0)*2,0);
+    const grainNeed=(a.swordsman||0)+(a.archer||0)+(a.spearman||0)+((a.cavalry||0)*2)+Object.entries(a).filter(([key])=>!['swordsman','archer','spearman','cavalry','giants'].includes(key)).reduce((sum,[,count])=>sum+Number(count||0)*2,0);
     const meatNeed=(a.giants||0)*2;
     const grainUsed=Math.min(Number(s.grain||0),grainNeed);
     let rem=Math.max(0,grainNeed-grainUsed);
     const fishUsed=Math.min(Number(s.fish||0),Math.ceil(rem/2));
     rem=Math.max(0,rem-fishUsed*2);
     const meatUsed=Math.min(Number(s.meat||0),Math.max(meatNeed,Math.ceil(rem/2)));
-    const resourceParts=[]; const resourceBind=[];
-    for(const [k,v] of Object.entries(changes)){if(RESOURCE_KEYS.includes(k)&&v){resourceParts.push(k+"="+k+"+?");resourceBind.push(Math.floor(v));}}
-    resourceParts.push("grain=MAX(0,grain-?)","fish=MAX(0,fish-?)","meat=MAX(0,meat-?)");
-    resourceBind.push(grainUsed,fishUsed,meatUsed);
-    const statements=[env.DB.prepare("UPDATE castle_state SET "+resourceParts.join(",")+" WHERE castle=?").bind(...resourceBind,s.castle)];
-    for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k))){
-      statements.push(env.DB.prepare("INSERT INTO castle_army(castle,unit_key,count) VALUES (?,?,?) ON CONFLICT(castle,unit_key) DO UPDATE SET count=count+excluded.count").bind(s.castle,unit,Math.floor(gain)));
-    }
-    if(Number(s.port_enabled)&&Number(s.port_level)>0){
-      statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='transport'").bind(Number(s.port_level),s.castle));
-      statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='warship'").bind(Number(s.port_level),s.castle));
-    }
-    statements.push(env.DB.prepare("UPDATE castle_week_state SET last_week_key=? WHERE castle=?").bind(week,s.castle));
+    const foodShortage=Math.max(0,rem);
+    const resourceParts=[];const resourceBind=[];
+    for(const [k,v] of Object.entries(changes)){if(RESOURCE_KEYS.includes(k)&&v){resourceParts.push(k+'='+k+'+?');resourceBind.push(Math.floor(v));}}
+    resourceParts.push('grain=MAX(0,grain-?)','fish=MAX(0,fish-?)','meat=MAX(0,meat-?)','food_debt=?');
+    resourceBind.push(grainUsed,fishUsed,meatUsed,-foodShortage);
+    const statements=[env.DB.prepare('UPDATE castle_state SET '+resourceParts.join(',')+' WHERE castle=?').bind(...resourceBind,s.castle)];
+    for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k)))statements.push(env.DB.prepare('INSERT INTO castle_army(castle,unit_key,count) VALUES (?,?,?) ON CONFLICT(castle,unit_key) DO UPDATE SET count=count+excluded.count').bind(s.castle,unit,Math.floor(gain)));
+    if(Number(s.port_enabled)&&Number(s.port_level)>0){statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='transport'").bind(Number(s.port_level),s.castle));statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='warship'").bind(Number(s.port_level),s.castle));}
+    if(foodShortage>0){const message='قلعه '+s.castle+' غذاش تمام شد؛ کمبود غذا: -'+foodShortage;alerts.push({castle:s.castle,amount:-foodShortage,message});statements.push(env.DB.prepare('INSERT INTO game_notifications(id,kind,castle,message,amount,created_at) VALUES(?,?,?,?,?,?)').bind(newId(),'food_shortage',s.castle,message,-foodShortage,new Date().toISOString()));}
+    statements.push(env.DB.prepare('UPDATE castle_week_state SET last_week_key=? WHERE castle=?').bind(week,s.castle));
     await env.DB.batch(statements);
   }
+  return alerts;
 }
-
 async function requireCastleOwner(request,env){
   const s=await requireUser(request,env); if(!s)return null;
 
@@ -551,7 +553,6 @@ async function handleApi(request, env, url) {
     const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
     const b=await body(request), type=String(b.type||""), source=String(b.source||"").trim(), destination=String(b.destination||"").trim(), durationMinutes=Math.floor(Number(b.durationMinutes||0)), isFake=!!b.fake, lordPresent=!!b.lordPresent;
     if(!["land","sea"].includes(type))return json({error:"نوع لشکرکشی معتبر نیست."},400);
-    if(type==="sea"&&!Number(state.port_enabled))return json({error:"این قلعه اسکله فعال ندارد."},400);
     if(type==="sea"&&!Number(state.port_enabled))return json({error:"این قلعه اسکله فعال ندارد."},400);
     const validCastleName=name=>houses.some(r=>r.castles.some(c=>c.castle===name));
     if(!(await castleExists(env,source)))return json({error:"مبدا معتبر نیست."},400);
