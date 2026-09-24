@@ -82,6 +82,24 @@ function findCastle(region, castle) {
   const r = houses.find(x => x.region === region);
   return r?.castles.find(x => x.castle === castle);
 }
+async function ensureCustomCastlesSchema(env){
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS game_castles (castle TEXT PRIMARY KEY, region TEXT NOT NULL, house TEXT NOT NULL, icon TEXT NOT NULL DEFAULT '🏰', location TEXT, description TEXT, created_at TEXT NOT NULL)").run();
+}
+async function getHouses(env){
+  await ensureCustomCastlesSchema(env);
+  const rows=(await env.DB.prepare("SELECT castle,region,house,icon FROM game_castles ORDER BY created_at").all()).results;
+  const out=houses.map(r=>({...r,castles:r.castles.map(c=>({...c}))}));
+  for(const x of rows){const r=out.find(v=>v.region===x.region);if(r&&!r.castles.some(c=>c.castle===x.castle))r.castles.push({house:x.house,castle:x.castle,icon:x.icon||'🏰'});}
+  return out;
+}
+async function getCastle(env,region,castle){
+  const base=findCastle(region,castle);if(base)return base;
+  await ensureCustomCastlesSchema(env);return await env.DB.prepare("SELECT castle,region,house,icon,location,description FROM game_castles WHERE region=? AND castle=?").bind(region,castle).first();
+}
+async function castleExists(env,castle){
+  if(houses.some(r=>r.castles.some(c=>c.castle===castle)))return true;
+  await ensureCustomCastlesSchema(env);return !!(await env.DB.prepare("SELECT castle FROM game_castles WHERE castle=?").bind(castle).first());
+}
 
 
 
