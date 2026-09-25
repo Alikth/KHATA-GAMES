@@ -148,6 +148,25 @@ async function ensureTradeSchema(env){
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_trade_sender_status ON trade_requests(sender_account_id,status,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_trade_receiver_status ON trade_requests(receiver_account_id,status,created_at)").run();
 }
+async function ensureNarrativeSchema(env){
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS scenario_submissions (
+    id TEXT PRIMARY KEY, war_id TEXT NOT NULL, submitter_account_id TEXT NOT NULL,
+    submitter_username TEXT NOT NULL, lord_name TEXT NOT NULL DEFAULT '', castle TEXT NOT NULL,
+    side TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL,
+    UNIQUE(war_id,submitter_account_id,side)
+  )`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS role_submissions (
+    id TEXT PRIMARY KEY, account_id TEXT NOT NULL, username TEXT NOT NULL,
+    lord_name TEXT NOT NULL DEFAULT '', castle TEXT NOT NULL, text TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS role_cooldowns (
+    account_id TEXT PRIMARY KEY, next_available_at TEXT NOT NULL
+  )`).run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_scenario_created ON scenario_submissions(created_at)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_scenario_submitter ON scenario_submissions(submitter_account_id,created_at)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_role_account_created ON role_submissions(account_id,created_at)").run();
+}
 async function ensureGameControls(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS game_controls (control_key TEXT PRIMARY KEY, locked INTEGER NOT NULL DEFAULT 0)`).run();
   await env.DB.prepare("INSERT OR IGNORE INTO game_controls(control_key,locked) VALUES ('war',0),('trade',0),('claim',0)").run();
@@ -891,9 +910,9 @@ async function handleApi(request, env, url) {
   if (method==="GET" && path==="/api/roles/status") {
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     await ensureNarrativeSchema(env);
-    const row=await env.DB.prepare("SELECT created_at AS createdAt FROM role_submissions WHERE account_id=? ORDER BY created_at DESC LIMIT 1").bind(session.user_id).first();
-    const last=row?.createdAt?Date.parse(row.createdAt):NaN,now=Date.now(),cooldown=48*60*60*1000,next=Number.isFinite(last)?last+cooldown:now;
-    return json({available:!Number.isFinite(last)||next<=now,nextAvailableAt:Number.isFinite(last)?new Date(next).toISOString():null,remainingSeconds:Number.isFinite(last)&&next>now?Math.ceil((next-now)/1000):0});
+    const row=await env.DB.prepare("SELECT next_available_at AS nextAvailableAt FROM role_cooldowns WHERE account_id=?").bind(session.user_id).first();
+    const next=row?.nextAvailableAt?Date.parse(row.nextAvailableAt):NaN,now=Date.now();
+    return json({available:!Number.isFinite(next)||next<=now,nextAvailableAt:Number.isFinite(next)?new Date(next).toISOString():null,remainingSeconds:Number.isFinite(next)&&next>now?Math.ceil((next-now)/1000):0});
   }
   if (method==="POST" && path==="/api/roles") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
@@ -903,12 +922,18 @@ async function handleApi(request, env, url) {
     if(!castle||!textValue)return json({error:"قلعه و متن رول الزامی است."},400);
     if(textValue.length>8000)return json({error:"متن رول حداکثر ۸۰۰۰ کاراکتر است."},400);
     const state=await requireCastleOwner(request,env,castle); if(!state)return json({error:"این قلعه متعلق به حساب شما نیست."},403);
-    const row=await env.DB.prepare("SELECT created_at AS createdAt FROM role_submissions WHERE account_id=? ORDER BY created_at DESC LIMIT 1").bind(session.user_id).first();
-    const last=row?.createdAt?Date.parse(row.createdAt):NaN,now=Date.now(),cooldown=48*60*60*1000;
-    if(Number.isFinite(last)&&now<last+cooldown)return json({error:"هر پلیر فقط هر ۴۸ ساعت یک رول می‌تواند ارسال کند.",nextAvailableAt:new Date(last+cooldown).toISOString()},429);
     const usernameRow=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(session.user_id).first();
-    await env.DB.prepare("INSERT INTO role_submissions(id,account_id,username,lord_name,castle,text,created_at) VALUES(?,?,?,?,?,?,?)").bind(newId(),session.user_id,usernameRow?.username||"",WAR_LORDS[castle]||"",castle,textValue,new Date().toISOString()).run();
-    return json({ok:true});
+    const now=Date.now(),createdAt=new Date(now).toISOString(),next=new Date(now+48*60*60*1000).toISOString();
+    const reserve=env.DB.prepare(`INSERT INTO role_cooldowns(account_id,next_available_at) VALUES(?,?)
+      ON CONFLICT(account_id) DO UPDATE SET next_available_at=excluded.next_available_at
+      WHERE role_cooldowns.next_available_at<=?`).bind(session.user_id,next,createdAt);
+    const insert=env.DB.prepare(`INSERT INTO role_submissions(id,account_id,username,lord_name,castle,text,created_at)
+      SELECT ?,?,?,?,?,?,? WHERE EXISTS(
+        SELECT 1 FROM role_cooldowns WHERE account_id=? AND next_available_at=?
+      )`).bind(newId(),session.user_id,usernameRow?.username||"",WAR_LORDS[castle]||"",castle,textValue,createdAt,session.user_id,next);
+    const result=await env.DB.batch([reserve,insert]);
+    if(!result[0]?.meta?.changes||!result[1]?.meta?.changes)return json({error:"هر پلیر فقط هر ۴۸ ساعت یک رول می‌تواند ارسال کند.",nextAvailableAt:next},429);
+    return json({ok:true,nextAvailableAt:next});
   }
   if (method==="GET" && path==="/api/admin/scenarios") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
