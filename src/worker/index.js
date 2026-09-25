@@ -205,11 +205,11 @@ async function ensureEconomySchema(env) {
       for (const k of Object.keys(GENERAL_CAMPS)) await env.DB.prepare("INSERT OR IGNORE INTO castle_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,k).run();
       for (const unit of ["swordsman","archer","spearman","cavalry"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_army (castle,unit_key,count) VALUES (?,?,?)").bind(c.castle,unit,unit==="swordsman"?500:unit==="archer"?200:100).run();
       for (const item of Object.keys(EQUIPMENT)) await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment (castle,item_key,count) VALUES (?,?,0)").bind(c.castle,item).run();
-      for (const ship of ["transport","warship"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet (castle,ship_key,count) VALUES (?,?,1)").bind(c.castle,ship).run();
+      for (const ship of ["transport","warship"]) await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet (castle,ship_key,count) VALUES (?,?,?)").bind(c.castle,ship,naval?1:0).run();
       for (const spc of (SPECIAL_CAMPS[r.region]||[])) await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,spc.key).run();
     }
   }
-  if(ready?.value==="1" && ["2","3"].includes(version?.value||"")){
+  if(ready?.value==="1" && version?.value!=="4"){
     for(const r of houses) for(const c of r.castles){
       const naval=NAVAL_CASTLES.has(c.castle);
       if(naval) await env.DB.prepare("UPDATE castle_fleet SET count=CASE WHEN count<1 THEN 1 ELSE count END WHERE castle=? AND ship_key IN ('transport','warship')").bind(c.castle).run();
