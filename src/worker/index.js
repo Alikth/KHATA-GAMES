@@ -722,7 +722,12 @@ async function handleApi(request, env, url) {
       }
     }
     for(const pair of [["workshop_level",changes.workshopLevel],["port_level",changes.portLevel]]){
-      if(pair[1]!==undefined){const n=Math.floor(Number(pair[1]));if(!Number.isFinite(n)||n<0)return json({error:"سطح نامعتبر است."},400);updates.push(env.DB.prepare("UPDATE castle_state SET "+pair[0]+"=? WHERE castle=?").bind(n,castle));}
+      if(pair[1]!==undefined){
+        const n=Math.floor(Number(pair[1]));
+        const max=pair[0]==="workshop_level"?5:15;
+        if(!Number.isFinite(n)||n<0||n>max)return json({error:pair[0]==="workshop_level"?"سطح کارگاه باید بین 0 تا 5 باشد.":"سطح اسکله باید بین 0 تا 15 باشد."},400);
+        updates.push(env.DB.prepare("UPDATE castle_state SET "+pair[0]+"=? WHERE castle=?").bind(n,castle));
+      }
     }
     if(changes.portEnabled!==undefined)updates.push(env.DB.prepare("UPDATE castle_state SET port_enabled=? WHERE castle=?").bind(changes.portEnabled?1:0,castle));
     const updateRows=async(table,keyField,source)=>{
