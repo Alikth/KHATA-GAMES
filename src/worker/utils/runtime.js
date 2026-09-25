@@ -18,11 +18,11 @@ function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: { ...SECURITY_HEADERS, "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
 }
 async function body(request) {
-  const length = Number(request.headers.get("content-length") || 0);
-  if (length > MAX_BODY_BYTES) { const e = new Error("Request body too large"); e.status = 413; throw e; }
   const type = request.headers.get("content-type") || "";
   if (!type.toLowerCase().startsWith("application/json")) { const e = new Error("JSON required"); e.status = 415; throw e; }
-  try { return await request.json(); } catch { const e = new Error("Invalid JSON"); e.status = 400; throw e; }
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) { const e = new Error("Request body too large"); e.status = 413; throw e; }
+  try { return JSON.parse(raw); } catch { const e = new Error("Invalid JSON"); e.status = 400; throw e; }
 }
 function sameOrigin(request) {
   const origin = request.headers.get("Origin");
@@ -53,7 +53,7 @@ function validTelegramUsername(value) { return /^[A-Za-z0-9_]{5,32}$/.test(value
 function validAccountUsername(value) { return /^[A-Za-z0-9_]{3,24}$/.test(value); }
 function cookie(name, value, maxAge = SESSION_TTL / 1000) { return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(maxAge)}`; }
 function clearCookie(name) { return `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`; }
-function getCookie(request, name) { const raw = request.headers.get("Cookie") || ""; const m = raw.match(new RegExp(`(?:^|; )${name}=([^;]*)`)); return m ? decodeURIComponent(m[1]) : null; }
+function getCookie(request, name) { const raw = request.headers.get("Cookie") || ""; const m = raw.match(new RegExp(`(?:^|; )${name}=([^;]*)`)); if(!m)return null; try{return decodeURIComponent(m[1]);}catch{return null;} }
 function newId() { return crypto.randomUUID(); }
 async function hashPassword(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
