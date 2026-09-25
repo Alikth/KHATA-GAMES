@@ -636,7 +636,7 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (action === "war-expedition") window.khataOpenWarExpedition?.(target.dataset.castle);
     else if (action === "trade") window.khataOpenTrade?.(target.dataset.castle);
     else if (action === "trade-requests") window.khataOpenTradeRequests?.();
-    else if (action === "cancel-war") cancelWarExpedition(target.dataset.warId);
+    else if (action === "cancel-war") { e.preventDefault(); e.stopImmediatePropagation(); e.__khataMyCastleHandled = true; cancelWarExpedition(target.dataset.warId); }
     else if (action === "admin-cancel-war") cancelAdminWar(target.dataset.warId);
     else if (action === "admin-outcome") setAdminOutcome(target.dataset.warId,target.dataset.outcome);
     else if (action === "save-casualties") saveAdminCasualties(target.dataset.warId);
