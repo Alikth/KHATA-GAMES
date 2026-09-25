@@ -30,18 +30,18 @@ export const GENERAL_CAMPS = {
   cavalry:{label:"🏇 کمپ سواره‌نظام",max:20,unit:"cavalry",cost:{coins:350,wood:150,iron:25,peasants:50,horses:50},yield:100}
 };
 export const SPECIAL_CAMPS = {
-  "The Wall":[{key:"ranger",label:"🥷 کمپ رنجر",cost:{wood:200,iron:20,peasants:50},unit:"ranger",yield:50}],
-  "North":[{key:"winter_soldier",label:"🐺 کمپ سرباز زمستان",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"winter_soldier",yield:50}],
+  "The Wall":[{key:"ranger",label:"🥷 کمپ رنجر",cost:{wood:200,iron:20,peasants:50},max:20,unit:"ranger",yield:50}],
+  "North":[{key:"winter_soldier",label:"🐺 کمپ سرباز زمستان",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"winter_soldier",yield:50}],
   "Riverlands":[
-    {key:"vale_knight",label:"😀 کمپ شوالیه ویل",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"vale_knight",yield:50},
-    {key:"crossbowman",label:"🏹 کمپ کراسبو‌دار",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"crossbowman",yield:50}
+    {key:"vale_knight",label:"😀 کمپ شوالیه ویل",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"vale_knight",yield:50},
+    {key:"crossbowman",label:"🏹 کمپ کراسبو‌دار",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"crossbowman",yield:50}
   ],
-  "Westerlands":[{key:"red_cloak",label:"🩸 کمپ ردا سرخ",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"red_cloak",yield:50}],
-  "Crownlands":[{key:"dragon_knight",label:"🐉 کمپ شوالیه اژدها",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"dragon_knight",yield:50}],
-  "Iron Islands":[{key:"axeman",label:"🪓 کمپ تبر‌دار",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"axeman",yield:50}],
-  "Reach":[{key:"flower_knight",label:"🏵 شوالیه گل",cost:{coins:300,wood:200,iron:20,peasants:50},unit:"flower_knight",yield:50}],
-  "Stormlands":[{key:"hammer_wielder",label:"🔨 پتک‌دار",cost:{coins:300,wood:200,iron:30,peasants:50},unit:"hammer_wielder",yield:50}],
-  "Dorne":[{key:"dornish_spearman",label:"🔱 نیزه‌دار دورنیش",cost:{coins:300,wood:200,iron:10,peasants:50},unit:"dornish_spearman",yield:50}]
+  "Westerlands":[{key:"red_cloak",label:"🩸 کمپ ردا سرخ",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"red_cloak",yield:50}],
+  "Crownlands":[{key:"dragon_knight",label:"🐉 کمپ شوالیه اژدها",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"dragon_knight",yield:50}],
+  "Iron Islands":[{key:"axeman",label:"🪓 کمپ تبر‌دار",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"axeman",yield:50}],
+  "Reach":[{key:"flower_knight",label:"🏵 شوالیه گل",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"flower_knight",yield:50}],
+  "Stormlands":[{key:"hammer_wielder",label:"🔨 پتک‌دار",cost:{coins:300,wood:200,iron:30,peasants:50},max:20,unit:"hammer_wielder",yield:50}],
+  "Dorne":[{key:"dornish_spearman",label:"🔱 نیزه‌دار دورنیش",cost:{coins:300,wood:200,iron:10,peasants:50},max:20,unit:"dornish_spearman",yield:50}]
 };
 export const EQUIPMENT = {
   ladder:{label:"🪜 نردبان",level:1,cost:{wood:70},limit:10,period:"day"},
