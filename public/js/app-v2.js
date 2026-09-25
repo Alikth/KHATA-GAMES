@@ -500,10 +500,11 @@ window.addEventListener("DOMContentLoaded", () => {
     for(const [k,v] of Object.entries(d.equipment||{}))html+=adminEditorInput(ADMIN_EQUIPMENT_LABELS[k]||k,v,'equipment.'+k);
     html+='</div><h4>ناوگان</h4><div class="admin-editor-grid">';
     for(const [k,v] of Object.entries(d.fleet||{}))html+=adminEditorInput(ADMIN_FLEET_LABELS[k]||k,v,'fleet.'+k);
-    html+='</div><div class="admin-editor-actions"><button class="primary" id="adminSaveCastleAssets">ذخیره تغییرات</button><button class="ghost" id="adminReloadCastleAssets">بازخوانی</button></div>';
+    html+='</div><div class="admin-editor-actions"><button class="primary" id="adminSaveCastleAssets">ذخیره تغییرات</button><button class="ghost" id="adminReloadCastleAssets">بازخوانی</button><button class="danger" id="adminDeleteCastle">حذف قلعه</button></div>';
     root.innerHTML=html;
     $("adminSaveCastleAssets").onclick=saveAdminCastleAssets;
     $("adminReloadCastleAssets").onclick=()=>loadAdminCastleAssets($("adminCastleSelect").value);
+    $("adminDeleteCastle").onclick=deleteAdminCastle;
   }
   async function loadAdminCastleAssets(castle){
     if(!castle){$("adminCastleEditor").innerHTML='<div class="admin-empty">یک قلعه انتخاب کن.</div>';return;}
@@ -518,6 +519,12 @@ window.addEventListener("DOMContentLoaded", () => {
       for(let i=0;i<parts.length-1;i++)target=target[parts[i]];
       target[parts[parts.length-1]]=Math.max(0,Math.floor(Number(el.value||0)));
     });
+    const special=document.querySelector('[data-admin-special-item]');
+    if(special){
+      const raw=String(special.value||"").trim();
+      if(!raw)changes.specialItem=null;
+      else{try{changes.specialItem=JSON.parse(raw);}catch{throw new Error("آیتم ویژه باید JSON معتبر باشد.");}}
+    }
     return changes;
   }
   async function saveAdminCastleAssets(){
@@ -527,11 +534,22 @@ window.addEventListener("DOMContentLoaded", () => {
     catch(e){showToast(e.message,true);}
   }
 
+  async function deleteAdminCastle(){
+    const castle=$("adminCastleSelect").value;if(!castle)return;
+    if(!adminConfirm('قلعه «'+castle+'» حذف شود؟ اگر لردی داشته باشد فقط ثبت قلعه او حذف می‌شود و حساب کاربری‌اش باقی می‌ماند.'))return;
+    try{
+      await api('/api/admin/castles/'+encodeURIComponent(castle),{method:'DELETE',body:JSON.stringify({})});
+      await refreshAdmin();
+      players=await api('/api/players');renderPlayers();renderMap();
+      showToast('قلعه حذف شد.');
+    }catch(e){showToast(e.message||'حذف قلعه انجام نشد.',true);}
+  }
+
   async function refreshAdmin(){
-    const results=await Promise.allSettled([api('/api/players'),api('/api/admin/players'),api('/api/houses'),api('/api/admin/war-expeditions'),api('/api/admin/trades'),api('/api/admin/controls'),api('/api/admin/castles'),api('/api/admin/game-runtime')]);
+    const results=await Promise.allSettled([api('/api/players'),api('/api/admin/players'),api('/api/houses'),api('/api/admin/war-expeditions'),api('/api/admin/trades'),api('/api/admin/controls'),api('/api/admin/castles'),api('/api/admin/game-runtime'),api('/api/admin/scenarios'),api('/api/admin/roles')]);
     const fallback=(i,value)=>results[i]?.status==="fulfilled"?results[i].value:value;
-    const [lordList,adminLordList,houseList,warData,tradeData,controlData,castleData,runtimeData]=[
-      fallback(0,[]),fallback(1,[]),fallback(2,[]),fallback(3,{expeditions:[]}),fallback(4,{trades:[]}),fallback(5,{controls:{}}),fallback(6,{castles:[]}),fallback(7,{running:true})
+    const [lordList,adminLordList,houseList,warData,tradeData,controlData,castleData,runtimeData,scenarioData,roleData]=[
+      fallback(0,[]),fallback(1,[]),fallback(2,[]),fallback(3,{expeditions:[]}),fallback(4,{trades:[]}),fallback(5,{controls:{}}),fallback(6,{castles:[]}),fallback(7,{running:true}),fallback(8,{items:[]}),fallback(9,{items:[]})
     ];
     players=lordList;adminPlayers=adminLordList;houses=houseList;renderPlayers();renderMap();fillAdminRegions();updateAdminAssignPlayers();
     if(results.some(x=>x.status==="rejected"))showToast("بخشی از اطلاعات پنل مدیریت بارگذاری نشد.",true);
@@ -541,13 +559,17 @@ window.addEventListener("DOMContentLoaded", () => {
     const attackWars=wars.filter(x=>x.command==='attack'&&!Number(x.cancelled));
     $("adminCasualtyList").innerHTML=attackWars.length?attackWars.map(x=>{let a={},d={},saved={};try{a=JSON.parse(x.assetsJson||'{}');d=JSON.parse(x.defenderAssetsJson||'{}');saved=JSON.parse(x.casualtiesJson||'{}');}catch{};const done=Object.keys(saved||{}).length>0;const attackerArmy=Object.entries(a.army||{}).map(([k,v])=>'<label class="casualty-field"><span>'+escapeHTML(ADMIN_ARMY_LABELS[k]||k)+' · آورده مهاجم: '+Number(v)+'</span><input type="number" min="0" '+(done?'disabled':'')+' data-cas-side="attacker" data-cas-kind="army" data-cas-key="'+escapeHTML(k)+'"></label>').join('');const attackerEq=Object.entries(a.equipment||{}).map(([k,v])=>'<label class="casualty-field"><span>'+escapeHTML(ADMIN_EQUIPMENT_LABELS[k]||k)+' · آورده مهاجم: '+Number(v)+'</span><input type="number" min="0" '+(done?'disabled':'')+' data-cas-side="attacker" data-cas-kind="equipment" data-cas-key="'+escapeHTML(k)+'"></label>').join('');const defenderArmy=Object.entries(d).map(([k,v])=>'<label class="casualty-field"><span>'+escapeHTML(ADMIN_ARMY_LABELS[k]||k)+' · موجودی زمان حمله: '+Number(v)+'</span><input type="number" min="0" '+(done?'disabled':'')+' data-cas-side="defender" data-cas-kind="army" data-cas-key="'+escapeHTML(k)+'"></label>').join('');return '<article class="admin-war-card"><div class="admin-war-top"><div><span class="admin-war-status">⚔️ حمله</span><h3>'+escapeHTML(x.attackerUsername)+' · '+escapeHTML(x.sourceCastle)+' → '+escapeHTML(x.destinationCastle)+'</h3></div></div><div class="casualty-columns"><div><h4>مهاجم — مقدار نهایی دارایی</h4>'+attackerArmy+attackerEq+'</div><div><h4>مدافع — مقدار افزوده به دارایی فعلی</h4>'+defenderArmy+'</div></div>'+(done?'<div class="admin-war-result">✓ تلفات ثبت شده است.</div>':'<button class="primary" data-action="save-casualties" data-war-id="'+escapeHTML(x.id)+'">ثبت تلفات</button>')+'</article>';}).join(''):'<div class="admin-empty">هنوز دستوری با عنوان حمله برای ثبت تلفات وجود ندارد.</div>';
     const trades=tradeData.trades||[];$("adminTradeCount").textContent=trades.length;$("adminTradeList").innerHTML=trades.length?trades.map(x=>'<article class="admin-trade-card"><div class="admin-trade-head"><div><b>'+escapeHTML(x.sender_username||'—')+'</b> · '+escapeHTML(x.sender_castle)+' → <b>'+escapeHTML(x.receiver_username||'—')+'</b> · '+escapeHTML(x.receiver_castle)+'</div><span>'+escapeHTML(x.status)+'</span></div><div class="admin-trade-ids">فرستنده ID: '+escapeHTML(x.sender_account_id)+' · گیرنده ID: '+escapeHTML(x.receiver_account_id)+' · درخواست ID: '+escapeHTML(x.id)+'</div><div class="admin-trade-assets"><div><strong>ارسال</strong>'+adminAssetLines(x.sendAssets,ADMIN_RESOURCE_LABELS)+'</div><div><strong>دریافت</strong>'+adminAssetLines(x.receiveAssets,ADMIN_RESOURCE_LABELS)+'</div></div><small>'+escapeHTML(x.created_at)+(x.responded_at?' · پاسخ: '+escapeHTML(x.responded_at):'')+'</small></article>').join(''):'<div class="admin-empty">هنوز تجارتی ثبت نشده است.</div>';
-    const controls=controlData.controls||{};$("adminWarLockBtn").textContent=controls.war?'🔓 باز کردن لشکرکشی':'🔒 قفل کردن لشکرکشی';$("adminTradeLockBtn").textContent=controls.trade?'🔓 باز کردن تجارت':'🔒 قفل کردن تجارت';$("adminWarLockState").textContent=controls.war?'قفل است':'باز است';$("adminTradeLockState").textContent=controls.trade?'قفل است':'باز است';$("adminGameRunState").textContent=runtimeData.running?'در حال اجرا':'متوقف';
+    const scenarios=Array.isArray(scenarioData.items)?scenarioData.items:[],roles=Array.isArray(roleData.items)?roleData.items:[];
+    $("adminScenarioList").innerHTML=scenarios.length?scenarios.map(x=>'<article class="admin-war-card"><div class="admin-war-top"><div><span class="admin-war-status">📝 سناریو</span><h3>'+escapeHTML(x.username)+' · '+escapeHTML(x.lordName||'—')+'</h3></div><span>'+escapeHTML(x.side==="attacker"?'مهاجم':'مدافع')+'</span></div><div class="admin-war-details"><span>قلعه: '+escapeHTML(x.castle)+'</span><span>نبرد: '+escapeHTML(x.warId)+'</span><span>'+escapeHTML(x.createdAt)+'</span></div><div class="admin-war-assets"><div class="admin-asset-line"><span>متن سناریو</span><b style="white-space:pre-wrap;text-align:right">'+escapeHTML(x.text)+'</b></div></div></article>').join(''):'<div class="admin-empty">هنوز سناریویی ارسال نشده است.</div>';
+    $("adminRoleList").innerHTML=roles.length?roles.map(x=>'<article class="admin-war-card"><div class="admin-war-top"><div><span class="admin-war-status">📝 رول</span><h3>'+escapeHTML(x.username)+' · '+escapeHTML(x.lordName||'—')+'</h3></div><span>'+escapeHTML(x.castle)+'</span></div><div class="admin-war-details"><span>'+escapeHTML(x.createdAt)+'</span></div><div class="admin-war-assets"><div class="admin-asset-line"><span>متن رول</span><b style="white-space:pre-wrap;text-align:right">'+escapeHTML(x.text)+'</b></div></div></article>').join(''):'<div class="admin-empty">هنوز رولی ارسال نشده است.</div>';
+    const controls=controlData.controls||{};$("adminWarLockBtn").textContent=controls.war?'🔓 باز کردن لشکرکشی':'🔒 قفل کردن لشکرکشی';$("adminTradeLockBtn").textContent=controls.trade?'🔓 باز کردن تجارت':'🔒 قفل کردن تجارت';$("adminClaimLockBtn").textContent=controls.claim?'🔓 باز کردن انتخاب قلعه':'🔒 قفل کردن انتخاب قلعه';$("adminWarLockState").textContent=controls.war?'قفل است':'باز است';$("adminTradeLockState").textContent=controls.trade?'قفل است':'باز است';$("adminClaimLockState").textContent=controls.claim?'قفل است':'باز است';$("adminGameRunState").textContent=runtimeData.running?'در حال اجرا':'متوقف';
     const castles=castleData.castles||[];const previousCastle=$("adminCastleSelect")?.value;$("adminCastleSelect").innerHTML=castles.map(c=>'<option value="'+escapeHTML(c.castle)+'">'+escapeHTML(c.castle)+' — '+escapeHTML(c.region)+' — '+escapeHTML(c.username||'آزاد')+'</option>').join('');const selectedCastle=castles.some(c=>c.castle===previousCastle)?previousCastle:castles[0]?.castle;if(selectedCastle){$("adminCastleSelect").value=selectedCastle;await loadAdminCastleAssets(selectedCastle);}
   }
   async function toggleAdminControl(key){
-    const button=key==='war'?$("adminWarLockBtn"):$("adminTradeLockBtn");const currentlyLocked=button.textContent.includes('باز کردن');
+    const button=key==='war'?$("adminWarLockBtn"):key==='trade'?$("adminTradeLockBtn"):$("adminClaimLockBtn");const currentlyLocked=button.textContent.includes('باز کردن');
     const action=currentlyLocked?'باز کردن':'قفل کردن';
-    if(!adminConfirm(action+' '+(key==='war'?'لشکرکشی':'تجارت')+' انجام شود؟'))return;
+    const label=key==='war'?'لشکرکشی':key==='trade'?'تجارت':'انتخاب قلعه';
+    if(!adminConfirm(action+' '+label+' انجام شود؟'))return;
     try{await api('/api/admin/controls',{method:'POST',body:JSON.stringify({key,locked:!currentlyLocked})});await refreshAdmin();showToast(action+' انجام شد.');}catch(e){showToast(e.message,true);}
   }
   async function runAdminWeeklyUpdate(){
@@ -595,6 +617,9 @@ window.addEventListener("DOMContentLoaded", () => {
   $("adminRefreshWars").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
   $("adminRefreshTrades").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
   $("adminWarLockBtn").onclick=()=>toggleAdminControl('war');
+  $("adminClaimLockBtn").onclick=()=>toggleAdminControl('claim');
+  $("adminRefreshScenarios").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
+  $("adminRefreshRoles").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
   $("adminGameStart").onclick=()=>setAdminGameRuntime('start');
   $("adminGameStop").onclick=()=>setAdminGameRuntime('stop');
   $("adminRefreshCasualties").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
@@ -603,8 +628,6 @@ window.addEventListener("DOMContentLoaded", () => {
   $("adminTradeLockBtn").onclick=()=>toggleAdminControl('trade');
   $("adminWeeklyUpdate").onclick=runAdminWeeklyUpdate;
   $("adminAssignCastleBtn").onclick=assignAdminCastle;
-  $("adminScenariosBtn").onclick=()=>showToast('بخش سناریوها آماده می‌شود.');
-  $("adminRolesBtn").onclick=()=>showToast('بخش رول‌ها آماده می‌شود.');
 
   function openAdminPanel(target){
     const panels=document.querySelectorAll("[data-admin-panel]");
