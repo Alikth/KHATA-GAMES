@@ -22,7 +22,14 @@ async function body(request) {
   if (!type.toLowerCase().startsWith("application/json")) { const e = new Error("JSON required"); e.status = 415; throw e; }
   const raw = await request.text();
   if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) { const e = new Error("Request body too large"); e.status = 413; throw e; }
-  try { return JSON.parse(raw); } catch { const e = new Error("Invalid JSON"); e.status = 400; throw e; }
+  try {
+    const parsed = JSON.parse(raw);
+    if(!parsed || typeof parsed !== "object" || Array.isArray(parsed)){ const e = new Error("JSON object required"); e.status = 400; throw e; }
+    return parsed;
+  } catch(e) {
+    if(e?.status) throw e;
+    const err = new Error("Invalid JSON"); err.status = 400; throw err;
+  }
 }
 function sameOrigin(request) {
   const origin = request.headers.get("Origin");
