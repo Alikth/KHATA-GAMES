@@ -532,7 +532,6 @@ async function handleApi(request, env, url) {
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]),b=await body(request),command=String(b.command||"");
     if(!["attack","deploy","siege"].includes(command))return json({error:"دستور معتبر نیست."},400);
-    const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND destination IN (?)").bind(id,session.user_id).first().catch(()=>null);
     const owner=await env.DB.prepare("SELECT c.* FROM castle_state c JOIN players p ON p.castle=c.castle AND p.account_id=? WHERE c.castle=(SELECT destination_castle FROM war_logs WHERE id=?) LIMIT 1").bind(session.user_id,id).first();
     const war=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
     if(!war)return json({error:"لشکرکشی پیدا نشد."},404);
