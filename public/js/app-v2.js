@@ -692,13 +692,13 @@ document.addEventListener("click", async e => {
     e.preventDefault();
     e.stopImmediatePropagation();
     if (typeof window.khataOpenCastleManagement === "function") {
-      await window.khataOpenCastleManagement();
+      await window.khataOpenCastleManagement(manage.dataset.castle);
     } else {
       const src = document.querySelector('script[src*="/js/castle-management-fixed.js"]');
       if (src) {
         await new Promise((resolve, reject) => {
           const tag = document.createElement("script");
-          tag.src = src.src.split("?")[0] + "?v=1";
+          tag.src = "/js/castle-management-v2.js?v=6";
           tag.onload = resolve;
           tag.onerror = reject;
           document.head.appendChild(tag);
