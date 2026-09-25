@@ -620,8 +620,29 @@ async function handleApi(request, env, url) {
     await ensureEconomySchema(env);const b=await body(request),name=String(b.name||"").trim(),region=String(b.region||"").trim(),naval=!!b.naval;
     if(!name||name.length>100)return json({error:"نام قلعه معتبر نیست."},400);if(!GAME_REGIONS.includes(region))return json({error:"اقلیم معتبر نیست."},400);
     const exists=await env.DB.prepare("SELECT castle FROM castle_state WHERE lower(castle)=lower(?) UNION SELECT name FROM dynamic_castles WHERE lower(name)=lower(?)").bind(name,name).first();if(exists)return json({error:"این قلعه قبلاً ثبت شده است."},409);
-    await env.DB.prepare("INSERT INTO dynamic_castles(name,region,naval,created_at) VALUES (?,?,?,?)").bind(name,region,naval?1:0,new Date().toISOString()).run();
-    await initializeCastleEconomy(env,name,region,naval);return json({ok:true,castle:{name,region,naval}});
+    try{
+      await env.DB.prepare("INSERT INTO dynamic_castles(name,region,naval,created_at) VALUES (?,?,?,?)").bind(name,region,naval?1:0,new Date().toISOString()).run();
+    }catch(e){
+      if(String(e?.message||e).toLowerCase().includes("unique"))return json({error:"این قلعه همزمان توسط دیگری ثبت شد."},409);
+      throw e;
+    }
+    try{
+      await initializeCastleEconomy(env,name,region,naval);
+    }catch(e){
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM castle_production WHERE castle=?").bind(name),
+        env.DB.prepare("DELETE FROM castle_camps WHERE castle=?").bind(name),
+        env.DB.prepare("DELETE FROM castle_special_camps WHERE castle=?").bind(name),
+        env.DB.prepare("DELETE FROM castle_army WHERE castle=?").bind(name),
+        env.DB.prepare("DELETE FROM castle_equipment WHERE castle=?").bind(name),
+        env.DB.prepare("DELETE FROM castle_fleet WHERE castle=?").bind(name),
+        env.DB.prepare("DELETE FROM castle_week_state WHERE castle=?").bind(name),
+        env.DB.prepare("DELETE FROM castle_state WHERE castle=?").bind(name),
+        env.DB.prepare("DELETE FROM dynamic_castles WHERE name=?").bind(name)
+      ]);
+      throw e;
+    }
+    return json({ok:true,castle:{name,region,naval}});
   }
   if (method==="POST" && path.match(/^\/api\/admin\/war-expeditions\/[^/]+\/outcome$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);await ensureWarLogSchema(env);
