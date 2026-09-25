@@ -757,14 +757,15 @@ async function handleApi(request, env, url) {
     const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
     if(!row)return json({error:"لشکرکشی پیدا نشد."},404);
     if(Number(row.cancelled))return json({error:"این لشکرکشی قبلاً لغو شده است."},409);
-    if(!warIsActive(row))return json({error:"زمان رسیدن این لشکرکشی گذشته است."},409);
+    const rt=await warRuntime(env);
+    if(!warIsActive(row,rt))return json({error:"زمان رسیدن این لشکرکشی گذشته است."},409);
     const assets=JSON.parse(row.assets_json||"{}"); const updates=[];
     if(!Number(row.is_fake)){
       for(const kind of ["army","equipment","fleet"]){
         for(const [key,raw] of Object.entries(assets[kind]||{})){
           const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";
           const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";
-          updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=?`).bind(Math.floor(Number(raw)||0),row.source_castle,key));
+          updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=? AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND cancelled=0 AND command IS NULL)`).bind(Math.floor(Number(raw)||0),row.source_castle,key,id));
         }
       }
     }
