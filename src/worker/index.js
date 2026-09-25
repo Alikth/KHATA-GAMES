@@ -481,8 +481,14 @@ async function handleApi(request, env, url) {
     return json({expeditions:rows.map(x=>({...x,active:warIsActive(x,rt),arrived:!warIsActive(x,rt)}))});
   }
   if (method==="GET" && path==="/api/my-war-expeditions/commands") {
-    await ensureWarLogSchema(env); const state=await requireCastleOwner(request,env); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
-    const rt=await warRuntime(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,source_castle AS sourceCastle,destination_castle AS destinationCastle,type,arrival_time AS arrivalTime,assets_json AS assetsJson,lord_present AS lordPresent,elapsed_seconds AS elapsedSeconds,duration_minutes AS durationMinutes FROM war_logs WHERE attacker_account_id=? AND source_castle=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(state.owner_account_id,state.castle).all()).results;
+    await ensureWarLogSchema(env);
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const castle=String(url.searchParams.get("castle")||"").trim();
+    if(!castle)return json({error:"قلعه مقصد برای بررسی دستورات مشخص نشده است."},400);
+    const state=await env.DB.prepare("SELECT c.* FROM castle_state c JOIN players p ON p.castle=c.castle AND p.account_id=? WHERE c.castle=? LIMIT 1").bind(session.user_id,castle).first();
+    if(!state)return json({error:"این قلعه متعلق به حساب شما نیست."},403);
+    const rt=await warRuntime(env);
+    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,source_castle AS sourceCastle,destination_castle AS destinationCastle,type,arrival_time AS arrivalTime,assets_json AS assetsJson,lord_present AS lordPresent,elapsed_seconds AS elapsedSeconds,duration_minutes AS durationMinutes FROM war_logs WHERE destination_castle=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(castle).all()).results;
     return json({commands:rows.filter(x=>!warIsActive(x,rt)).map(x=>({...x,arrived:true}))});
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/cancel$/)) {
@@ -522,13 +528,23 @@ async function handleApi(request, env, url) {
     const result=await env.DB.batch(statements);for(let i=0;i<deductions.length;i++)if(!result[i]?.meta?.changes)return json({error:"تغییر همزمان دارایی انجام نشد؛ دوباره تلاش کن."},409);return json({ok:true,id});
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/command$/)) {
-    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);await ensureWarLogSchema(env);
-    const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403); await ensureWarLogSchema(env);
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]),b=await body(request),command=String(b.command||"");
     if(!["attack","deploy","siege"].includes(command))return json({error:"دستور معتبر نیست."},400);
-    const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=?").bind(id,session.user_id).first();if(!row)return json({error:"لشکرکشی پیدا نشد."},404);
-    const rt=await warRuntime(env);if(Number(row.cancelled)||warIsActive(row,rt))return json({error:"این لشکرکشی هنوز به مقصد نرسیده است."},409);if(row.command)return json({error:"برای این لشکرکشی قبلاً دستور ثبت شده است."},409);
-    let defenderAssets={};if(command==="attack"||command==="siege"){const rows=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(row.destination_castle).all()).results;defenderAssets=Object.fromEntries(rows.map(x=>[x.unit_key,Number(x.count)]));}
+    const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND destination IN (?)").bind(id,session.user_id).first().catch(()=>null);
+    const owner=await env.DB.prepare("SELECT c.* FROM castle_state c JOIN players p ON p.castle=c.castle AND p.account_id=? WHERE c.castle=(SELECT destination_castle FROM war_logs WHERE id=?) LIMIT 1").bind(session.user_id,id).first();
+    const war=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
+    if(!war)return json({error:"لشکرکشی پیدا نشد."},404);
+    if(!owner)return json({error:"فقط صاحب قلعه مقصد می‌تواند برای این لشکرکشی دستور صادر کند."},403);
+    const rt=await warRuntime(env);
+    if(Number(war.cancelled)||warIsActive(war,rt))return json({error:"این لشکرکشی هنوز به مقصد نرسیده است."},409);
+    if(war.command)return json({error:"برای این لشکرکشی قبلاً دستور ثبت شده است."},409);
+    let defenderAssets={};
+    if(command==="attack"||command==="siege"){
+      const rows=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(war.destination_castle).all()).results;
+      defenderAssets=Object.fromEntries(rows.map(x=>[x.unit_key,Number(x.count)]));
+    }
     await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=? WHERE id=? AND command IS NULL").bind(command,new Date().toISOString(),JSON.stringify(defenderAssets),id).run();
     return json({ok:true,command});
   }
