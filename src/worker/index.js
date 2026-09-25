@@ -133,6 +133,9 @@ async function ensureWarLogSchema(env){
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN defender_assets_json TEXT NOT NULL DEFAULT '{}'").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN casualties_json TEXT NOT NULL DEFAULT '{}'").run();}catch{}
   if(durationAdded)await env.DB.prepare("UPDATE war_logs SET duration_minutes=0 WHERE run_started_at IS NULL AND elapsed_seconds=0 AND command IS NULL").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_war_logs_attacker_state ON war_logs(attacker_account_id,cancelled,command,created_at)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_war_logs_destination_state ON war_logs(destination_castle,cancelled,command,created_at)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_war_logs_source_state ON war_logs(source_castle,cancelled,command,created_at)").run();
 }
 async function ensureTradeSchema(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS trade_requests (
@@ -141,6 +144,8 @@ async function ensureTradeSchema(env){
     send_assets_json TEXT NOT NULL DEFAULT '{}', receive_assets_json TEXT NOT NULL DEFAULT '{}',
     status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL, responded_at TEXT
   )`).run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_trade_sender_status ON trade_requests(sender_account_id,status,created_at)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_trade_receiver_status ON trade_requests(receiver_account_id,status,created_at)").run();
 }
 async function ensureGameControls(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS game_controls (control_key TEXT PRIMARY KEY, locked INTEGER NOT NULL DEFAULT 0)`).run();
