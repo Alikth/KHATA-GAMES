@@ -66,7 +66,7 @@ export const houses = [
     { house: "Marbrand", castle: "Ashemark", icon: "🏯" }
   ]},
   { region: "Crownlands", icon: "🐉", castles: [
-    { house: "Crownlands", castle: "King's Landing", icon: "🌟👑" },
+    { house: "Crownlands", castle: "King's Landing", icon: "🌟👑⚓" },
     { house: "Targaryen", castle: "Dragonstone", icon: "⚓" },
     { house: "Bar Emmon", castle: "Sharp Point", icon: "🏯" }
   ]},
