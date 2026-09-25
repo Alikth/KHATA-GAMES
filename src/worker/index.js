@@ -218,8 +218,11 @@ async function ensureEconomySchema(env) {
 
   const week=gameWeekKey();
   const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
+  const deletedStatic=(await env.DB.prepare("SELECT name FROM deleted_castles").all()).results;
+  const deletedStaticSet=new Set(deletedStatic.map(x=>x.name));
   for (const r of houses) {
     for (const c of r.castles) {
+      if(deletedStaticSet.has(c.castle))continue;
       await env.DB.prepare("INSERT OR IGNORE INTO castle_state (castle,region) VALUES (?,?)").bind(c.castle,r.region).run();
       // Repair support rows once when migrating an older economy database.
       await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state (castle,last_week_key) VALUES (?,?)").bind(c.castle,week).run();
@@ -392,6 +395,11 @@ async function handleApi(request, env, url) {
   const session=await getSession(request,env);
   const userSession=await requireUser(request,env);
   if (method === "GET" && path === "/api/my-castles") { if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); return json((await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(userSession.user_id).all()).results); }
+  if (method === "GET" && path === "/api/claim/status") {
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    await ensureGameControls(env); const row=await env.DB.prepare("SELECT locked FROM game_controls WHERE control_key='claim'").first();
+    return json({locked:Number(row?.locked||0)===1});
+  }
   if (method === "POST" && path === "/api/register") {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
     if(await isGameControlLocked(env,"claim"))return json({error:"انتخاب قلعه فعلاً توسط ادمین قفل شده است."},423);
