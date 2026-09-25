@@ -204,3 +204,11 @@ body.nav-slide-demo .page.nav-slide-old{z-index:2}
 /* Lobby card separation fix */
 .game-grid{align-items:stretch;isolation:isolate;row-gap:28px}.game-card{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100%;background:rgba(8,10,12,.96);border-radius:3px}.game-card+.game-card{margin-top:0}.locked-game{border-color:#2c3236;background:rgba(7,9,11,.98)}.locked-game .game-content{background:linear-gradient(180deg,#0d1012,#080a0c)}.locked-game .coming-art{border-bottom:1px solid #292f33}.game-art{flex:0 0 auto}.game-content{position:relative;z-index:1;flex:1}
 @media(max-width:600px){.game-grid{gap:26px}.game-card{box-shadow:0 18px 55px rgba(0,0,0,.78)}.game-card+.game-card{margin-top:0}.locked-game{border-top:1px solid #454b4f}}
+
+
+.submission-modal-card{width:min(720px,94vw);text-align:right}
+.submission-textarea{display:block;width:100%;min-height:260px;resize:vertical;background:#080a0c;border:1px solid #30363a;color:#eee;padding:14px;outline:none;border-radius:2px;line-height:1.8;margin-top:14px}
+.submission-textarea:focus{border-color:#9a3c43;box-shadow:0 0 0 2px rgba(154,60,67,.1)}
+.my-castle-submissions{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:8px}
+.scenario-submit-btn,.role-submit-btn{width:100%}
+.admin-special-item-input{display:block;width:100%;min-height:150px;resize:vertical;background:#080a0c;border:1px solid #30363a;color:#eee;padding:12px;font-family:monospace;line-height:1.6;margin:8px 0}
