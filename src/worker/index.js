@@ -40,6 +40,7 @@ import {
   GENERAL_CAMPS,
   SPECIAL_CAMPS,
   EQUIPMENT,
+  SHIP_CAPACITY,
   EQUIPMENT_UPGRADE_COST,
   RESOURCE_KEYS,
   RESOURCE_LABELS,
@@ -571,6 +572,15 @@ async function handleApi(request, env, url) {
     const selected=b.assets&&typeof b.assets==="object"?b.assets:{},allowed={army:["castle_army","unit_key"],equipment:["castle_equipment","item_key"],fleet:["castle_fleet","ship_key"]},deductions=[],sanitizedAssets={};let selectedTotal=0;
     if(!isFake){for(const kind of type==="sea"?["army","equipment","fleet"]:["army","equipment"]){const group=selected[kind]&&typeof selected[kind]==="object"?selected[kind]:{};for(const [key,raw] of Object.entries(group)){const n=Math.floor(Number(raw));if(!Number.isFinite(n)||n<0||n>1000000)return json({error:"تعداد واردشده معتبر نیست."},400);if(!n)continue;const def=allowed[kind],row=await env.DB.prepare(`SELECT count FROM ${def[0]} WHERE castle=? AND ${def[1]}=?`).bind(state.castle,key).first();const have=Number(row?.count||0);if(n>have)return json({error:`تعداد ${key} بیشتر از موجودی قلعه است.`},400);deductions.push({table:def[0],keyField:def[1],key,n});sanitizedAssets[kind]??={};sanitizedAssets[kind][key]=n;selectedTotal+=n;}}
       if(!selectedTotal)return json({error:"برای لشکرکشی واقعی حداقل یک نیرو، ادوات یا کشتی انتخاب کن."},400);
+      if(type==="sea"){
+        const fleet=selected.fleet&&typeof selected.fleet==="object"?selected.fleet:{};
+        const transport=Math.floor(Number(fleet.transport||0)),warship=Math.floor(Number(fleet.warship||0));
+        if(transport+warship<1)return json({error:"لشکرکشی دریایی حداقل به یک کشتی نیاز دارد."},400);
+        const capacity=transport*SHIP_CAPACITY.transport+warship*SHIP_CAPACITY.warship;
+        const army=selected.army&&typeof selected.army==="object"?selected.army:{};
+        const required=Object.entries(army).reduce((sum,[key,raw])=>sum+(key==="cavalry"?2:1)*Math.floor(Number(raw)||0),0);
+        if(required>capacity)return json({error:`ظرفیت ناوگان کافی نیست. ظرفیت ${capacity} و ظرفیت موردنیاز نیروها ${required} است.`},400);
+      }
     }
     const statements=[];for(const d of deductions)statements.push(env.DB.prepare(`UPDATE ${d.table} SET count=count-? WHERE castle=? AND ${d.keyField}=? AND count>=?`).bind(d.n,state.castle,d.key,d.n));
     const id=newId(),createdAt=new Date().toISOString(),lordName=WAR_LORDS[source]||"";
