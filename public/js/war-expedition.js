@@ -27,17 +27,21 @@
     const err=$('weError');err.textContent='';const source=$('weSource').value,destination=$('weDestination').value,duration=durationMinutes();
     if(!source||!destination||!duration){err.textContent='مبدا، مقصد و مدت سفر را کامل کن.';return;}
     if(duration>10080){err.textContent='مدت سفر نمی‌تواند بیشتر از 7 روز باشد.';return;}
+    if(!fake){
+      values=collect();
+      const total=Object.values(values).flatMap(x=>Object.values(x)).reduce((a,b)=>a+b,0);
+      if(!total){err.textContent='برای لشکرکشی واقعی حداقل یک نیرو، ادوات یا کشتی انتخاب کن.';return;}
+    }else values={};
     if(type==='sea'){
       const src=houses.some(r=>r.castles.some(c=>c.castle===source&&c.naval)),dst=houses.some(r=>r.castles.some(c=>c.castle===destination&&c.naval));
       if(!src||!dst){err.textContent='لشکرکشی دریایی فقط بین قلعه‌های دریایی امکان‌پذیر است.';return;}
-      const fleet=values.fleet||collect().fleet||{},transport=Math.floor(Number(fleet.transport||0)),warship=Math.floor(Number(fleet.warship||0));
+      const fleet=values.fleet||{},transport=Math.floor(Number(fleet.transport||0)),warship=Math.floor(Number(fleet.warship||0));
       const capacity=transport*600+warship*400;
-      const army=collect().army||{};
+      const army=values.army||{};
       const required=Object.entries(army).reduce((sum,[key,n])=>sum+(key==='cavalry'?2:1)*Math.floor(Number(n)||0),0);
       if(transport+warship<1){err.textContent='لشکرکشی دریایی حداقل به یک کشتی نیاز دارد.';return;}
       if(required>capacity){err.textContent='ظرفیت ناوگان کافی نیست. ظرفیت '+capacity+' و ظرفیت موردنیاز نیروها '+required+' است.';return;}
     }
-    if(!fake){values=collect();const total=Object.values(values).flatMap(x=>Object.values(x)).reduce((a,b)=>a+b,0);if(!total){err.textContent='برای لشکرکشی واقعی حداقل یک نیرو، ادوات یا کشتی انتخاب کن.';return;}}else values={};
     $('weConfirmStep').innerHTML='<h3>نظر نهایی؟</h3><div class="we-summary"><div>نوع: <b>'+esc(type==='land'?'زمینی':'دریایی')+'</b></div><div>مبدا: <b>'+esc(source)+'</b></div><div>مقصد: <b>'+esc(destination)+'</b></div><div>مدت سفر: <b>'+esc(Math.floor(duration/60)+' ساعت و '+(duration%60)+' دقیقه')+'</b></div><div>زمان رسیدن تقریبی: <b>'+esc(arrivalText(duration))+'</b></div><div>لرد: <b>'+esc(lordPresent?'حاضر':'غایب')+'</b></div><div>دارایی: <b>'+(fake?'لشکرکشی فیک — بدون کسر دارایی':esc(Object.entries(values).flatMap(([kind,obj])=>Object.entries(obj).map(([k,n])=>(labels[k]||k)+' × '+fmt(n))).join(' · ')))+'</b></div></div><div class="we-actions"><button id="weFinalNo" class="we-btn negative">منفی — لغو</button><button id="weFinalYes" class="we-btn positive">مثبت — انجام لشکرکشی</button></div><div id="weConfirmError" class="we-error"></div>';
     $('weFormStep').classList.remove('active');$('weConfirmStep').classList.add('active');$('weFinalNo').onclick=()=>{$('weConfirmStep').classList.remove('active');$('weFormStep').classList.add('active');};$('weFinalYes').onclick=submit;
   }
