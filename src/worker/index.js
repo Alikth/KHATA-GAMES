@@ -423,6 +423,7 @@ async function handleApi(request, env, url) {
     return json(await loadCastleEconomy(env,state.castle));
   }
   if (method==="POST" && path==="/api/my-castle/production/upgrade") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     const key=String(b.key||""); const def=GENERAL_PRODUCTIONS[key];
     if(!def)return json({error:"تولیدی معتبر نیست."},400);
@@ -431,6 +432,7 @@ async function handleApi(request, env, url) {
     return json(result);
   }
   if (method==="POST" && path==="/api/my-castle/camp/upgrade") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     const key=String(b.key||""); const def=GENERAL_CAMPS[key];
     if(!def)return json({error:"کمپ معتبر نیست."},400);
@@ -439,6 +441,7 @@ async function handleApi(request, env, url) {
     return json(result);
   }
   if (method==="POST" && path==="/api/my-castle/special-camp/upgrade") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     const key=String(b.key||""), def=(SPECIAL_CAMPS[state.region]||[]).find(x=>x.key===key);
     if(!def)return json({error:"کمپ ویژه این اقلیم معتبر نیست."},400);
@@ -447,6 +450,7 @@ async function handleApi(request, env, url) {
     return json(result);
   }
   if (method==="POST" && path==="/api/my-castle/special-production/upgrade") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     const sp=SPECIAL_PRODUCTIONS[state.region]; if(!sp)return json({error:"این اقلیم تولیدی ویژه ندارد."},400);
     const result=await upgradeResourceBacked(env,state.castle,"castle_production",sp.key,sp,sp.max);
@@ -454,6 +458,7 @@ async function handleApi(request, env, url) {
     return json(result);
   }
   if (method==="POST" && path==="/api/my-castle/workshop/upgrade") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     if(state.workshop_level>=5)return json({error:"کارگاه به حداکثر سطح رسیده است."},400);
     const oldCoins=Number(state.coins||0); if(oldCoins<EQUIPMENT_UPGRADE_COST)return json({error:"6000 سکه لازم است."},400);
@@ -466,6 +471,7 @@ async function handleApi(request, env, url) {
     return json({ok:true,newLevel:nextLevel});
   }
   if (method==="POST" && path==="/api/my-castle/equipment/build") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     const key=String(b.key||""),def=EQUIPMENT[key]; if(!def)return json({error:"ادوات معتبر نیست."},400);
     if(Number(state.workshop_level)<def.level)return json({error:`برای ساخت ${def.label} کارگاه باید حداقل سطح ${def.level} باشد.`},400);
@@ -490,6 +496,7 @@ async function handleApi(request, env, url) {
     return json({ok:true});
   }
   if (method==="POST" && path==="/api/my-castle/port/upgrade") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     if(!Number(state.port_enabled))return json({error:"این قلعه فعلاً بندری تعریف نشده است."},400);
     if(Number(state.port_level)>=15)return json({error:"اسکله به حداکثر سطح 15 رسیده است."},400);
