@@ -190,6 +190,8 @@ async function ensureEconomySchema(env) {
   // guarantees that the two runtime support tables exist after an old deploy.
   for (const sql of ECONOMY_SCHEMA) await env.DB.prepare(sql).run();
   await ensureDynamicCastleSchema(env);
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_players_account_created ON players(account_id,created_at)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_castle_state_owner ON castle_state(owner_account_id)").run();
 
   const ready=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='seeded'").first();
   const version=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='schema_version'").first();
@@ -829,7 +831,7 @@ async function handleApi(request, env, url) {
   if (method==="GET" && path==="/api/trades/destinations") {
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     await ensureEconomySchema(env);
-    const rows=(await env.DB.prepare("SELECT c.castle,c.region,p.house,COALESCE(u.username,p.username) AS username FROM castle_state c JOIN players p ON p.castle=c.castle AND p.account_id=c.owner_account_id LEFT JOIN users u ON u.id=c.owner_account_id WHERE c.owner_account_id IS NOT NULL AND c.owner_account_id<>? ORDER BY c.region,c.castle").bind(session.user_id).all()).results;
+    const rows=(await env.DB.prepare("SELECT c.castle,c.region,p.house,p.username AS username FROM castle_state c JOIN players p ON p.castle=c.castle AND p.account_id=c.owner_account_id LEFT JOIN users u ON u.id=c.owner_account_id WHERE c.owner_account_id IS NOT NULL AND c.owner_account_id<>? ORDER BY c.region,c.castle").bind(session.user_id).all()).results;
     return json({castles:rows});
   }
   if (method==="GET" && path==="/api/trades/incoming") {
