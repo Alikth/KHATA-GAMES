@@ -659,6 +659,7 @@ async function handleApi(request, env, url) {
        if(!naval&&n>0)return json({error:"قلعه غیربندری نمی‌تواند سطح اسکله داشته باشد."},400);
      }
      if(changes.portEnabled===false)changes.portLevel=0;
+     if(!naval&&changes.fleet&&Object.values(changes.fleet).some(v=>Number(v)>0))return json({error:"قلعه غیربندری نمی‌تواند کشتی داشته باشد."},400);
      const updates=[];
     const res=changes.resources&&typeof changes.resources==="object"?changes.resources:{};
     for(const k of RESOURCE_KEYS){
