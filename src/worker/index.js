@@ -599,11 +599,15 @@ async function handleApi(request, env, url) {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureEconomySchema(env);
     const week=gameWeekKey();
-    const done=await env.DB.prepare("SELECT week_key FROM game_week_runs WHERE week_key=?").bind(week).first();
-    if(done)return json({error:"آپدیت این هفته قبلاً انجام شده است.",week,already:true},409);
-    await runWeeklyUpdate(env,true);
-    await env.DB.prepare("INSERT INTO game_week_runs(week_key,processed_at) VALUES(?,?)").bind(week,new Date().toISOString()).run();
-    return json({ok:true,week});
+    const claim=await env.DB.prepare("INSERT OR IGNORE INTO game_week_runs(week_key,processed_at) VALUES(?,?)").bind(week,new Date().toISOString()).run();
+    if(!claim.meta?.changes)return json({error:"آپدیت این هفته قبلاً انجام شده است.",week,already:true},409);
+    try{
+      await runWeeklyUpdate(env,false);
+      return json({ok:true,week});
+    }catch(e){
+      await env.DB.prepare("DELETE FROM game_week_runs WHERE week_key=?").bind(week).run();
+      throw e;
+    }
   }
   if (method==="GET" && path==="/api/admin/trades") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
