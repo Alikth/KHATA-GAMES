@@ -190,7 +190,7 @@ async function ensureEconomySchema(env) {
 
   const ready=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='seeded'").first();
   const version=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='schema_version'").first();
-  if(ready?.value==="1" && version?.value==="2") return;
+  if(ready?.value==="1" && version?.value==="3") return;
 
   const week=gameWeekKey();
   const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
@@ -209,8 +209,13 @@ async function ensureEconomySchema(env) {
       for (const spc of (SPECIAL_CAMPS[r.region]||[])) await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps (castle,camp_key,level) VALUES (?,?,0)").bind(c.castle,spc.key).run();
     }
   }
+  if(ready?.value==="1" && version?.value==="2"){
+    for(const castle of NAVAL_CASTLES){
+      await env.DB.prepare("UPDATE castle_fleet SET count=CASE WHEN count<1 THEN 1 ELSE count END WHERE castle=? AND ship_key IN ('transport','warship')").bind(castle).run();
+    }
+  }
   await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('seeded','1')").run();
-  await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('schema_version','2')").run();
+  await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('schema_version','3')").run();
 }
 
 async function loadCastleEconomy(env, castle) {
