@@ -668,7 +668,7 @@ window.addEventListener("DOMContentLoaded", () => {
       if (typeof window.khataOpenCastleManagement !== "function") {
         await new Promise((resolve, reject) => {
           const tag = document.createElement("script");
-          tag.src = "/js/castle-management-v2.js?v=8";
+          tag.src = "/js/castle-management-v2.js?v=9";
           tag.onload = resolve;
           tag.onerror = () => reject(new Error("فایل مدیریت قلعه بارگذاری نشد."));
           document.head.appendChild(tag);
@@ -705,7 +705,7 @@ document.addEventListener("click", async e => {
     } else {
       await new Promise((resolve, reject) => {
         const tag = document.createElement("script");
-        tag.src = "/js/castle-management-v2.js?v=8";
+        tag.src = "/js/castle-management-v2.js?v=9";
         tag.onload = resolve;
         tag.onerror = () => reject(new Error("فایل مدیریت قلعه بارگذاری نشد."));
         document.head.appendChild(tag);
