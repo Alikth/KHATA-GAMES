@@ -777,7 +777,7 @@ async function handleApi(request, env, url) {
     if(!["accept","reject"].includes(action))return json({error:"عملیات تجارت معتبر نیست."},400);
     const row=await env.DB.prepare("SELECT * FROM trade_requests WHERE id=? AND receiver_account_id=? AND status='pending'").bind(id,session.user_id).first();
     if(!row)return json({error:"درخواست تجارت پیدا نشد."},404);
-    if(action==="reject"){await env.DB.prepare("UPDATE trade_requests SET status='rejected',responded_at=? WHERE id=? AND status='pending'").bind(new Date().toISOString(),id).run();return json({ok:true});}
+    if(action==="reject"){const result=await env.DB.prepare("UPDATE trade_requests SET status='rejected',responded_at=? WHERE id=? AND status='pending'").bind(new Date().toISOString(),id).run();if(!result.meta?.changes)return json({error:"درخواست تجارت قبلاً پاسخ داده شده است."},409);return json({ok:true});}
     const sendAssets=JSON.parse(row.send_assets_json||"{}"), receiveAssets=JSON.parse(row.receive_assets_json||"{}");
     const sender=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=? AND owner_account_id=?").bind(row.sender_castle,row.sender_account_id).first();
     const receiver=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=? AND owner_account_id=?").bind(row.receiver_castle,row.receiver_account_id).first();
