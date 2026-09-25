@@ -263,7 +263,6 @@ async function runWeeklyUpdate(env, force=false) {
     for(const p of prods){
       const def=GENERAL_PRODUCTIONS[p.production_key]; if(!def||!p.level) continue;
       let gain=Number(p.level)*def.yield;
-      if(p.production_key==="farm"&&Number(p.level)===1) gain=300;
       gain*=REGION_MULTIPLIERS[s.region]?.[p.production_key]||1;
       add(def.base,gain);
     }
