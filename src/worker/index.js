@@ -528,7 +528,7 @@ async function handleApi(request, env, url) {
     const state=await env.DB.prepare("SELECT c.* FROM castle_state c JOIN players p ON p.castle=c.castle AND p.account_id=? WHERE c.castle=? LIMIT 1").bind(session.user_id,castle).first();
     if(!state)return json({error:"این قلعه متعلق به حساب شما نیست."},403);
     const rt=await warRuntime(env);
-    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,source_castle AS sourceCastle,destination_castle AS destinationCastle,type,arrival_time AS arrivalTime,assets_json AS assetsJson,lord_present AS lordPresent,elapsed_seconds AS elapsedSeconds,duration_minutes AS durationMinutes FROM war_logs WHERE destination_castle=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(castle).all()).results;
+    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,source_castle AS sourceCastle,destination_castle AS destinationCastle,type,arrival_time AS arrivalTime,lord_present AS lordPresent,elapsed_seconds AS elapsedSeconds,duration_minutes AS durationMinutes FROM war_logs WHERE destination_castle=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(castle).all()).results;
     return json({commands:rows.filter(x=>!warIsActive(x,rt)).map(x=>({...x,arrived:true}))});
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/cancel$/)) {
