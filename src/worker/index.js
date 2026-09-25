@@ -799,6 +799,12 @@ async function handleApi(request, env, url) {
     const incoming=rows.filter(x=>x.receiver_account_id===session.user_id);
     const byCastle={}; incoming.forEach(x=>byCastle[x.receiver_castle]=(byCastle[x.receiver_castle]||0)+1); return json({count:incoming.length,byCastle});
   }
+  if (method==="GET" && path==="/api/trades/destinations") {
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    await ensureEconomySchema(env);
+    const rows=(await env.DB.prepare("SELECT c.castle,c.region,p.house,COALESCE(u.username,p.username) AS username FROM castle_state c JOIN players p ON p.castle=c.castle AND p.account_id=c.owner_account_id LEFT JOIN users u ON u.id=c.owner_account_id WHERE c.owner_account_id IS NOT NULL AND c.owner_account_id<>? ORDER BY c.region,c.castle").bind(session.user_id).all()).results;
+    return json({castles:rows});
+  }
   if (method==="GET" && path==="/api/trades/incoming") {
     await ensureTradeSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
