@@ -718,7 +718,28 @@ async function handleApi(request, env, url) {
       if(pair[1]!==undefined){const n=Math.floor(Number(pair[1]));if(!Number.isFinite(n)||n<0)return json({error:"سطح نامعتبر است."},400);updates.push(env.DB.prepare("UPDATE castle_state SET "+pair[0]+"=? WHERE castle=?").bind(n,castle));}
     }
     if(changes.portEnabled!==undefined)updates.push(env.DB.prepare("UPDATE castle_state SET port_enabled=? WHERE castle=?").bind(changes.portEnabled?1:0,castle));
-    const updateRows=async(table,keyField,source)=>{if(!source||typeof source!=="object")return;for(const [k,raw] of Object.entries(source)){const n=Math.floor(Number(raw));if(!Number.isFinite(n)||n<0||n>1000000000)throw new Error("مقدار نامعتبر است.");let valid=true;if(table==="castle_production")valid=!!GENERAL_PRODUCTIONS[k]||!!(SPECIAL_PRODUCTIONS[state.region]&&SPECIAL_PRODUCTIONS[state.region].key===k);else if(table==="castle_camps")valid=!!GENERAL_CAMPS[k];else if(table==="castle_special_camps")valid=!!(SPECIAL_CAMPS[state.region]||[]).find(x=>x.key===k);if(!valid&&table!=="castle_army"&&table!=="castle_equipment"&&table!=="castle_fleet")throw new Error("کلید نامعتبر است.");const valueField=(table==="castle_army"||table==="castle_equipment"||table==="castle_fleet")?"count":"level";updates.push(env.DB.prepare("UPDATE "+table+" SET "+valueField+"=? WHERE castle=? AND "+keyField+"=?").bind(n,castle,k));}};
+    const updateRows=async(table,keyField,source)=>{
+      if(!source||typeof source!=="object")return;
+      for(const [k,raw] of Object.entries(source)){
+        const n=Math.floor(Number(raw));
+        if(!Number.isFinite(n)||n<0||n>1000000000)throw new Error("مقدار نامعتبر است.");
+        let valid=true,maxLevel=null;
+        if(table==="castle_production"){
+          const def=GENERAL_PRODUCTIONS[k]||((SPECIAL_PRODUCTIONS[state.region]&&SPECIAL_PRODUCTIONS[state.region].key===k)?SPECIAL_PRODUCTIONS[state.region]:null);
+          valid=!!def;maxLevel=def?.max??null;
+        }else if(table==="castle_camps"){
+          const def=GENERAL_CAMPS[k];valid=!!def;maxLevel=def?.max??null;
+        }else if(table==="castle_special_camps"){
+          const def=(SPECIAL_CAMPS[state.region]||[]).find(x=>x.key===k);valid=!!def;maxLevel=def?.max??null;
+        }
+        if(!valid&&table!=="castle_army"&&table!=="castle_equipment"&&table!=="castle_fleet")throw new Error("کلید نامعتبر است.");
+        if(maxLevel!==null&&n>Number(maxLevel))throw new Error("سطح واردشده از حداکثر مجاز بیشتر است.");
+        if(table==="castle_fleet"&&!naval&&n>0)throw new Error("قلعه غیربندری نمی‌تواند کشتی داشته باشد.");
+        const valueField=(table==="castle_army"||table==="castle_equipment"||table==="castle_fleet")?"count":"level";
+        updates.push(env.DB.prepare("UPDATE "+table+" SET "+valueField+"=? WHERE castle=? AND "+keyField+"=?").bind(n,castle,k));
+      }
+    };
+
     try{
       await updateRows("castle_production","production_key",changes.production);
       await updateRows("castle_camps","camp_key",changes.camps);
