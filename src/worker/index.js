@@ -944,7 +944,7 @@ export default {
     const url=new URL(request.url);
     try {
       if(url.pathname.startsWith("/api/")){
-        await cleanupExpiredSessions(env);
+        if(url.pathname==="/api/auth/status"||url.pathname==="/api/auth/login"||url.pathname==="/api/auth/register")await cleanupExpiredSessions(env);
         return await handleApi(request,env,url);
       }
       const characterImage = await serveCharacterImage(request, env, url);
