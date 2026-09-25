@@ -79,7 +79,7 @@
       var id=cancel.dataset.cmCancelWarId;if(!id)return;
       if(!confirm('آیا از لغو این لشکرکشی مطمئن هستید؟\\nنیروها و ادوات به قلعه مبدا برمی‌گردند.'))return;
       cancel.disabled=true;cancel.textContent='در حال لغو...';
-      try{await api('/api/war-expeditions/'+encodeURIComponent(id)+'/cancel',{method:'POST'});await load();alert('لشکرکشی لغو شد و نیروها و ادوات به قلعه مبدا برگشتند.');}
+      try{await api('/api/war-expeditions/'+encodeURIComponent(id)+'/cancel',{method:'POST'});await load(currentData?.castle);alert('لشکرکشی لغو شد و نیروها و ادوات به قلعه مبدا برگشتند.');}
       catch(err){cancel.disabled=false;cancel.textContent='لغو لشکرکشی';alert(err.message);}
       return;
     }
@@ -91,7 +91,7 @@
       buttons.forEach(x=>{x.disabled=true;});
       try{
         await api('/api/war-expeditions/'+encodeURIComponent(id)+'/command',{method:'POST',body:JSON.stringify({command:commandName})});
-        await load();
+        await load(currentData?.castle);
         alert(commandName==='attack'?'دستور حمله ثبت شد.':commandName==='siege'?'دستور محاصره ثبت شد.':'دستور استقرار ثبت شد.');
       }catch(err){
         buttons.forEach(x=>{x.disabled=false;});
