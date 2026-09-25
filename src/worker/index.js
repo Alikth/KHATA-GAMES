@@ -683,7 +683,7 @@ async function handleApi(request, env, url) {
     let stored={},defender={};try{stored=JSON.parse(row.assets_json||"{}");defender=JSON.parse(row.defender_assets_json||"{}");}catch{}
     const b=await body(request),att=b.attacker&&typeof b.attacker==="object"?b.attacker:{},def=b.defender&&typeof b.defender==="object"?b.defender:{};
     const qs=[],saved={attacker:{army:{},equipment:{}},defender:{army:{}}};
-    for(const kind of ["army","equipment"]){for(const [key,raw] of Object.entries(att[kind]||{})){if(!Object.prototype.hasOwnProperty.call(stored[kind]||{},key))return json({error:"واحد مهاجم نامعتبر است."},400);const n=Math.floor(Number(raw));const brought=Number(stored[kind]?.[key]||0);if(!Number.isFinite(n)||n<0||n>brought)return json({error:"مقدار تلفات مهاجم نامعتبر است."},400);const table=kind==="army"?"castle_army":"castle_equipment",field=kind==="army"?"unit_key":"item_key";qs.push(env.DB.prepare(`UPDATE ${table} SET count=? WHERE castle=? AND ${field}=?`).bind(n,row.source_castle,key));saved.attacker[kind][key]=n;}}
+    for(const kind of ["army","equipment"]){for(const [key,raw] of Object.entries(att[kind]||{})){if(!Object.prototype.hasOwnProperty.call(stored[kind]||{},key))return json({error:"واحد مهاجم نامعتبر است."},400);const n=Math.floor(Number(raw));const brought=Number(stored[kind]?.[key]||0);if(!Number.isFinite(n)||n<0||n>brought)return json({error:"مقدار تلفات مهاجم نامعتبر است."},400);const table=kind==="army"?"castle_army":"castle_equipment",field=kind==="army"?"unit_key":"item_key";qs.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=?`).bind(n,row.source_castle,key));saved.attacker[kind][key]=n;}}
     for(const [key,raw] of Object.entries(def.army||{})){if(!Object.prototype.hasOwnProperty.call(defender,key))return json({error:"واحد مدافع نامعتبر است."},400);const n=Math.floor(Number(raw));if(!Number.isFinite(n)||n<0||n>1000000000)return json({error:"مقدار تلفات مدافع نامعتبر است."},400);qs.push(env.DB.prepare("UPDATE castle_army SET count=count+? WHERE castle=? AND unit_key=?").bind(n,row.destination_castle,key));saved.defender.army[key]=n;}
     if(!qs.length)return json({error:"حداقل یک مقدار وارد کن."},400);qs.push(env.DB.prepare("UPDATE war_logs SET casualties_json=? WHERE id=? AND (casualties_json IS NULL OR casualties_json='{}')").bind(JSON.stringify(saved),id));const result=await env.DB.batch(qs);if(!result[qs.length-1]?.meta?.changes)return json({error:"تلفات همزمان ثبت شده است."},409);return json({ok:true});
   }
@@ -790,8 +790,8 @@ async function handleApi(request, env, url) {
     statements.push(env.DB.prepare("DELETE FROM castle_week_state WHERE castle=?").bind(castle));
     statements.push(env.DB.prepare("DELETE FROM castle_equipment_limits WHERE castle=?").bind(castle));
     statements.push(env.DB.prepare("DELETE FROM castle_state WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("INSERT OR REPLACE INTO deleted_castles(name,deleted_at) VALUES(?,?)").bind(castle,now));
     if(dynamic) statements.push(env.DB.prepare("DELETE FROM dynamic_castles WHERE name=?").bind(castle));
-    else statements.push(env.DB.prepare("INSERT OR REPLACE INTO deleted_castles(name,deleted_at) VALUES(?,?)").bind(castle,now));
     await env.DB.batch(statements);
     return json({ok:true,castle,playerUnlinked:true});
   }
