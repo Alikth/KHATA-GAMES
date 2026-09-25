@@ -694,17 +694,14 @@ document.addEventListener("click", async e => {
     if (typeof window.khataOpenCastleManagement === "function") {
       await window.khataOpenCastleManagement(manage.dataset.castle);
     } else {
-      const src = document.querySelector('script[src*="/js/castle-management-fixed.js"]');
-      if (src) {
-        await new Promise((resolve, reject) => {
-          const tag = document.createElement("script");
-          tag.src = "/js/castle-management-v2.js?v=6";
-          tag.onload = resolve;
-          tag.onerror = reject;
-          document.head.appendChild(tag);
-        });
-        await window.khataOpenCastleManagement?.(manage.dataset.castle);
-      }
+      await new Promise((resolve, reject) => {
+        const tag = document.createElement("script");
+        tag.src = "/js/castle-management-v2.js?v=6";
+        tag.onload = resolve;
+        tag.onerror = () => reject(new Error("فایل مدیریت قلعه بارگذاری نشد."));
+        document.head.appendChild(tag);
+      });
+      await window.khataOpenCastleManagement?.(manage.dataset.castle);
     }
     return;
   }
