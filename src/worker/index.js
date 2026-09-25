@@ -565,8 +565,8 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path.match(/^\/api\/admin\/war-expeditions\/[^/]+\/outcome$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);await ensureWarLogSchema(env);
     const id=decodeURIComponent(path.split("/")[4]),outcome=String((await body(request)).outcome||"");if(!["attacker","defender"].includes(outcome))return json({error:"نتیجه معتبر نیست."},400);
-    const row=await env.DB.prepare("SELECT id,command FROM war_logs WHERE id=?").bind(id).first();if(!row||row.command!=="attack")return json({error:"این گزارش حمله قابل نتیجه‌گذاری نیست."},404);
-    await env.DB.prepare("UPDATE war_logs SET outcome=? WHERE id=?").bind(outcome,id).run();return json({ok:true,outcome});
+    const row=await env.DB.prepare("SELECT id,command,outcome FROM war_logs WHERE id=?").bind(id).first();if(!row||!["attack","siege"].includes(row.command))return json({error:"این گزارش برای ثبت نتیجه آماده نیست."},404);if(row.outcome)return json({error:"نتیجه این نبرد قبلاً ثبت شده است."},409);
+    const result=await env.DB.prepare("UPDATE war_logs SET outcome=? WHERE id=? AND outcome IS NULL").bind(outcome,id).run();if(!result.meta?.changes)return json({error:"نتیجه همزمان تغییر کرده است."},409);return json({ok:true,outcome});
   }
   if (method==="POST" && path.match(/^\/api\/admin\/war-expeditions\/[^/]+\/casualties$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);await ensureWarLogSchema(env);
