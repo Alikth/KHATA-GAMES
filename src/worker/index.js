@@ -346,8 +346,13 @@ async function handleApi(request, env, url) {
     const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||"");
     if(!validAccountUsername(username)) return json({error:"نام کاربری باید ۳ تا ۲۴ کاراکتر و فقط شامل حروف، عدد یا _ باشد."},400);
     if(password.length<12 || password.length>MAX_PASSWORD_LENGTH) return json({error:"رمز عبور باید بین ۱۲ تا ۱۲۸ کاراکتر باشد."},400);
-    const exists=await env.DB.prepare("SELECT id FROM users WHERE lower(username)=lower(?)").bind(username).first(); if(exists) return json({error:"این نام کاربری قبلاً ثبت شده است."},409);
-    const h=await hashPassword(password), id=newId(); await env.DB.prepare("INSERT INTO users (id,username,salt,hash,created_at) VALUES (?,?,?,?,?)").bind(id,username,h.salt,h.hash,new Date().toISOString()).run();
+    const exists=await env.DB.prepare("SELECT id FROM users WHERE lower(username)=lower(?)").bind(username).first(); if(exists) return json({error:"این نام کاربری قبلاً ثبت شده است."},409);     const h=await hashPassword(password), id=newId();
+     try{
+       await env.DB.prepare("INSERT INTO users (id,username,salt,hash,created_at) VALUES (?,?,?,?,?)").bind(id,username,h.salt,h.hash,new Date().toISOString()).run();
+     }catch(e){
+       if(String(e?.message||e).toLowerCase().includes("unique"))return json({error:"این نام کاربری قبلاً ثبت شده است."},409);
+       throw e;
+     }
     await deleteSession(request,env);
     const sid=await createSession(env,id); return json({ok:true,user:{id,username}},200,{"set-cookie":cookie(SESSION_COOKIE_NAME,sid)});
   }
@@ -369,8 +374,14 @@ async function handleApi(request, env, url) {
     if(!validTelegramUsername(username)) return json({error:"Username تلگرام معتبر نیست. فقط حروف، عدد و _ و بین ۵ تا ۳۲ کاراکتر."},400); const selected=await dynamicCastle(env,region,castle); if(!selected) return json({error:"قلمرو یا قلعه معتبر نیست."},400);
     if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first()) return json({error:"این قلعه قبلاً توسط یک لرد انتخاب شده است."},409);
     if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first()) return json({error:"این Telegram Username قبلاً ثبت شده است."},409);
-    if(await env.DB.prepare("SELECT id FROM players WHERE account_id=?").bind(userSession.user_id).first()) return json({error:"این حساب قبلاً برای Kill The King یک قلعه انتخاب کرده است."},409);
-    const p={id:newId(),username:"@"+username,region,house:selected.house,castle,account_id:userSession.user_id,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,p.account_id,p.created_at).run(); await ensureEconomySchema(env); await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=?").bind(p.account_id,p.castle).run(); return json({message:`ثبت شد لرد ${selected.house}`,player:p});
+    if(await env.DB.prepare("SELECT id FROM players WHERE account_id=?").bind(userSession.user_id).first()) return json({error:"این حساب قبلاً برای Kill The King یک قلعه انتخاب کرده است."},409);     const p={id:newId(),username:"@"+username,region,house:selected.house,castle,account_id:userSession.user_id,created_at:new Date().toISOString()};
+     try{
+       await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,p.account_id,p.created_at).run();
+     }catch(e){
+       if(String(e?.message||e).toLowerCase().includes("unique"))return json({error:"این قلعه یا نام کاربری همزمان توسط دیگری ثبت شد."},409);
+       throw e;
+     }
+     await ensureEconomySchema(env); await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=?").bind(p.account_id,p.castle).run(); return json({message:`ثبت شد لرد ${selected.house}`,player:p});
   }
   if (method === "POST" && path === "/api/admin/login") {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
@@ -392,8 +403,14 @@ async function handleApi(request, env, url) {
   if (path === "/api/admin/players" && method === "POST") {
     if(!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
     if(!session?.is_admin) return json({error:"دسترسی مدیر لازم است."},401); const b=await body(request), username=normalizeUsername(b.username),region=String(b.region||"").trim(),castle=String(b.castle||"").trim(),selected=await dynamicCastle(env,region,castle); if(!validTelegramUsername(username)||!selected)return json({error:"اطلاعات واردشده معتبر نیست."},400);
-    if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first())return json({error:"این قلعه قبلاً رزرو شده است."},409); if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first())return json({error:"این Username قبلاً ثبت شده است."},409);
-    const p={id:newId(),username:"@"+username,region,house:selected.house,castle,created_at:new Date().toISOString()}; await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,null,p.created_at).run(); await ensureEconomySchema(env); return json({player:p});
+    if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first())return json({error:"این قلعه قبلاً رزرو شده است."},409); if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first())return json({error:"این Username قبلاً ثبت شده است."},409);     const p={id:newId(),username:"@"+username,region,house:selected.house,castle,created_at:new Date().toISOString()};
+     try{
+       await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,null,p.created_at).run();
+     }catch(e){
+       if(String(e?.message||e).toLowerCase().includes("unique"))return json({error:"این قلعه یا نام کاربری همزمان توسط دیگری ثبت شد."},409);
+       throw e;
+     }
+     await ensureEconomySchema(env); return json({player:p});
   }
   if(path.startsWith("/api/admin/players/")&&method==="DELETE"){ if(!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401); const id=decodeURIComponent(path.split("/").pop()); const old=await env.DB.prepare("SELECT castle FROM players WHERE id=?").bind(id).first(); const r=await env.DB.prepare("DELETE FROM players WHERE id=?").bind(id).run(); if(!r.meta.changes)return json({error:"پلیر پیدا نشد."},404); await ensureEconomySchema(env); if(old?.castle) await env.DB.prepare("UPDATE castle_state SET owner_account_id=NULL WHERE castle=?").bind(old.castle).run(); return json({ok:true}); }
   if(method==="GET"&&path.startsWith("/api/castles/")){const name=decodeURIComponent(path.slice("/api/castles/".length));const info=castleInfo[name];if(info)return json(info);await ensureEconomySchema(env);const row=await env.DB.prepare("SELECT region FROM castle_state WHERE castle=?").bind(name).first();if(!row)return json({error:"اطلاعات قلعه پیدا نشد."},404);return json({location:row.region,description:"این قلعه توسط مدیر قلمرو اضافه شده است."});}
@@ -657,9 +674,13 @@ async function handleApi(request, env, url) {
     await ensureEconomySchema(env);
     const exists=await env.DB.prepare("SELECT id FROM players WHERE account_id=? AND castle=?").bind(player.accountId,castle).first();
     if(exists)return json({error:"این قلعه قبلاً برای این پلیر ثبت شده است."},409);
-    const u=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(player.accountId).first();
-    const p={id:newId(),username:u?.username||"",region,house:selected.house,castle,account_id:player.accountId,created_at:new Date().toISOString()};
-    await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,p.account_id,p.created_at).run();
+    const u=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(player.accountId).first();     const p={id:newId(),username:u?.username||"",region,house:selected.house,castle,account_id:player.accountId,created_at:new Date().toISOString()};
+     try{
+       await env.DB.prepare("INSERT INTO players (id,username,region,house,castle,account_id,created_at) VALUES (?,?,?,?,?,?,?)").bind(p.id,p.username,p.region,p.house,p.castle,p.account_id,p.created_at).run();
+     }catch(e){
+       if(String(e?.message||e).toLowerCase().includes("unique"))return json({error:"این قلعه همزمان توسط دیگری ثبت شد."},409);
+       throw e;
+     }
     await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=?").bind(player.accountId,castle).run();
     return json({ok:true,player:p});
   }
