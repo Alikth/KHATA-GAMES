@@ -283,27 +283,23 @@ async function runWeeklyUpdate(env, force=false) {
   }
 }
 
-async function requireCastleOwner(request,env){
+async function requireCastleOwner(request,env,castleName=""){
   const s=await requireUser(request,env); if(!s)return null;
-
-  // players.account_id is the authoritative ownership record created by
-  // /api/register. Do not depend solely on the denormalized economy owner field:
-  // older castle rows may have a missing/stale owner_account_id.
-  const player=await env.DB.prepare(
-    "SELECT castle,region FROM players WHERE account_id=? ORDER BY created_at LIMIT 1"
-  ).bind(s.user_id).first();
+  const name=String(castleName||"").trim();
+  const player=name
+    ? await env.DB.prepare("SELECT castle,region FROM players WHERE account_id=? AND castle=? LIMIT 1").bind(s.user_id,name).first()
+    : await env.DB.prepare("SELECT castle,region FROM players WHERE account_id=? ORDER BY created_at LIMIT 1").bind(s.user_id).first();
   if(!player)return null;
-
-  let state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(player.castle).first();
+  const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(player.castle).first();
   if(!state)return null;
-
-  // Repair the denormalized owner field so the rest of the castle API stays
-  // consistent with the actual account ownership.
   if(state.owner_account_id!==s.user_id){
-    await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=?").bind(s.user_id,player.castle).run();
-    state={...state,owner_account_id:s.user_id};
+    const fixed=await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=? AND (owner_account_id IS NULL OR owner_account_id=?)").bind(s.user_id,player.castle,s.user_id).run();
+    if(!fixed.meta?.changes){
+      const current=await env.DB.prepare("SELECT owner_account_id FROM castle_state WHERE castle=?").bind(player.castle).first();
+      if(current?.owner_account_id && current.owner_account_id!==s.user_id)return null;
+    }
   }
-  return state;
+  return {...state,owner_account_id:s.user_id};
 }
 function safeCost(cost){return Object.fromEntries(Object.entries(cost).filter(([k,v])=>RESOURCE_KEYS.includes(k)&&Number(v)>0));}
 async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
@@ -332,7 +328,6 @@ async function handleApi(request, env, url) {
     if(password.length<12 || password.length>MAX_PASSWORD_LENGTH) return json({error:"رمز عبور باید بین ۱۲ تا ۱۲۸ کاراکتر باشد."},400);
     const exists=await env.DB.prepare("SELECT id FROM users WHERE lower(username)=lower(?)").bind(username).first(); if(exists) return json({error:"این نام کاربری قبلاً ثبت شده است."},409);
     const h=await hashPassword(password), id=newId(); await env.DB.prepare("INSERT INTO users (id,username,salt,hash,created_at) VALUES (?,?,?,?,?)").bind(id,username,h.salt,h.hash,new Date().toISOString()).run();
-    await deleteSession(request,env);
     await deleteSession(request,env);
     const sid=await createSession(env,id); return new Response(JSON.stringify({ok:true,user:{id,username}}),{status:200,headers:{"content-type":"application/json","set-cookie":cookie(SESSION_COOKIE_NAME,sid)}});
   }
@@ -388,7 +383,8 @@ async function handleApi(request, env, url) {
   }
   if (method==="GET" && path==="/api/game/week") return json({week:gameWeekKey()});
   if (method==="GET" && path==="/api/my-castle/assets") {
-    const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
+    const castle=String(url.searchParams.get("castle")||"").trim();
+    const state=await requireCastleOwner(request,env,castle); if(!state)return json({error:"این قلعه متعلق به حساب شما نیست."},403);
     return json(await loadCastleEconomy(env,state.castle));
   }
   if (method==="POST" && path==="/api/my-castle/production/upgrade") {
@@ -472,7 +468,7 @@ async function handleApi(request, env, url) {
     const rt=await warRuntime(env); return json({fakeAvailable:!fake,gameRunning:rt.running});
   }
   if (method==="GET" && path==="/api/war-logs") {
-    await ensureWarLogSchema(env); const rows=(await env.DB.prepare("SELECT id,attacker_account_id AS attackerAccountId,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,cancelled,cancelled_at AS cancelledAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs ORDER BY created_at DESC").all()).results;
+    await ensureWarLogSchema(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,cancelled,cancelled_at AS cancelledAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs ORDER BY created_at DESC").all()).results;
     return json({logs:rows});
   }
   if (method==="GET" && path==="/api/my-war-expeditions/active") {
