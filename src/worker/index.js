@@ -320,7 +320,7 @@ async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
   const where=table==="castle_production"?"production_key":"camp_key";
   const q1=env.DB.prepare(`UPDATE castle_state SET ${sets} WHERE castle=? AND ${Object.keys(cost).map(k=>`${k}>=?`).join(" AND ")}`).bind(...Object.values(cost),castle,...Object.values(cost));
   const q2=env.DB.prepare(`UPDATE ${table} SET level=level+1 WHERE castle=? AND ${where}=? AND level=?`).bind(castle,key,level);
-  const b=await env.DB.batch([q1,q2]); if(!b[1]?.meta?.changes)return {error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن.",status:409}; return {ok:true,newLevel:level+1};
+  const b=await env.DB.batch([q1,q2]); if(!b[0]?.meta?.changes||!b[1]?.meta?.changes)return {error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن.",status:409}; return {ok:true,newLevel:level+1};
 }
 
 async function handleApi(request, env, url) {
@@ -372,7 +372,7 @@ async function handleApi(request, env, url) {
     const sid=await createSession(env,"__admin__",1);
     return json({ok:true},200,{"set-cookie":cookie(SESSION_COOKIE_NAME,sid)});
   }
-  if (method === "POST" && path === "/api/admin/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie(SESSION_COOKIE_NAME)}}); }
+  if (method === "POST" && path === "/api/admin/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return json({ok:true},200,{"set-cookie":clearCookie(SESSION_COOKIE_NAME)}); }
   if (method === "GET" && path === "/api/admin/status") return json({admin:!!session?.is_admin});
   if (path === "/api/admin/players" && method === "GET") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
@@ -425,7 +425,7 @@ async function handleApi(request, env, url) {
       env.DB.prepare(`UPDATE castle_state SET ${sets} WHERE castle=? AND ${cond}`).bind(...Object.values(cost),state.castle,...Object.values(cost)),
       env.DB.prepare("UPDATE castle_special_camps SET level=level+1 WHERE castle=? AND camp_key=? AND level=?").bind(state.castle,key,level)
     ]);
-    if(!bres[1]?.meta?.changes)return json({error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن."},409);
+    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes)return json({error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن."},409);
     return json({ok:true,newLevel:level+1});
   }
   if (method==="POST" && path==="/api/my-castle/special-production/upgrade") {
@@ -435,14 +435,14 @@ async function handleApi(request, env, url) {
     if(level>=sp.max)return json({error:"تولیدی ویژه به حداکثر سطح رسیده است."},400); if(!addCostCheck(state,sp.cost))return json({error:"منابع کافی نیست."},400);
     const cost=safeCost(sp.cost),sets=Object.keys(cost).map(k=>`${k}=${k}-?`).join(","),cond=Object.keys(cost).map(k=>`${k}>=?`).join(" AND ");
     const bres=await env.DB.batch([env.DB.prepare(`UPDATE castle_state SET ${sets} WHERE castle=? AND ${cond}`).bind(...Object.values(cost),state.castle,...Object.values(cost)),env.DB.prepare("UPDATE castle_production SET level=level+1 WHERE castle=? AND production_key=? AND level=?").bind(state.castle,sp.key,level)]);
-    if(!bres[1]?.meta?.changes)return json({error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:level+1});
+    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes)return json({error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:level+1});
   }
   if (method==="POST" && path==="/api/my-castle/workshop/upgrade") {
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     if(state.workshop_level>=5)return json({error:"کارگاه به حداکثر سطح رسیده است."},400);
     if(Number(state.coins)<EQUIPMENT_UPGRADE_COST)return json({error:"6000 سکه لازم است."},400);
     const bres=await env.DB.batch([env.DB.prepare("UPDATE castle_state SET coins=coins-6000 WHERE castle=? AND coins>=6000").bind(state.castle),env.DB.prepare("UPDATE castle_state SET workshop_level=workshop_level+1 WHERE castle=? AND workshop_level=?").bind(state.castle,state.workshop_level)]);
-    if(!bres[1]?.meta?.changes)return json({error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:state.workshop_level+1});
+    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes)return json({error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:state.workshop_level+1});
   }
   if (method==="POST" && path==="/api/my-castle/equipment/build") {
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
@@ -458,7 +458,7 @@ async function handleApi(request, env, url) {
       env.DB.prepare("UPDATE castle_equipment SET count=count+1 WHERE castle=? AND item_key=?").bind(state.castle,key),
       env.DB.prepare("INSERT INTO castle_equipment_limits(castle,tracker_key,used) VALUES (?,?,1) ON CONFLICT(castle,tracker_key) DO UPDATE SET used=used+1").bind(state.castle,trackerKey)
     ]);
-    if(!bres[1]?.meta?.changes || !bres[2]?.meta?.changes)return json({error:"ساخت همزمان تغییر کرده؛ دوباره تلاش کن."},409);
+    if(!bres[0]?.meta?.changes || !bres[1]?.meta?.changes || !bres[2]?.meta?.changes)return json({error:"منابع یا ساخت همزمان تغییر کرده؛ دوباره تلاش کن."},409);
     return json({ok:true});
   }
 
@@ -468,7 +468,7 @@ async function handleApi(request, env, url) {
     if(Number(state.port_level)>=15)return json({error:"اسکله به حداکثر سطح 15 رسیده است."},400);
     if(Number(state.coins)<1500||Number(state.wood)<1000)return json({error:"برای ارتقای اسکله 1500 سکه و 1000 چوب لازم است."},400);
     const bres=await env.DB.batch([env.DB.prepare("UPDATE castle_state SET coins=coins-1500,wood=wood-1000 WHERE castle=? AND coins>=1500 AND wood>=1000").bind(state.castle),env.DB.prepare("UPDATE castle_state SET port_level=port_level+1 WHERE castle=? AND port_level=?").bind(state.castle,state.port_level)]);
-    if(!bres[1]?.meta?.changes)return json({error:"ارتقا همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:state.port_level+1});
+    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes)return json({error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:state.port_level+1});
   }
 
   if (method==="GET" && path==="/api/war-expeditions/status") {
@@ -565,7 +565,7 @@ async function handleApi(request, env, url) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureEconomySchema(env);const b=await body(request),name=String(b.name||"").trim(),region=String(b.region||"").trim(),naval=!!b.naval;
     if(!name||name.length>100)return json({error:"نام قلعه معتبر نیست."},400);if(!GAME_REGIONS.includes(region))return json({error:"اقلیم معتبر نیست."},400);
-    const exists=await env.DB.prepare("SELECT castle FROM castle_state WHERE castle=? UNION SELECT name FROM dynamic_castles WHERE name=?").bind(name,name).first();if(exists)return json({error:"این قلعه قبلاً ثبت شده است."},409);
+    const exists=await env.DB.prepare("SELECT castle FROM castle_state WHERE lower(castle)=lower(?) UNION SELECT name FROM dynamic_castles WHERE lower(name)=lower(?)").bind(name,name).first();if(exists)return json({error:"این قلعه قبلاً ثبت شده است."},409);
     await env.DB.prepare("INSERT INTO dynamic_castles(name,region,naval,created_at) VALUES (?,?,?,?)").bind(name,region,naval?1:0,new Date().toISOString()).run();
     await initializeCastleEconomy(env,name,region,naval);return json({ok:true,castle:{name,region,naval}});
   }
@@ -635,8 +635,8 @@ async function handleApi(request, env, url) {
     if(!selected)return json({error:"قلمرو یا قلعه معتبر نیست."},400);
     const player=await env.DB.prepare("SELECT id,account_id AS accountId FROM players WHERE id=?").bind(playerId).first();
     if(!player?.accountId)return json({error:"این پلیر حساب کاربری معتبر ندارد."},400);
-    const taken=await env.DB.prepare("SELECT owner_account_id FROM castle_state WHERE castle=?").bind(castle).first();
-    if(taken?.owner_account_id)return json({error:"این قلعه قبلاً در اختیار یک پلیر است."},409);
+    const taken=await env.DB.prepare("SELECT id FROM players WHERE castle=? LIMIT 1").bind(castle).first();
+    if(taken)return json({error:"این قلعه قبلاً در اختیار یک پلیر است."},409);
     await ensureEconomySchema(env);
     const exists=await env.DB.prepare("SELECT id FROM players WHERE account_id=? AND castle=?").bind(player.accountId,castle).first();
     if(exists)return json({error:"این قلعه قبلاً برای این پلیر ثبت شده است."},409);
