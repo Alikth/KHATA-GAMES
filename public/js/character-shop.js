@@ -140,7 +140,7 @@
   function init(){
     css();renderRegionTabs();setupModal();setupShop();
     characters.forEach(c=>c._image="");
-    let activeRegion="The North";
+    activeRegion="The North";
     render(activeRegion);
     characters.forEach(async c=>{
       const image=await loadImage(c.image);
@@ -148,8 +148,14 @@
       if(c.region===activeRegion) render(activeRegion);
     });
   }
+  let activeRegion="The North";
   document.addEventListener("click",e=>{
-    const r=e.target.closest("[data-khcs-region]");if(r){render(r.dataset.khcsRegion);document.querySelectorAll("[data-khcs-region]").forEach(b=>b.classList.toggle("active",b===r))}
+    const r=e.target.closest("[data-khcs-region]");
+    if(r){
+      activeRegion=r.dataset.khcsRegion;
+      render(activeRegion);
+      document.querySelectorAll("[data-khcs-region]").forEach(b=>b.classList.toggle("active",b.dataset.khcsRegion===activeRegion));
+    }
     const c=e.target.closest("[data-khcs-character]");if(c)window.khataOpenCharacter(c.dataset.khcsCharacter);
     const s=e.target.closest("[data-khcs-shop]");if(s)openShop(s.dataset.khcsShop);
   });
