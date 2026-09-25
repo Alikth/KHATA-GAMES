@@ -20,7 +20,7 @@
       const root = $('cmWarCommands');
       if (!root) return;
       const incoming = (arrived.commands || []).filter(x => x.sourceCastle === castle);
-      const mine = (active.expeditions || []).filter(x => x.sourceCastle === castle && x.active);
+      const mine = (active.expeditions || []).filter(x => x.sourceCastle === castle && x.active === true);
 
       const activeHtml = mine.map(x =>
         '<article class="cm-command-card cm-active-expedition">' +
