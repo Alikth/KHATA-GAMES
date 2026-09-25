@@ -122,7 +122,8 @@ async function ensureWarLogSchema(env){
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled INTEGER NOT NULL DEFAULT 0").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled_at TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN cancelled_by TEXT").run();}catch{}
-  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN duration_minutes INTEGER NOT NULL DEFAULT 60").run();}catch{}
+  let durationAdded=false;
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN duration_minutes INTEGER NOT NULL DEFAULT 60").run();durationAdded=true;}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN elapsed_seconds REAL NOT NULL DEFAULT 0").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN run_started_at TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN lord_present INTEGER NOT NULL DEFAULT 1").run();}catch{}
@@ -131,7 +132,7 @@ async function ensureWarLogSchema(env){
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN outcome TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN defender_assets_json TEXT NOT NULL DEFAULT '{}'").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN casualties_json TEXT NOT NULL DEFAULT '{}'").run();}catch{}
-  await env.DB.prepare("UPDATE war_logs SET duration_minutes=0 WHERE run_started_at IS NULL AND elapsed_seconds=0 AND command IS NULL").run();
+  if(durationAdded)await env.DB.prepare("UPDATE war_logs SET duration_minutes=0 WHERE run_started_at IS NULL AND elapsed_seconds=0 AND command IS NULL").run();
 }
 async function ensureTradeSchema(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS trade_requests (
@@ -905,8 +906,10 @@ export default {
   async fetch(request, env) {
     const url=new URL(request.url);
     try {
-      await cleanupExpiredSessions(env);
-      if(url.pathname.startsWith("/api/")) return await handleApi(request,env,url);
+      if(url.pathname.startsWith("/api/")){
+        await cleanupExpiredSessions(env);
+        return await handleApi(request,env,url);
+      }
       const characterImage = await serveCharacterImage(request, env, url);
       if(characterImage) return characterImage;
       const response = await env.ASSETS.fetch(request);
