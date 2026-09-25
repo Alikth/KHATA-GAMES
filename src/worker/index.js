@@ -48,8 +48,8 @@ import {
 } from "./data/game-rules.js";
 const NAVAL_CASTLES = new Set(["Eastwatch","Karhold","Seagard","Gulltown","Pyke","Ten Towers","Hammerhorn","Casterly Rock","King's Landing","Dragonstone","Storm's End","Oldtown","Sunspear","Yronwood"]);
 const GAME_REGIONS = houses.map(x=>x.region);
-async function ensureDynamicCastleSchema(env){await env.DB.prepare("CREATE TABLE IF NOT EXISTS dynamic_castles (name TEXT PRIMARY KEY, region TEXT NOT NULL, naval INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)").run();}
-async function dynamicHouses(env){await ensureDynamicCastleSchema(env);const rows=(await env.DB.prepare("SELECT name AS castle,region,naval FROM dynamic_castles ORDER BY region,name").all()).results;const out=houses.map(r=>({...r,castles:r.castles.map(c=>({...c,naval:NAVAL_CASTLES.has(c.castle)}))}));for(const row of rows){const region=out.find(x=>x.region===row.region);if(region&&!region.castles.some(c=>c.castle===row.castle))region.castles.push({house:"",castle:row.castle,icon:Number(row.naval)?"⚓":"🏯",naval:!!Number(row.naval)});}return out;}
+async function ensureDynamicCastleSchema(env){await env.DB.prepare("CREATE TABLE IF NOT EXISTS dynamic_castles (name TEXT PRIMARY KEY, region TEXT NOT NULL, naval INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)").run();await env.DB.prepare("CREATE TABLE IF NOT EXISTS deleted_castles (name TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)").run();}
+async function dynamicHouses(env){await ensureDynamicCastleSchema(env);const deletedRows=(await env.DB.prepare("SELECT name FROM deleted_castles").all()).results;const deleted=new Set(deletedRows.map(x=>x.name));const rows=(await env.DB.prepare("SELECT name AS castle,region,naval FROM dynamic_castles ORDER BY region,name").all()).results;const out=houses.map(r=>({...r,castles:r.castles.filter(c=>!deleted.has(c.castle)).map(c=>({...c,naval:NAVAL_CASTLES.has(c.castle)}))}));for(const row of rows){const region=out.find(x=>x.region===row.region);if(region&&!deleted.has(row.castle)&&!region.castles.some(c=>c.castle===row.castle))region.castles.push({house:"",castle:row.castle,icon:Number(row.naval)?"⚓":"🏯",naval:!!Number(row.naval)});}return out;}
 async function dynamicCastle(env,region,castle){const hs=await dynamicHouses(env);return hs.find(x=>x.region===region)?.castles.find(x=>x.castle===castle)||null;}
 async function isNavalCastle(env,castle){if(NAVAL_CASTLES.has(castle))return true;const row=await env.DB.prepare("SELECT naval FROM dynamic_castles WHERE name=?").bind(castle).first();return !!Number(row?.naval||0);}
 async function initializeCastleEconomy(env,castle,region,naval){const week=gameWeekKey(),defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};await env.DB.prepare("INSERT OR IGNORE INTO castle_state(castle,region,port_enabled,port_level) VALUES (?,?,?,0)").bind(castle,region,naval?1:0).run();await env.DB.prepare("UPDATE castle_state SET region=?,port_enabled=? WHERE castle=?").bind(region,naval?1:0,castle).run();await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state(castle,last_week_key) VALUES (?,?)").bind(castle,week).run();for(const [k,lvl] of Object.entries(defaults))await env.DB.prepare("INSERT OR IGNORE INTO castle_production(castle,production_key,level) VALUES (?,?,?)").bind(castle,k,lvl).run();const sp=SPECIAL_PRODUCTIONS[region];if(sp)await env.DB.prepare("INSERT OR IGNORE INTO castle_production(castle,production_key,level) VALUES (?,?,0)").bind(castle,sp.key).run();for(const k of Object.keys(GENERAL_CAMPS))await env.DB.prepare("INSERT OR IGNORE INTO castle_camps(castle,camp_key,level) VALUES (?,?,0)").bind(castle,k,0).run();for(const unit of ["swordsman","archer","spearman","cavalry"])await env.DB.prepare("INSERT OR IGNORE INTO castle_army(castle,unit_key,count) VALUES (?,?,?)").bind(castle,unit,unit==="swordsman"?500:unit==="archer"?200:100).run();for(const item of Object.keys(EQUIPMENT))await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment(castle,item_key,count) VALUES (?,?,0)").bind(castle,item).run();for(const ship of ["transport","warship"])await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet(castle,ship_key,count) VALUES (?,?,?)").bind(castle,ship,naval?1:0).run();for(const spc of (SPECIAL_CAMPS[region]||[]))await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps(castle,camp_key,level) VALUES (?,?,0)").bind(castle,spc.key,0).run();}
@@ -150,7 +150,7 @@ async function ensureTradeSchema(env){
 }
 async function ensureGameControls(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS game_controls (control_key TEXT PRIMARY KEY, locked INTEGER NOT NULL DEFAULT 0)`).run();
-  await env.DB.prepare("INSERT OR IGNORE INTO game_controls(control_key,locked) VALUES ('war',0),('trade',0)").run();
+  await env.DB.prepare("INSERT OR IGNORE INTO game_controls(control_key,locked) VALUES ('war',0),('trade',0),('claim',0)").run();
 }
 async function isGameControlLocked(env,key){
   await ensureGameControls(env);
@@ -375,6 +375,7 @@ async function handleApi(request, env, url) {
   if (method === "GET" && path === "/api/my-castles") { if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); return json((await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(userSession.user_id).all()).results); }
   if (method === "POST" && path === "/api/register") {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
+    if(await isGameControlLocked(env,"claim"))return json({error:"انتخاب قلعه فعلاً توسط ادمین قفل شده است."},423);
     if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); const b=await body(request), username=normalizeUsername(b.username), region=String(b.region||"").trim(), castle=String(b.castle||"").trim();
     if(!validTelegramUsername(username)) return json({error:"Username تلگرام معتبر نیست. فقط حروف، عدد و _ و بین ۵ تا ۳۲ کاراکتر."},400); const selected=await dynamicCastle(env,region,castle); if(!selected) return json({error:"قلمرو یا قلعه معتبر نیست."},400);
     if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first()) return json({error:"این قلعه قبلاً توسط یک لرد انتخاب شده است."},409);
@@ -671,7 +672,7 @@ async function handleApi(request, env, url) {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureGameControls(env);
     const b=await body(request), key=String(b.key||""), locked=!!b.locked;
-    if(!["war","trade"].includes(key))return json({error:"قفل نامعتبر است."},400);
+    if(!["war","trade","claim"].includes(key))return json({error:"قفل نامعتبر است."},400);
     await env.DB.prepare("UPDATE game_controls SET locked=? WHERE control_key=?").bind(locked?1:0,key).run();
     return json({ok:true,key,locked});
   }
@@ -724,6 +725,50 @@ async function handleApi(request, env, url) {
     await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=?").bind(player.accountId,castle).run();
     return json({ok:true,player:p});
   }
+  if (method==="DELETE" && path.startsWith("/api/admin/castles/")) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    await ensureEconomySchema(env); await ensureTradeSchema(env); await ensureNarrativeSchema(env); await ensureWarLogSchema(env);
+    const castle=decodeURIComponent(path.slice("/api/admin/castles/".length)).trim();
+    if(!castle)return json({error:"قلعه مشخص نشده است."},400);
+    const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
+    if(!state)return json({error:"قلعه پیدا نشد."},404);
+    const dynamic=await env.DB.prepare("SELECT name FROM dynamic_castles WHERE name=?").bind(castle).first();
+    const now=new Date().toISOString();
+    const activeWars=(await env.DB.prepare("SELECT id,source_castle AS sourceCastle,assets_json AS assetsJson FROM war_logs WHERE cancelled=0 AND command IS NULL AND (source_castle=? OR destination_castle=?)").bind(castle,castle).all()).results;
+    const statements=[];
+    for(const w of activeWars){
+      if(w.sourceCastle!==castle){
+        let assets={};try{assets=JSON.parse(w.assetsJson||"{}");}catch{}
+        for(const kind of ["army","equipment","fleet"]){
+          for(const [key,raw] of Object.entries(assets[kind]||{})){
+            const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";
+            const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";
+            const amount=Math.floor(Number(raw)||0);
+            if(amount>0)statements.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=?`).bind(amount,w.sourceCastle,key));
+          }
+        }
+      }
+      statements.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by='admin',run_started_at=NULL WHERE id=? AND cancelled=0 AND command IS NULL").bind(now,w.id));
+    }
+    statements.push(env.DB.prepare("UPDATE trade_requests SET status='rejected',responded_at=? WHERE status='pending' AND (sender_castle=? OR receiver_castle=?)").bind(now,castle,castle));
+    statements.push(env.DB.prepare("DELETE FROM scenario_submissions WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("DELETE FROM players WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("DELETE FROM castle_production WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("DELETE FROM castle_camps WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("DELETE FROM castle_special_camps WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("DELETE FROM castle_army WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("DELETE FROM castle_equipment WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("DELETE FROM castle_fleet WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("DELETE FROM castle_week_state WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("DELETE FROM castle_equipment_limits WHERE castle=?").bind(castle));
+    statements.push(env.DB.prepare("DELETE FROM castle_state WHERE castle=?").bind(castle));
+    if(dynamic) statements.push(env.DB.prepare("DELETE FROM dynamic_castles WHERE name=?").bind(castle));
+    else statements.push(env.DB.prepare("INSERT OR REPLACE INTO deleted_castles(name,deleted_at) VALUES(?,?)").bind(castle,now));
+    await env.DB.batch(statements);
+    return json({ok:true,castle,playerUnlinked:true});
+  }
+
   if (method==="GET" && path==="/api/admin/castle-assets") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureEconomySchema(env);
@@ -802,13 +847,80 @@ async function handleApi(request, env, url) {
     await env.DB.batch(updates);
     return json({ok:true});
   }
+  if (method==="GET" && path==="/api/my-scenarios") {
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    await ensureNarrativeSchema(env); await ensureWarLogSchema(env); await ensureEconomySchema(env);
+    const rows=(await env.DB.prepare(`SELECT w.id,w.attacker_username AS attackerUsername,w.source_castle AS sourceCastle,w.destination_castle AS destinationCastle,w.created_at AS createdAt,
+      CASE WHEN w.attacker_account_id=? THEN 'attacker' ELSE 'defender' END AS side,
+      CASE WHEN w.attacker_account_id=? THEN w.source_castle ELSE w.destination_castle END AS castle
+      FROM war_logs w
+      WHERE w.command='attack' AND w.cancelled=0
+        AND (w.attacker_account_id=? OR EXISTS(SELECT 1 FROM castle_state cs WHERE cs.castle=w.destination_castle AND cs.owner_account_id=?))
+      ORDER BY w.created_at DESC`).bind(session.user_id,session.user_id,session.user_id,session.user_id).all()).results;
+    const submitted=(await env.DB.prepare("SELECT war_id,side FROM scenario_submissions WHERE submitter_account_id=?").bind(session.user_id).all()).results;
+    const sent=new Set(submitted.map(x=>x.war_id+"|"+x.side));
+    const items=rows.filter(x=>!sent.has(x.id+"|"+x.side)).map(x=>({
+      warId:x.id,attackerUsername:x.attackerUsername,sourceCastle:x.sourceCastle,destinationCastle:x.destinationCastle,createdAt:x.createdAt,
+      side:x.side,castle:x.castle,opponentCastle:x.side==="attacker"?x.destinationCastle:x.sourceCastle,lordName:WAR_LORDS[x.castle]||""
+    }));
+    return json({items});
+  }
+  if (method==="POST" && path==="/api/scenarios") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    await ensureNarrativeSchema(env); await ensureWarLogSchema(env); await ensureEconomySchema(env);
+    const b=await body(request),warId=String(b.warId||"").trim(),side=String(b.side||"").trim(),castle=String(b.castle||"").trim(),textValue=String(b.text||"").trim();
+    if(!warId||!["attacker","defender"].includes(side)||!castle||!textValue)return json({error:"اطلاعات سناریو کامل نیست."},400);
+    if(textValue.length>8000)return json({error:"متن سناریو حداکثر ۸۰۰۰ کاراکتر است."},400);
+    const war=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND command='attack' AND cancelled=0").bind(warId).first();
+    if(!war)return json({error:"این حمله برای ارسال سناریو معتبر نیست."},404);
+    const castleState=await env.DB.prepare("SELECT owner_account_id FROM castle_state WHERE castle=?").bind(castle).first();
+    const isAttacker=war.attacker_account_id===session.user_id&&war.source_castle===castle;
+    const isDefender=castleState?.owner_account_id===session.user_id&&war.destination_castle===castle;
+    if(side==="attacker"&&!isAttacker)return json({error:"این سناریو متعلق به قلعه مهاجم شما نیست."},403);
+    if(side==="defender"&&!isDefender)return json({error:"این سناریو متعلق به قلعه مدافع شما نیست."},403);
+    const usernameRow=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(session.user_id).first();
+    try{
+      await env.DB.prepare("INSERT INTO scenario_submissions(id,war_id,submitter_account_id,submitter_username,lord_name,castle,side,text,created_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(newId(),warId,session.user_id,usernameRow?.username||"",WAR_LORDS[castle]||"",castle,side,textValue,new Date().toISOString()).run();
+    }catch(e){
+      if(String(e?.message||e).toLowerCase().includes("unique"))return json({error:"برای این حمله قبلاً سناریو ارسال کرده‌ای."},409);
+      throw e;
+    }
+    return json({ok:true});
+  }
+  if (method==="GET" && path==="/api/roles/status") {
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    await ensureNarrativeSchema(env);
+    const row=await env.DB.prepare("SELECT created_at AS createdAt FROM role_submissions WHERE account_id=? ORDER BY created_at DESC LIMIT 1").bind(session.user_id).first();
+    const last=row?.createdAt?Date.parse(row.createdAt):NaN,now=Date.now(),cooldown=48*60*60*1000,next=Number.isFinite(last)?last+cooldown:now;
+    return json({available:!Number.isFinite(last)||next<=now,nextAvailableAt:Number.isFinite(last)?new Date(next).toISOString():null,remainingSeconds:Number.isFinite(last)&&next>now?Math.ceil((next-now)/1000):0});
+  }
+  if (method==="POST" && path==="/api/roles") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    await ensureNarrativeSchema(env); await ensureEconomySchema(env);
+    const b=await body(request),castle=String(b.castle||"").trim(),textValue=String(b.text||"").trim();
+    if(!castle||!textValue)return json({error:"قلعه و متن رول الزامی است."},400);
+    if(textValue.length>8000)return json({error:"متن رول حداکثر ۸۰۰۰ کاراکتر است."},400);
+    const state=await requireCastleOwner(request,env,castle); if(!state)return json({error:"این قلعه متعلق به حساب شما نیست."},403);
+    const row=await env.DB.prepare("SELECT created_at AS createdAt FROM role_submissions WHERE account_id=? ORDER BY created_at DESC LIMIT 1").bind(session.user_id).first();
+    const last=row?.createdAt?Date.parse(row.createdAt):NaN,now=Date.now(),cooldown=48*60*60*1000;
+    if(Number.isFinite(last)&&now<last+cooldown)return json({error:"هر پلیر فقط هر ۴۸ ساعت یک رول می‌تواند ارسال کند.",nextAvailableAt:new Date(last+cooldown).toISOString()},429);
+    const usernameRow=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(session.user_id).first();
+    await env.DB.prepare("INSERT INTO role_submissions(id,account_id,username,lord_name,castle,text,created_at) VALUES(?,?,?,?,?,?,?)").bind(newId(),session.user_id,usernameRow?.username||"",WAR_LORDS[castle]||"",castle,textValue,new Date().toISOString()).run();
+    return json({ok:true});
+  }
   if (method==="GET" && path==="/api/admin/scenarios") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
-    return json({items:[]});
+    await ensureNarrativeSchema(env);
+    const rows=(await env.DB.prepare("SELECT id,war_id AS warId,submitter_username AS username,lord_name AS lordName,castle,side,text,created_at AS createdAt FROM scenario_submissions ORDER BY created_at DESC").all()).results;
+    return json({items:rows});
   }
   if (method==="GET" && path==="/api/admin/roles") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
-    return json({items:[]});
+    await ensureNarrativeSchema(env);
+    const rows=(await env.DB.prepare("SELECT id,username,lord_name AS lordName,castle,text,created_at AS createdAt FROM role_submissions ORDER BY created_at DESC").all()).results;
+    return json({items:rows});
   }
 
   if (method==="GET" && path==="/api/admin/war-expeditions") {
