@@ -41,16 +41,15 @@
     }catch(e){root.innerHTML='<div class="trade-error">'+esc(e.message)+'</div>';}
   }
   function assetText(obj){return Object.entries(obj||{}).map(([k,v])=>labels[k]+' × '+fmt(v)).join(' · ')||'—';}
-  async function respond(id,action){
-    const button=document.querySelector('[data-trade-response][data-trade-id="'+CSS.escape(id)+'"]');
-    if(button){button.disabled=true;}
+  async function respond(id,action,button){
+    if(button)button.disabled=true;
     try{await api('/api/trades/'+encodeURIComponent(id)+'/respond',{method:'POST',body:JSON.stringify({action})});await showIncoming();await refreshNotifications();alert(action==='accept'?'تجارت تأیید شد.':'درخواست تجارت رد شد.');}
     catch(e){if(button)button.disabled=false;alert(e.message);}
   }
   async function refreshNotifications(){
     try{const d=await api('/api/trades/notifications');document.querySelectorAll('[data-trade-notification]').forEach(x=>{x.textContent=d.count||'';x.classList.toggle('hidden',!d.count);});return d.count||0;}catch{return 0;}
   }
-  document.addEventListener('click',e=>{const b=e.target.closest('[data-trade-response]');if(b)respond(b.dataset.tradeId,b.dataset.tradeResponse);if(e.target.id==='tradeModal'||e.target.id==='tradeClose')close();});
+  document.addEventListener('click',e=>{const b=e.target.closest('[data-trade-response]');if(b){e.preventDefault();respond(b.dataset.tradeId,b.dataset.tradeResponse,b);}if(e.target.id==='tradeModal'||e.target.id==='tradeClose')close();});
   async function openRequests(){const m=modal();if(!m)return;m.classList.remove('hidden');document.body.classList.add('modal-open');$('tradeRoot').innerHTML='<div class="trade-modal-head"><div><span>TRADE REQUESTS</span><h2>📜 درخواست تجارت</h2></div><button id="tradeClose" class="trade-close">×</button></div><div class="trade-body"><div id="tradeIncoming" class="trade-incoming"></div></div>';$('tradeClose').onclick=close;await showIncoming();}
   window.khataOpenTrade=open;window.khataOpenTradeRequests=openRequests;window.khataRefreshTradeNotifications=refreshNotifications;
 })();
