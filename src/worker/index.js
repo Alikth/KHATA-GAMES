@@ -700,7 +700,7 @@ async function handleApi(request, env, url) {
   if (method==="GET" && path==="/api/admin/castles") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureEconomySchema(env);
-    const rows=(await env.DB.prepare("SELECT c.castle,c.region,p.house,c.owner_account_id AS ownerAccountId,COALESCE(u.username,p.username) AS username FROM castle_state c LEFT JOIN players p ON p.castle=c.castle LEFT JOIN users u ON u.id=c.owner_account_id ORDER BY c.region,c.castle").all()).results;
+    const rows=(await env.DB.prepare("SELECT c.castle,c.region,p.house,c.owner_account_id AS ownerAccountId,COALESCE(u.username,p.username) AS username FROM castle_state c LEFT JOIN players p ON p.castle=c.castle AND p.account_id=c.owner_account_id LEFT JOIN users u ON u.id=c.owner_account_id ORDER BY c.region,c.castle").all()).results;
     return json({castles:rows});
   }
   if (method==="POST" && path.match(/^\/api\/admin\/players\/[^/]+\/castles$/)) {
