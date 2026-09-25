@@ -666,7 +666,6 @@ window.addEventListener("DOMContentLoaded", () => {
     root.innerHTML = '<div class="cm-placeholder">در حال بارگذاری مدیریت قلعه...</div>';
     try {
       if (typeof window.khataOpenCastleManagement !== "function") {
-        const src = document.querySelector('script[src*="/js/castle-management-v2.js"]');
         await new Promise((resolve, reject) => {
           const tag = document.createElement("script");
           tag.src = "/js/castle-management-v2.js?v=7";
@@ -706,7 +705,7 @@ document.addEventListener("click", async e => {
     } else {
       await new Promise((resolve, reject) => {
         const tag = document.createElement("script");
-        tag.src = "/js/castle-management-v2.js?v=6";
+        tag.src = "/js/castle-management-v2.js?v=7";
         tag.onload = resolve;
         tag.onerror = () => reject(new Error("فایل مدیریت قلعه بارگذاری نشد."));
         document.head.appendChild(tag);
