@@ -5,7 +5,7 @@
   const labels={coins:'💰 سکه',wood:'🪵 چوب',stone:'🪨 سنگ',iron:'⛓ آهن',meat:'🥩 گوشت',fish:'🐟 ماهی',grain:'🌾 غلات',horses:'🐎 اسب',dragon_glass:'🌑 شیشه اژدها',wildfire:'🧪 وایلدفایر',tar:'🛢 قیر',grapes:'🍇 انگور'};
   const keys=Object.keys(labels);
   async function api(url,options={}){const h=new Headers(options.headers||{});if(options.body&&!h.has('Content-Type'))h.set('Content-Type','application/json');const r=await fetch(url,{cache:'no-store',...options,headers:h});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'خطایی رخ داد.');return d;}
-  function rows(prefix,resources){return keys.map(k=>{const max=resources?Number(resources[k]||0):1000000000;return '<div class="trade-item"><span>'+labels[k]+'</span><small>موجودی: '+(resources?fmt(resources[k]):'مقدار درخواستی')+'</small><input type="number" min="0" max="'+max+'" value="0" data-trade-side="'+prefix+'" data-trade-key="'+k+'"></div>';}).join('');}
+  function rows(prefix,resources){return keys.map(k=>{const max=resources?Number(resources[k]||0):100000000;return '<div class="trade-item"><span>'+labels[k]+'</span><small>موجودی: '+(resources?fmt(resources[k]):'مقدار درخواستی')+'</small><input type="number" min="0" max="'+max+'" value="0" data-trade-side="'+prefix+'" data-trade-key="'+k+'"></div>';}).join('');}
   function modal(){return $('tradeModal');}
   async function open(sourceCastle){
     const m=modal(); if(!m)return;
