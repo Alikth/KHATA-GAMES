@@ -1,6 +1,6 @@
 window.addEventListener("DOMContentLoaded", () => {
   let houses = [], players = [], adminPlayers = [], selected = null, currentUser = null;
-  let castleRequestId = 0, submissionState = null;
+  let castleRequestId = 0, submissionState = null, claimLocked = false;
   let adminRequested = new URLSearchParams(location.search).get("admin") === "1";
   const $ = id => document.getElementById(id);
 
@@ -58,6 +58,7 @@ window.addEventListener("DOMContentLoaded", () => {
         return;
       }
       currentUser = auth.user;
+      try { claimLocked = !!(await api("/api/claim/status")).locked; } catch { claimLocked = false; }
       await enterAuthenticated();
     } catch (err) {
       console.error(err);
@@ -215,6 +216,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const requestId = ++castleRequestId;
     const p = players.find(x => x.region === r.region && x.castle === c.castle);
     $("castleDetails").innerHTML = `<div class="modal-loading"><span class="spinner"></span> در حال دریافت اطلاعات قلعه...</div>`;
+    const claimButton=$("castleDetails").querySelector('[data-action="claim"]'); if(claimButton&&claimLocked){claimButton.disabled=true;claimButton.textContent="انتخاب قلعه فعلاً قفل است.";}
     openModal("castleModal");
     let info = {};
     try { info = await api("/api/castles/" + encodeURIComponent(c.castle)); } catch (e) { console.warn(e); }
@@ -723,7 +725,7 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (action === "admin-cancel-war") cancelAdminWar(target.dataset.warId);
     else if (action === "admin-outcome") setAdminOutcome(target.dataset.warId,target.dataset.outcome);
     else if (action === "save-casualties") saveAdminCasualties(target.dataset.warId);
-    else if (action === "claim") openClaim(Number(target.dataset.region), Number(target.dataset.castle));
+    else if (action === "claim") { if(claimLocked) showToast("انتخاب قلعه فعلاً توسط ادمین قفل است.",true); else openClaim(Number(target.dataset.region), Number(target.dataset.castle)); }
     else if (action === "go-register") openPage("register").catch(() => {});
     else if (action === "delete-player") deletePlayer(target.dataset.id);
   });
