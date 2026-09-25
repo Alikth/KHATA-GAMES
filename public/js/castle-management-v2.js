@@ -28,8 +28,8 @@
       root.innerHTML = activeHtml || '<div class="cm-placeholder">لشکرکشی فعالی وجود ندارد.</div>';
 
       try {
-        const arrived = await api('/api/my-war-expeditions/commands');
-        const incoming = (arrived.commands || []).filter(x => x.sourceCastle === castle);
+        const arrived = await api('/api/my-war-expeditions/commands?castle=' + encodeURIComponent(castle));
+        const incoming = arrived.commands || [];
         const arrivedHtml = incoming.length ? incoming.map(x =>
           '<article class="cm-command-card">' +
             '<strong>دستور خود را وارد کنید</strong>' +
@@ -73,6 +73,34 @@
   }
   function closeConfirm(){$('cmConfirm')?.remove();}
   async function action(a,k){var map={production:'/api/my-castle/production/upgrade',camp:'/api/my-castle/camp/upgrade','special-camp':'/api/my-castle/special-camp/upgrade','special-production':'/api/my-castle/special-production/upgrade',workshop:'/api/my-castle/workshop/upgrade',equipment:'/api/my-castle/equipment/build',port:'/api/my-castle/port/upgrade'};if(!map[a])return;try{await api(map[a],{method:'POST',body:JSON.stringify(k?{key:k}:{})});await load();}catch(e){alert(e.message);}}
-  document.addEventListener('click',async e=>{var cancel=e.target.closest('[data-cm-cancel-war-id]');if(cancel){var id=cancel.dataset.cmCancelWarId;if(!id)return;if(!confirm('آیا از لغو این لشکرکشی مطمئن هستید؟\\nنیروها و ادوات به قلعه مبدا برمی‌گردند.'))return;cancel.disabled=true;cancel.textContent='در حال لغو...';try{await api('/api/war-expeditions/'+encodeURIComponent(id)+'/cancel',{method:'POST'});await load();alert('لشکرکشی لغو شد و نیروها و ادوات به قلعه مبدا برگشتند.');}catch(err){cancel.disabled=false;cancel.textContent='لغو لشکرکشی';alert(err.message);}}var b=e.target.closest('[data-cm-action]');if(b)openUpgradeConfirm(b.dataset.cmAction,b.dataset.cmKey);if(e.target.id==='cmClose'||e.target.id==='castleManagementModal'){$('castleManagementModal').classList.add('hidden');document.body.classList.remove('modal-open');}});
+  document.addEventListener('click',async e=>{
+    var cancel=e.target.closest('[data-cm-cancel-war-id]');
+    if(cancel){
+      var id=cancel.dataset.cmCancelWarId;if(!id)return;
+      if(!confirm('آیا از لغو این لشکرکشی مطمئن هستید؟\\nنیروها و ادوات به قلعه مبدا برمی‌گردند.'))return;
+      cancel.disabled=true;cancel.textContent='در حال لغو...';
+      try{await api('/api/war-expeditions/'+encodeURIComponent(id)+'/cancel',{method:'POST'});await load();alert('لشکرکشی لغو شد و نیروها و ادوات به قلعه مبدا برگشتند.');}
+      catch(err){cancel.disabled=false;cancel.textContent='لغو لشکرکشی';alert(err.message);}
+      return;
+    }
+    var command=e.target.closest('[data-cm-war-command]');
+    if(command){
+      var id=command.dataset.cmWarId,commandName=command.dataset.cmWarCommand;
+      if(!id||!commandName)return;
+      var card=command.closest('.cm-command-card'),buttons=card?card.querySelectorAll('[data-cm-war-command]'):[];
+      buttons.forEach(x=>{x.disabled=true;});
+      try{
+        await api('/api/war-expeditions/'+encodeURIComponent(id)+'/command',{method:'POST',body:JSON.stringify({command:commandName})});
+        await load();
+        alert(commandName==='attack'?'دستور حمله ثبت شد.':commandName==='siege'?'دستور محاصره ثبت شد.':'دستور استقرار ثبت شد.');
+      }catch(err){
+        buttons.forEach(x=>{x.disabled=false;});
+        alert(err.message);
+      }
+      return;
+    }
+    var b=e.target.closest('[data-cm-action]');if(b)openUpgradeConfirm(b.dataset.cmAction,b.dataset.cmKey);
+    if(e.target.id==='cmClose'||e.target.id==='castleManagementModal'){$('castleManagementModal').classList.add('hidden');document.body.classList.remove('modal-open');}
+  });
   window.khataOpenCastleManagement=async()=>{$('castleManagementModal').classList.remove('hidden');document.body.classList.add('modal-open');await load();};
 })();
