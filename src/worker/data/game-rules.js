@@ -43,6 +43,7 @@ export const SPECIAL_CAMPS = {
   "Stormlands":[{key:"hammer_wielder",label:"🔨 پتک‌دار",cost:{coins:300,wood:200,iron:30,peasants:50},max:20,unit:"hammer_wielder",yield:50}],
   "Dorne":[{key:"dornish_spearman",label:"🔱 نیزه‌دار دورنیش",cost:{coins:300,wood:200,iron:10,peasants:50},max:20,unit:"dornish_spearman",yield:50}]
 };
+export const SHIP_CAPACITY = {transport:600,warship:400};
 export const EQUIPMENT = {
   ladder:{label:"🪜 نردبان",level:1,cost:{wood:70},limit:10,period:"day"},
   ram:{label:"🔩 دژکوب",level:2,cost:{wood:500,iron:50},limit:3,period:"day"},
