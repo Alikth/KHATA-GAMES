@@ -59,7 +59,7 @@ async function ensureWarRuntime(env){await env.DB.prepare("CREATE TABLE IF NOT E
 async function warRuntime(env){await ensureWarRuntime(env);const rows=(await env.DB.prepare("SELECT key,value FROM game_runtime WHERE key IN ('war_running')").all()).results;const m=Object.fromEntries(rows.map(x=>[x.key,x.value]));return {running:m.war_running!=="0"};}
 async function freezeWars(env){await ensureWarLogSchema(env);const rt=await warRuntime(env);if(!rt.running)return;const now=Date.now();const rows=(await env.DB.prepare("SELECT id,elapsed_seconds,run_started_at FROM war_logs WHERE cancelled=0 AND command IS NULL AND run_started_at IS NOT NULL").all()).results;const qs=rows.map(x=>env.DB.prepare("UPDATE war_logs SET elapsed_seconds=?,run_started_at=NULL WHERE id=?").bind(Number(x.elapsed_seconds||0)+Math.max(0,(now-Date.parse(x.run_started_at))/1000),x.id));qs.push(env.DB.prepare("UPDATE game_runtime SET value='0' WHERE key='war_running'"));if(qs.length)await env.DB.batch(qs);}
 async function resumeWars(env){await ensureWarLogSchema(env);const rt=await warRuntime(env);if(rt.running)return;const now=new Date().toISOString();await env.DB.batch([env.DB.prepare("UPDATE game_runtime SET value='1' WHERE key='war_running'"),env.DB.prepare("UPDATE war_logs SET run_started_at=? WHERE cancelled=0 AND command IS NULL AND run_started_at IS NULL AND elapsed_seconds < duration_minutes*60").bind(now)]);}
-async function castleTradeBlocked(env,castle){await ensureWarLogSchema(env);const row=await env.DB.prepare("SELECT id FROM war_logs WHERE destination_castle=? AND command IN ('attack','siege') LIMIT 1").bind(castle).first();return !!row;}
+async function castleTradeBlocked(env,castle){await ensureWarLogSchema(env);const row=await env.DB.prepare("SELECT id FROM war_logs WHERE destination_castle=? AND cancelled=0 AND command IN ('attack','siege') AND outcome IS NULL LIMIT 1").bind(castle).first();return !!row;}
 
 
 const ECONOMY_SCHEMA = [
@@ -503,9 +503,9 @@ async function handleApi(request, env, url) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(await isGameControlLocked(env,"war"))return json({error:"لشکرکشی‌ها فعلاً توسط ادمین قفل شده‌اند."},423);
     await ensureWarLogSchema(env); const rt=await warRuntime(env); if(!rt.running)return json({error:"بازی فعلاً متوقف است؛ شروع بازی را از ادمین صبر کن."},423);
-    const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
     const b=await body(request),type=String(b.type||""),source=String(b.source||"").trim(),destination=String(b.destination||"").trim(),arrivalTime=String(b.arrivalTime||"").trim(),isFake=!!b.fake,lordPresent=b.lordPresent!==false;
     const durationMinutes=Math.floor(Number(b.durationMinutes||0));
+    const state=await requireCastleOwner(request,env,source); if(!state)return json({error:"قلعه مبدا متعلق به این حساب نیست."},403);
     if(!["land","sea"].includes(type))return json({error:"نوع لشکرکشی معتبر نیست."},400);
     const sourceRow=await env.DB.prepare("SELECT castle,region FROM castle_state WHERE castle=?").bind(source).first(),destRow=await env.DB.prepare("SELECT castle,region,owner_account_id AS ownerAccountId FROM castle_state WHERE castle=?").bind(destination).first();
     if(!sourceRow||!destRow)return json({error:"مبدا یا مقصد معتبر نیست."},400); if(source!==state.castle)return json({error:"مبدا باید قلعه ثبت‌شده خودت باشد."},403); if(destination===source)return json({error:"مقصد باید با مبدا متفاوت باشد."},400);
@@ -540,7 +540,8 @@ async function handleApi(request, env, url) {
       const rows=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(war.destination_castle).all()).results;
       defenderAssets=Object.fromEntries(rows.map(x=>[x.unit_key,Number(x.count)]));
     }
-    await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=? WHERE id=? AND command IS NULL").bind(command,new Date().toISOString(),JSON.stringify(defenderAssets),id).run();
+    const result=await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=? WHERE id=? AND command IS NULL").bind(command,new Date().toISOString(),JSON.stringify(defenderAssets),id).run();
+    if(!result.meta?.changes)return json({error:"این لشکرکشی قبلاً دستور گرفته است."},409);
     return json({ok:true,command});
   }
   if (method==="GET" && path==="/api/admin/game-runtime") {
@@ -729,8 +730,8 @@ async function handleApi(request, env, url) {
     if(await isGameControlLocked(env,"trade"))return json({error:"تجارت فعلاً توسط ادمین قفل شده است."},423);
     await ensureTradeSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
-    const state=await requireCastleOwner(request,env); if(!state)return json({error:"ابتدا قلعه خود را ثبت کنید."},404);
     const b=await body(request), source=String(b.source||"").trim(), destination=String(b.destination||"").trim();
+    const state=await requireCastleOwner(request,env,source); if(!state)return json({error:"قلعه مبدا متعلق به این حساب نیست."},403);
     const sourceRow=source?await env.DB.prepare("SELECT * FROM castle_state WHERE castle=? AND owner_account_id=?").bind(source,session.user_id).first():state;
     if(!sourceRow)return json({error:"قلعه مبدا متعلق به این حساب نیست."},403);
     const sendAssets=tradeAssets(b.sendAssets), receiveAssets=tradeAssets(b.receiveAssets);
