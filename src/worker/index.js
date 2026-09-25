@@ -524,11 +524,11 @@ async function handleApi(request, env, url) {
     await ensureWarLogSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const castle=String(url.searchParams.get("castle")||"").trim();
-    if(!castle)return json({error:"قلعه مقصد برای بررسی دستورات مشخص نشده است."},400);
-    const state=await env.DB.prepare("SELECT c.* FROM castle_state c JOIN players p ON p.castle=c.castle AND p.account_id=? WHERE c.castle=? LIMIT 1").bind(session.user_id,castle).first();
+    if(!castle)return json({error:"قلعه مبدا برای بررسی دستورات مشخص نشده است."},400);
+    const state=await requireCastleOwner(request,env,castle);
     if(!state)return json({error:"این قلعه متعلق به حساب شما نیست."},403);
     const rt=await warRuntime(env);
-    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,source_castle AS sourceCastle,destination_castle AS destinationCastle,type,arrival_time AS arrivalTime,lord_present AS lordPresent,elapsed_seconds AS elapsedSeconds,duration_minutes AS durationMinutes FROM war_logs WHERE destination_castle=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(castle).all()).results;
+    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,source_castle AS sourceCastle,destination_castle AS destinationCastle,type,arrival_time AS arrivalTime,lord_present AS lordPresent,elapsed_seconds AS elapsedSeconds,duration_minutes AS durationMinutes FROM war_logs WHERE attacker_account_id=? AND source_castle=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(session.user_id,castle).all()).results;
     return json({commands:rows.filter(x=>!warIsActive(x,rt)).map(x=>({...x,arrived:true}))});
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/cancel$/)) {
@@ -572,10 +572,8 @@ async function handleApi(request, env, url) {
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]),b=await body(request),command=String(b.command||"");
     if(!["attack","deploy","siege"].includes(command))return json({error:"دستور معتبر نیست."},400);
-    const owner=await env.DB.prepare("SELECT c.* FROM castle_state c JOIN players p ON p.castle=c.castle AND p.account_id=? WHERE c.castle=(SELECT destination_castle FROM war_logs WHERE id=?) LIMIT 1").bind(session.user_id,id).first();
-    const war=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
-    if(!war)return json({error:"لشکرکشی پیدا نشد."},404);
-    if(!owner)return json({error:"فقط صاحب قلعه مقصد می‌تواند برای این لشکرکشی دستور صادر کند."},403);
+    const war=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=?").bind(id,session.user_id).first();
+    if(!war)return json({error:"لشکرکشی پیدا نشد یا متعلق به این حساب نیست."},404);
     const rt=await warRuntime(env);
     if(Number(war.cancelled)||warIsActive(war,rt))return json({error:"این لشکرکشی هنوز به مقصد نرسیده است."},409);
     if(war.command)return json({error:"برای این لشکرکشی قبلاً دستور ثبت شده است."},409);
@@ -584,8 +582,8 @@ async function handleApi(request, env, url) {
       const rows=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(war.destination_castle).all()).results;
       defenderAssets=Object.fromEntries(rows.map(x=>[x.unit_key,Number(x.count)]));
     }
-    const result=await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=? WHERE id=? AND command IS NULL").bind(command,new Date().toISOString(),JSON.stringify(defenderAssets),id).run();
-     if(!result.meta?.changes)return json({error:"این لشکرکشی قبلاً دستور گرفته است."},409);
+    const result=await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=? WHERE id=? AND attacker_account_id=? AND command IS NULL").bind(command,new Date().toISOString(),JSON.stringify(defenderAssets),id,session.user_id).run();
+    if(!result.meta?.changes)return json({error:"این لشکرکشی قبلاً دستور گرفته است."},409);
     return json({ok:true,command});
   }
   if (method==="GET" && path==="/api/admin/game-runtime") {
