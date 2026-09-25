@@ -259,6 +259,7 @@ async function runWeeklyUpdate(env, force=false) {
     for(const c of camps){const d=GENERAL_CAMPS[c.camp_key];if(d&&c.level)add(d.unit,c.level*d.yield);}
     for(const c of scamps){const d=(SPECIAL_CAMPS[s.region]||[]).find(x=>x.key===c.camp_key);if(d&&c.level)add(d.unit,c.level*d.yield);}
     const a=Object.fromEntries(army.map(x=>[x.unit_key,Number(x.count)]));
+    for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k))) a[unit]=(a[unit]||0)+Number(gain||0);
     const grainNeed=(a.swordsman||0)+(a.archer||0)+(a.spearman||0)+((a.cavalry||0)*2)+Object.entries(a).filter(([key])=>!["swordsman","archer","spearman","cavalry","giants"].includes(key)).reduce((sum,[,count])=>sum+Number(count||0)*2,0);
     const meatNeed=(a.giants||0)*2;
     const grainUsed=Math.min(Number(s.grain||0),grainNeed);
@@ -266,10 +267,12 @@ async function runWeeklyUpdate(env, force=false) {
     const fishUsed=Math.min(Number(s.fish||0),Math.ceil(rem/2));
     rem=Math.max(0,rem-fishUsed*2);
     const meatUsed=Math.min(Number(s.meat||0),Math.max(meatNeed,Math.ceil(rem/2)));
+    rem=Math.max(0,rem-meatUsed*2);
+    const grapeUsed=Math.min(Number(s.grapes||0),Math.ceil(rem*2));
     const resourceParts=[]; const resourceBind=[];
     for(const [k,v] of Object.entries(changes)){if(RESOURCE_KEYS.includes(k)&&v){resourceParts.push(k+"="+k+"+?");resourceBind.push(Math.floor(v));}}
-    resourceParts.push("grain=MAX(0,grain-?)","fish=MAX(0,fish-?)","meat=MAX(0,meat-?)");
-    resourceBind.push(grainUsed,fishUsed,meatUsed);
+    resourceParts.push("grain=MAX(0,grain-?)","fish=MAX(0,fish-?)","meat=MAX(0,meat-?)","grapes=MAX(0,grapes-?)");
+    resourceBind.push(grainUsed,fishUsed,meatUsed,grapeUsed);
     const statements=[env.DB.prepare("UPDATE castle_state SET "+resourceParts.join(",")+" WHERE castle=?").bind(...resourceBind,s.castle)];
     for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k))){
       statements.push(env.DB.prepare("INSERT INTO castle_army(castle,unit_key,count) VALUES (?,?,?) ON CONFLICT(castle,unit_key) DO UPDATE SET count=count+excluded.count").bind(s.castle,unit,Math.floor(gain)));
