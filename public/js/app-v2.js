@@ -293,23 +293,30 @@ window.addEventListener("DOMContentLoaded", () => {
   async function renderMyCastles() {
     const root = $("myCastlesList"); if (!root || !currentUser) return;
     let mine = [];
+    let mineError = null;
     let activeWars = {expeditions:[]};
+    let activeWarsError = null;
     let tradeNotice = {byCastle:{}};
-    try { mine = await api("/api/my-castles"); } catch { mine = players.filter(p => p.accountId === currentUser.id); }
-    try { activeWars = await api("/api/my-war-expeditions/active"); } catch { activeWars = {expeditions:[]}; }
-    try { tradeNotice = await api("/api/trades/notifications"); } catch { tradeNotice = {byCastle:{}}; }
+    try { mine = await api("/api/my-castles"); } catch (e) { mineError = e; }
+    try { activeWars = await api("/api/my-war-expeditions/active"); } catch (e) { activeWarsError = e; }
+    try { tradeNotice = await api("/api/trades/notifications"); } catch {}
+    if (mineError) {
+      root.innerHTML = '<div class="my-castles-empty"><div class="empty-castle-icon">⚠️</div><h3>خطا در دریافت قلعه‌ها</h3><p>'+escapeHTML(mineError.message||"دریافت قلعه‌ها انجام نشد.")+'</p></div>';
+      return;
+    }
     if (!mine.length) {
       root.innerHTML = `<div class="my-castles-empty"><div class="empty-castle-icon">🏰</div><h3>NO CASTLES YET</h3><p>هنوز هیچ قلعه‌ای با این حساب ثبت نشده است.</p><button class="primary" type="button" data-action="go-register">انتخاب قلعه</button></div>`;
       return;
     }
     root.innerHTML = mine.map(p => {
       const r = houses.find(x => x.region === p.region), c = r?.castles.find(x => x.castle === p.castle);
-      const wars = (activeWars.expeditions||[]).filter(w => w.sourceCastle === p.castle && w.active);
+      const wars = activeWarsError ? [] : (activeWars.expeditions||[]).filter(w => w.sourceCastle === p.castle && w.active);
       const badge = Number(tradeNotice.byCastle?.[p.castle]||0);
       const warHtml = wars.length ? '<div class="my-castle-war">'+wars.map(w => `<article class="active-war-card"><strong>⚔️ لشکرکشی به ${escapeHTML(w.destinationCastle)} — رسیدن ${escapeHTML(w.arrivalTime)}</strong><div>${w.type==='sea'?'دریایی':'زمینی'} ${w.fake?' · فیک':''}</div><button class="war-cancel-btn" type="button" data-action="cancel-war" data-war-id="${escapeHTML(w.id)}">لغو لشکرکشی</button></article>`).join('')+'</div>' : '';
       return `<article class="my-castle-card"><div class="my-castle-art">${escapeHTML(c?.icon || "🏰")}</div><div class="my-castle-body"><span class="my-castle-region">${escapeHTML(r?.icon || "")} ${escapeHTML(p.region)}</span><h3>${escapeHTML(p.castle)}</h3><p>HOUSE ${escapeHTML(p.house)}</p><div class="my-castle-meta"><span>👤 ${escapeHTML(p.username)}</span><span class="owned-badge">YOUR CASTLE</span></div></div><div class="my-castle-actions"><button class="castle-open" type="button" data-action="my-castle-manage" data-castle="${escapeHTML(p.castle)}">🏰 مدیریت قلعه</button><button class="castle-open" type="button" data-action="war-expedition" data-castle="${escapeHTML(p.castle)}">⚔️ لشکرکشی</button><button class="castle-open trade-open" type="button" data-action="trade" data-castle="${escapeHTML(p.castle)}">⚖️ تجارت <span class="trade-badge-wrap"><span class="trade-badge ${badge?'':'hidden'}" data-trade-notification="${escapeHTML(p.castle)}">${badge||''}</span></span></button><button class="castle-open trade-request-open" type="button" data-action="trade-requests">📜 درخواست تجارت</button></div>${warHtml}</article>`;
     }).join("");
     window.khataRefreshTradeNotifications?.();
+    if(activeWarsError)showToast(activeWarsError.message||"دریافت وضعیت لشکرکشی‌ها انجام نشد.",true);
   }
   async function cancelWarExpedition(id) {
     if (!confirm("این لشکرکشی لغو شود؟ نیروها و ادوات انتخاب‌شده به قلعه بازمی‌گردند.")) return;
@@ -492,8 +499,13 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   async function refreshAdmin(){
-    const [lordList,adminLordList,houseList,warData,tradeData,controlData,castleData,runtimeData]=await Promise.all([api('/api/players'),api('/api/admin/players'),api('/api/houses'),api('/api/admin/war-expeditions'),api('/api/admin/trades'),api('/api/admin/controls'),api('/api/admin/castles'),api('/api/admin/game-runtime')]);
+    const results=await Promise.allSettled([api('/api/players'),api('/api/admin/players'),api('/api/houses'),api('/api/admin/war-expeditions'),api('/api/admin/trades'),api('/api/admin/controls'),api('/api/admin/castles'),api('/api/admin/game-runtime')]);
+    const fallback=(i,value)=>results[i]?.status==="fulfilled"?results[i].value:value;
+    const [lordList,adminLordList,houseList,warData,tradeData,controlData,castleData,runtimeData]=[
+      fallback(0,[]),fallback(1,[]),fallback(2,[]),fallback(3,{expeditions:[]}),fallback(4,{trades:[]}),fallback(5,{controls:{}}),fallback(6,{castles:[]}),fallback(7,{running:true})
+    ];
     players=lordList;adminPlayers=adminLordList;houses=houseList;renderPlayers();renderMap();fillAdminRegions();updateAdminAssignPlayers();
+    if(results.some(x=>x.status==="rejected"))showToast("بخشی از اطلاعات پنل مدیریت بارگذاری نشد.",true);
     $("adminPlayers").innerHTML=players.length?players.map(p=>'<div class="admin-row"><span>'+escapeHTML(p.username)+' · '+escapeHTML(p.castle)+'</span><button class="delete" type="button" data-action="delete-player" data-id="'+escapeHTML(p.id)+'">DELETE</button></div>').join(''):'<small>هیچ پلیری ثبت نشده.</small>';
     const wars=warData.expeditions||[];$("adminLordCount").textContent=players.length;$("adminWarCount").textContent=wars.length;$("adminActiveWarCount").textContent=wars.filter(x=>x.active).length;
     $("adminWarList").innerHTML=wars.length?wars.map(x=>{let assets={};try{assets=JSON.parse(x.assetsJson||'{}');}catch{};const lines=Object.entries(assets).map(([kind,obj])=>'<div><b>'+escapeHTML(kind==='army'?'نیروها':kind==='equipment'?'ادوات':'ناوگان')+'</b>'+adminAssetLines(obj,kind==='army'?ADMIN_ARMY_LABELS:kind==='equipment'?ADMIN_EQUIPMENT_LABELS:ADMIN_FLEET_LABELS)+'</div>').join('');let outcome=x.outcome?'<div class="admin-war-result">نتیجه: '+(x.outcome==='attacker'?'پیروزی مهاجم':'پیروزی مدافع')+'</div>':['attack','siege'].includes(x.command)?'<div class="admin-future-actions"><button class="primary" data-action="admin-outcome" data-war-id="'+escapeHTML(x.id)+'" data-outcome="attacker">پیروزی مهاجم</button><button class="danger" data-action="admin-outcome" data-war-id="'+escapeHTML(x.id)+'" data-outcome="defender">پیروزی مدافع</button></div>':'';let command=x.command?'<div class="admin-war-command">دستور صادرشده: '+escapeHTML(x.command==='attack'?'حمله':x.command==='deploy'?'استقرار':'محاصره')+'</div>':(!x.active&&!Number(x.cancelled)?'<div class="admin-war-command">رسیده و منتظر دستور</div>':'');return '<article class="admin-war-card '+(x.active?'active ':'')+(Number(x.cancelled)?'cancelled':'')+'"><div class="admin-war-top"><div><span class="admin-war-status">'+(Number(x.cancelled)?'✓ لغو شده':x.command? '✓ دستور ثبت شده':x.active?'● فعال':'⌛ رسیده')+'</span><h3>'+escapeHTML(x.attackerUsername)+' · '+escapeHTML(x.sourceCastle)+' → '+escapeHTML(x.destinationCastle)+'</h3></div><span>'+escapeHTML(x.arrivalTime)+'</span></div><div class="admin-war-details"><span>آیدی پلیر: '+escapeHTML(x.attackerAccountId||'—')+'</span><span>لرد: '+escapeHTML(x.lordName||'—')+'</span><span>نوع: '+(x.type==='sea'?'دریایی':'زمینی')+'</span><span>'+((x.fake)?'فیک':'واقعی')+'</span><span>'+((x.lordPresent)?'لرد حاضر':'لرد غایب')+'</span><span>مدت: '+escapeHTML(String(x.durationMinutes||0))+' دقیقه</span></div><div class="admin-war-assets">'+(lines||'<div class="admin-muted">بدون دارایی</div>')+'</div>'+command+outcome+(x.active&&!Number(x.cancelled)?'<button class="war-cancel-btn" type="button" data-action="admin-cancel-war" data-war-id="'+escapeHTML(x.id)+'">لغو لشکرکشی از طرف ادمین</button>':'')+'</article>';}).join(''):'<div class="admin-empty">هنوز لشکرکشی‌ای ثبت نشده است.</div>';
@@ -655,15 +667,13 @@ window.addEventListener("DOMContentLoaded", () => {
     try {
       if (typeof window.khataOpenCastleManagement !== "function") {
         const src = document.querySelector('script[src*="/js/castle-management-v2.js"]');
-        if (!src) {
-          await new Promise((resolve, reject) => {
-            const tag = document.createElement("script");
-            tag.src = "/js/castle-management-v2.js?v=5";
-            tag.onload = resolve;
-            tag.onerror = () => reject(new Error("فایل مدیریت قلعه بارگذاری نشد."));
-            document.head.appendChild(tag);
-          });
-        }
+        await new Promise((resolve, reject) => {
+          const tag = document.createElement("script");
+          tag.src = "/js/castle-management-v2.js?v=7";
+          tag.onload = resolve;
+          tag.onerror = () => reject(new Error("فایل مدیریت قلعه بارگذاری نشد."));
+          document.head.appendChild(tag);
+        });
       }
       if (typeof window.khataOpenCastleManagement !== "function") {
         throw new Error("مدیریت قلعه بارگذاری نشد.");
