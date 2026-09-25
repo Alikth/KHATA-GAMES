@@ -147,10 +147,6 @@
       c._image=image;
       if(c.region===activeRegion) render(activeRegion);
     });
-    document.addEventListener("click",e=>{
-      const r=e.target.closest("[data-khcs-region]");
-      if(r) activeRegion=r.dataset.khcsRegion;
-    });
   }
   document.addEventListener("click",e=>{
     const r=e.target.closest("[data-khcs-region]");if(r){render(r.dataset.khcsRegion);document.querySelectorAll("[data-khcs-region]").forEach(b=>b.classList.toggle("active",b===r))}
