@@ -650,8 +650,16 @@ async function handleApi(request, env, url) {
     await ensureEconomySchema(env);
     const b=await body(request), castle=String(b.castle||"").trim(), changes=b.changes&&typeof b.changes==="object"?b.changes:{};
     const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
-    if(!state)return json({error:"قلعه پیدا نشد."},404);
-    const updates=[];
+     if(!state)return json({error:"قلعه پیدا نشد."},404);
+     const naval=await isNavalCastle(env,castle);
+     if(changes.portEnabled===true&&!naval)return json({error:"قلعه غیربندری نمی‌تواند اسکله فعال داشته باشد."},400);
+     if(changes.portLevel!==undefined){
+       const n=Math.floor(Number(changes.portLevel));
+       if(!Number.isFinite(n)||n<0||n>15)return json({error:"سطح اسکله باید بین 0 تا 15 باشد."},400);
+       if(!naval&&n>0)return json({error:"قلعه غیربندری نمی‌تواند سطح اسکله داشته باشد."},400);
+     }
+     if(changes.portEnabled===false)changes.portLevel=0;
+     const updates=[];
     const res=changes.resources&&typeof changes.resources==="object"?changes.resources:{};
     for(const k of RESOURCE_KEYS){
       if(Object.prototype.hasOwnProperty.call(res,k)){
