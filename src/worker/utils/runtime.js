@@ -100,6 +100,7 @@ async function rateLimit(request, env, action, limit, windowMs = 15 * 60 * 1000)
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const key = action + ":" + await sha256Base64Url(ip);
   const now = Date.now(), bucket = now - (now % windowMs);
+  await env.DB.prepare("DELETE FROM rate_limits WHERE window_start < ?").bind(bucket - (windowMs * 2)).run();
   const row = await env.DB.prepare(`INSERT INTO rate_limits (bucket_key, window_start, count) VALUES (?, ?, 1)
     ON CONFLICT(bucket_key) DO UPDATE SET count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END, window_start = excluded.window_start
     RETURNING count`).bind(key, bucket).first();
