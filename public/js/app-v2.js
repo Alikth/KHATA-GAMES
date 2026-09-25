@@ -338,6 +338,21 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function deletePlayer(id) {
+    if (!id) return;
+    if (!adminConfirm("این لرد از لیست لردهای ثبت‌شده حذف شود؟ قلعه‌اش آزاد می‌شود.")) return;
+    try {
+      await api("/api/admin/players/" + encodeURIComponent(id), {method:"DELETE", body:JSON.stringify({})});
+      await refreshAdmin();
+      players = await api("/api/players");
+      renderPlayers();
+      renderMap();
+      showToast("لرد حذف شد و قلعه آزاد شد.");
+    } catch (e) {
+      showToast(e.message || "حذف لرد انجام نشد.", true);
+    }
+  }
+
   window.khataRefreshMyCastles = renderMyCastles;
 
   const navSlideDemo = new URLSearchParams(location.search).get("navtest") === "1";
