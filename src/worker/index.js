@@ -313,16 +313,26 @@ async function requireCastleOwner(request,env,castleName=""){
 }
 function safeCost(cost){return Object.fromEntries(Object.entries(cost).filter(([k,v])=>RESOURCE_KEYS.includes(k)&&Number(v)>0));}
 async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
-  const row=await env.DB.prepare(`SELECT level FROM ${table} WHERE castle=? AND ${table==="castle_production"?"production_key":"camp_key"}=?`).bind(castle,key).first();
-  const level=Number(row?.level||0); if(level>=maxLevel)return {error:"این مورد به حداکثر سطح رسیده است.",status:400};
-  if(!addCostCheck(await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first(),def.cost))return {error:"منابع کافی نیست.",status:400};
-  const cost=safeCost(def.cost); const sets=Object.keys(cost).map(k=>`${k}=${k}-?`).join(",");
   const where=table==="castle_production"?"production_key":"camp_key";
-  const q1=env.DB.prepare(`UPDATE castle_state SET ${sets} WHERE castle=? AND ${Object.keys(cost).map(k=>`${k}>=?`).join(" AND ")}`).bind(...Object.values(cost),castle,...Object.values(cost));
-  const q2=env.DB.prepare(`UPDATE ${table} SET level=level+1 WHERE castle=? AND ${where}=? AND level=?`).bind(castle,key,level);
-  const b=await env.DB.batch([q1,q2]); if(!b[0]?.meta?.changes||!b[1]?.meta?.changes)return {error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن.",status:409}; return {ok:true,newLevel:level+1};
+  const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
+  const row=await env.DB.prepare(`SELECT level FROM ${table} WHERE castle=? AND ${where}=?`).bind(castle,key).first();
+  const level=Number(row?.level||0);
+  if(!row)return {error:"این مورد برای این قلعه تعریف نشده است.",status:404};
+  if(level>=maxLevel)return {error:"این مورد به حداکثر سطح رسیده است.",status:400};
+  if(!addCostCheck(state,def.cost))return {error:"منابع کافی نیست.",status:400};
+  const cost=safeCost(def.cost),sets=Object.keys(cost).map(k=>`${k}=${k}-?`).join(",");
+  const availability=Object.keys(cost).map(k=>`${k}>=?`).join(" AND ");
+  const original=Object.values(cost).map((_,i)=>Object.keys(cost)[i]).map(k=>`${k}=?`).join(" AND ");
+  const q1=env.DB.prepare(
+    `UPDATE ${table} SET level=level+1 WHERE castle=? AND ${where}=? AND level=? AND EXISTS (SELECT 1 FROM castle_state WHERE castle=? AND ${availability})`
+  ).bind(castle,key,level,castle,...Object.values(cost));
+  const q2=env.DB.prepare(
+    `UPDATE castle_state SET ${sets} WHERE castle=? AND ${original} AND EXISTS (SELECT 1 FROM ${table} WHERE castle=? AND ${where}=? AND level=?)`
+  ).bind(castle,...Object.keys(cost).map(k=>Number(state[k]||0)),castle,key,level+1);
+  const b=await env.DB.batch([q1,q2]);
+  if(!b[0]?.meta?.changes||!b[1]?.meta?.changes)return {error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن.",status:409};
+  return {ok:true,newLevel:level+1};
 }
-
 async function handleApi(request, env, url) {
   const method=request.method, path=url.pathname;
   if (method === "GET" && path === "/api/health") { await env.DB.prepare("SELECT 1 AS ok").first(); return json({ok:true,service:"khata-games"}); }
@@ -415,27 +425,18 @@ async function handleApi(request, env, url) {
   }
   if (method==="POST" && path==="/api/my-castle/special-camp/upgrade") {
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
-    const key=String(b.key||""); const def=(SPECIAL_CAMPS[state.region]||[]).find(x=>x.key===key);
+    const key=String(b.key||""), def=(SPECIAL_CAMPS[state.region]||[]).find(x=>x.key===key);
     if(!def)return json({error:"کمپ ویژه این اقلیم معتبر نیست."},400);
-    const row=await env.DB.prepare("SELECT level FROM castle_special_camps WHERE castle=? AND camp_key=?").bind(state.castle,key).first(); const level=Number(row?.level||0);
-    if(level>=Number(def.max||50))return json({error:"کمپ به حداکثر سطح رسیده است."},400);
-    if(!addCostCheck(state,def.cost))return json({error:"منابع کافی نیست."},400);
-    const cost=safeCost(def.cost), sets=Object.keys(cost).map(k=>`${k}=${k}-?`).join(","), cond=Object.keys(cost).map(k=>`${k}>=?`).join(" AND ");
-    const bres=await env.DB.batch([
-      env.DB.prepare(`UPDATE castle_state SET ${sets} WHERE castle=? AND ${cond}`).bind(...Object.values(cost),state.castle,...Object.values(cost)),
-      env.DB.prepare("UPDATE castle_special_camps SET level=level+1 WHERE castle=? AND camp_key=? AND level=?").bind(state.castle,key,level)
-    ]);
-    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes)return json({error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن."},409);
-    return json({ok:true,newLevel:level+1});
+    const result=await upgradeResourceBacked(env,state.castle,"castle_special_camps",key,def,Number(def.max||20));
+    if(result.error)return json({error:result.error},result.status);
+    return json(result);
   }
   if (method==="POST" && path==="/api/my-castle/special-production/upgrade") {
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     const sp=SPECIAL_PRODUCTIONS[state.region]; if(!sp)return json({error:"این اقلیم تولیدی ویژه ندارد."},400);
-    const row=await env.DB.prepare("SELECT level FROM castle_production WHERE castle=? AND production_key=?").bind(state.castle,sp.key).first(); const level=Number(row?.level||0);
-    if(level>=sp.max)return json({error:"تولیدی ویژه به حداکثر سطح رسیده است."},400); if(!addCostCheck(state,sp.cost))return json({error:"منابع کافی نیست."},400);
-    const cost=safeCost(sp.cost),sets=Object.keys(cost).map(k=>`${k}=${k}-?`).join(","),cond=Object.keys(cost).map(k=>`${k}>=?`).join(" AND ");
-    const bres=await env.DB.batch([env.DB.prepare(`UPDATE castle_state SET ${sets} WHERE castle=? AND ${cond}`).bind(...Object.values(cost),state.castle,...Object.values(cost)),env.DB.prepare("UPDATE castle_production SET level=level+1 WHERE castle=? AND production_key=? AND level=?").bind(state.castle,sp.key,level)]);
-    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes)return json({error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:level+1});
+    const result=await upgradeResourceBacked(env,state.castle,"castle_production",sp.key,sp,sp.max);
+    if(result.error)return json({error:result.error},result.status);
+    return json(result);
   }
   if (method==="POST" && path==="/api/my-castle/workshop/upgrade") {
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
