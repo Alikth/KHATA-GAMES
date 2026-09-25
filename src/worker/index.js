@@ -263,6 +263,7 @@ async function loadCastleEconomy(env, castle) {
   const campMap=Object.fromEntries(camps.results.map(x=>[x.camp_key,{level:Number(x.level),...GENERAL_CAMPS[x.camp_key]}]));
   const specialCampMap=Object.fromEntries(specialCamps.results.map(x=>[x.camp_key,{level:Number(x.level),...(SPECIAL_CAMPS[state.region]||[]).find(s=>s.key===x.camp_key)}]));
   const armyMap=Object.fromEntries(army.results.map(x=>[x.unit_key,Number(x.count)]));
+  for(const spc of (SPECIAL_CAMPS[state.region]||[])) if(!Object.prototype.hasOwnProperty.call(armyMap,spc.unit)) armyMap[spc.unit]=0;
   const equipmentMap=Object.fromEntries(equipment.results.map(x=>[x.item_key,Number(x.count)]));
   const fleetMap=Object.fromEntries(fleet.results.map(x=>[x.ship_key,Number(x.count)]));
   let parsedSpecialItem=null; try{parsedSpecialItem=state.special_item?JSON.parse(state.special_item):null;}catch{parsedSpecialItem=null;}
@@ -346,18 +347,20 @@ async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
   const level=Number(row?.level||0);
   if(!row)return {error:"این مورد برای این قلعه تعریف نشده است.",status:404};
   if(level>=maxLevel)return {error:"این مورد به حداکثر سطح رسیده است.",status:400};
-  if(!addCostCheck(state,def.cost))return {error:"منابع کافی نیست.",status:400};
-  const cost=safeCost(def.cost),sets=Object.keys(cost).map(k=>`${k}=${k}-?`).join(",");
-  const availability=Object.keys(cost).map(k=>`${k}>=?`).join(" AND ");
-  const original=Object.values(cost).map((_,i)=>Object.keys(cost)[i]).map(k=>`${k}=?`).join(" AND ");
-  const q1=env.DB.prepare(
+  const cost=safeCost(def.cost),entries=Object.entries(cost);
+  const availability=entries.map(([k])=>`${k}>=?`).join(" AND ");
+  const deduction=entries.map(([k])=>`${k}=${k}-?`).join(",");
+  const upgraded=await env.DB.prepare(
     `UPDATE ${table} SET level=level+1 WHERE castle=? AND ${where}=? AND level=? AND EXISTS (SELECT 1 FROM castle_state WHERE castle=? AND ${availability})`
-  ).bind(castle,key,level,castle,...Object.values(cost));
-  const q2=env.DB.prepare(
-    `UPDATE castle_state SET ${sets} WHERE castle=? AND ${original} AND EXISTS (SELECT 1 FROM ${table} WHERE castle=? AND ${where}=? AND level=?)`
-  ).bind(castle,...Object.keys(cost).map(k=>Number(state[k]||0)),castle,key,level+1);
-  const b=await env.DB.batch([q1,q2]);
-  if(!b[0]?.meta?.changes||!b[1]?.meta?.changes)return {error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن.",status:409};
+  ).bind(castle,key,level,castle,...entries.map(([,v])=>Number(v))).run();
+  if(!upgraded.meta?.changes)return {error:"منابع کافی نیست یا سطح همزمان تغییر کرده؛ دوباره تلاش کن.",status:409};
+  const spent=await env.DB.prepare(
+    `UPDATE castle_state SET ${deduction} WHERE castle=? AND ${availability}`
+  ).bind(castle,...entries.map(([,v])=>Number(v))).run();
+  if(!spent.meta?.changes){
+    await env.DB.prepare(`UPDATE ${table} SET level=level-1 WHERE castle=? AND ${where}=? AND level=?`).bind(castle,key,level+1).run();
+    return {error:"منابع همزمان تغییر کرده؛ دوباره تلاش کن.",status:409};
+  }
   return {ok:true,newLevel:level+1};
 }
 async function handleApi(request, env, url) {
@@ -708,15 +711,8 @@ async function handleApi(request, env, url) {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureEconomySchema(env);
     const week=gameWeekKey();
-    const claim=await env.DB.prepare("INSERT OR IGNORE INTO game_week_runs(week_key,processed_at) VALUES(?,?)").bind(week,new Date().toISOString()).run();
-    if(!claim.meta?.changes)return json({error:"آپدیت این هفته قبلاً انجام شده است.",week,already:true},409);
-    try{
-      await runWeeklyUpdate(env,false);
-      return json({ok:true,week});
-    }catch(e){
-      await env.DB.prepare("DELETE FROM game_week_runs WHERE week_key=?").bind(week).run();
-      throw e;
-    }
+    await runWeeklyUpdate(env,true);
+    return json({ok:true,week,forced:true});
   }
   if (method==="GET" && path==="/api/admin/trades") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
