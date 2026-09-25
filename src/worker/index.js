@@ -803,12 +803,19 @@ async function handleApi(request, env, url) {
     for(const [k,v] of Object.entries(sendAssets))if(Number(sender[k]||0)<v)return json({error:"موجودی فرستنده برای این تجارت کافی نیست."},409);
     for(const [k,v] of Object.entries(receiveAssets))if(Number(receiver[k]||0)<v)return json({error:"موجودی گیرنده برای کالای پیشنهادی کافی نیست."},409);
     const keys=[...new Set([...Object.keys(sendAssets),...Object.keys(receiveAssets)])];
-    const senderSets=[],receiverSets=[],senderBinds=[],receiverBinds=[];
-    for(const k of keys){const s=Number(sendAssets[k]||0),r=Number(receiveAssets[k]||0);senderSets.push(`${k}=${k}-?`);senderBinds.push(s-r);receiverSets.push(`${k}=${k}-?`);receiverBinds.push(r-s);}
-    const senderWhere=keys.map(k=>`${k}>=?`).join(" AND "), receiverWhere=keys.map(k=>`${k}>=?`).join(" AND ");
-    const q1=env.DB.prepare(`UPDATE castle_state SET ${senderSets.join(",")} WHERE castle=? AND ${senderWhere}`).bind(...senderBinds,row.sender_castle,...keys.map(k=>Number(sendAssets[k]||0)));
-    const q2=env.DB.prepare(`UPDATE castle_state SET ${receiverSets.join(",")} WHERE castle=? AND ${receiverWhere}`).bind(...receiverBinds,row.receiver_castle,...keys.map(k=>Number(receiveAssets[k]||0)));
-    const q3=env.DB.prepare("UPDATE trade_requests SET status='accepted',responded_at=? WHERE id=? AND status='pending'").bind(new Date().toISOString(),id);
+    const senderSets=[],receiverSets=[],senderBinds=[],receiverBinds=[],senderPost=[],receiverPost=[];
+    for(const k of keys){
+      const s=Number(sendAssets[k]||0),r=Number(receiveAssets[k]||0);
+      senderSets.push(k+"="+k+"-?");senderBinds.push(s-r);
+      receiverSets.push(k+"="+k+"-?");receiverBinds.push(r-s);
+      senderPost.push(k+"=?");receiverPost.push(k+"=?");
+    }
+    const senderWhere=keys.map(k=>k+">=?").join(" AND "), receiverWhere=keys.map(k=>k+">=?").join(" AND ");
+    const pending="EXISTS (SELECT 1 FROM trade_requests WHERE id=? AND status='pending')";
+    const q1=env.DB.prepare(`UPDATE castle_state SET ${senderSets.join(",")} WHERE castle=? AND ${senderWhere} AND ${pending}`).bind(...senderBinds,row.sender_castle,...keys.map(k=>Number(sendAssets[k]||0)),id);
+    const q2=env.DB.prepare(`UPDATE castle_state SET ${receiverSets.join(",")} WHERE castle=? AND ${receiverWhere} AND ${pending}`).bind(...receiverBinds,row.receiver_castle,...keys.map(k=>Number(receiveAssets[k]||0)),id);
+    const senderExpected=keys.map(k=>Number(sender[k]||0)-Number(sendAssets[k]||0)+Number(receiveAssets[k]||0)),receiverExpected=keys.map(k=>Number(receiver[k]||0)-Number(receiveAssets[k]||0)+Number(sendAssets[k]||0));
+    const q3=env.DB.prepare(`UPDATE trade_requests SET status='accepted',responded_at=? WHERE id=? AND status='pending' AND EXISTS (SELECT 1 FROM castle_state WHERE castle=? AND ${senderPost.join(" AND ")}) AND EXISTS (SELECT 1 FROM castle_state WHERE castle=? AND ${receiverPost.join(" AND ")})`).bind(new Date().toISOString(),id,row.sender_castle,...senderExpected,row.receiver_castle,...receiverExpected);
     const result=await env.DB.batch([q1,q2,q3]);
     if(!result[0]?.meta?.changes||!result[1]?.meta?.changes||!result[2]?.meta?.changes)return json({error:"تجارت همزمان تغییر کرده؛ دوباره تلاش کن."},409);
     return json({ok:true});
