@@ -441,35 +441,51 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/my-castle/workshop/upgrade") {
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     if(state.workshop_level>=5)return json({error:"کارگاه به حداکثر سطح رسیده است."},400);
-    if(Number(state.coins)<EQUIPMENT_UPGRADE_COST)return json({error:"6000 سکه لازم است."},400);
-    const bres=await env.DB.batch([env.DB.prepare("UPDATE castle_state SET coins=coins-6000 WHERE castle=? AND coins>=6000").bind(state.castle),env.DB.prepare("UPDATE castle_state SET workshop_level=workshop_level+1 WHERE castle=? AND workshop_level=?").bind(state.castle,state.workshop_level)]);
-    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes)return json({error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:state.workshop_level+1});
+    const oldCoins=Number(state.coins||0); if(oldCoins<EQUIPMENT_UPGRADE_COST)return json({error:"6000 سکه لازم است."},400);
+    const nextLevel=Number(state.workshop_level)+1;
+    const bres=await env.DB.batch([
+      env.DB.prepare("UPDATE castle_state SET workshop_level=workshop_level+1 WHERE castle=? AND workshop_level=? AND coins>=?").bind(state.castle,state.workshop_level,EQUIPMENT_UPGRADE_COST),
+      env.DB.prepare("UPDATE castle_state SET coins=coins-? WHERE castle=? AND coins=? AND workshop_level=?").bind(EQUIPMENT_UPGRADE_COST,state.castle,oldCoins,nextLevel)
+    ]);
+    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes)return json({error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن."},409);
+    return json({ok:true,newLevel:nextLevel});
   }
   if (method==="POST" && path==="/api/my-castle/equipment/build") {
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     const key=String(b.key||""),def=EQUIPMENT[key]; if(!def)return json({error:"ادوات معتبر نیست."},400);
     if(Number(state.workshop_level)<def.level)return json({error:`برای ساخت ${def.label} کارگاه باید حداقل سطح ${def.level} باشد.`},400);
     const trackerKey=`${def.period}:${def.period==="day"?gameDayKey():gameWeekKey()}:${key}`;
-    const used=Number((await env.DB.prepare("SELECT used FROM castle_equipment_limits WHERE castle=? AND tracker_key=?").bind(state.castle,trackerKey).first())?.used||0);
+    await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment_limits(castle,tracker_key,used) VALUES (?,?,0)").bind(state.castle,trackerKey).run();
+    const limitRow=await env.DB.prepare("SELECT used FROM castle_equipment_limits WHERE castle=? AND tracker_key=?").bind(state.castle,trackerKey).first();
+    const itemRow=await env.DB.prepare("SELECT count FROM castle_equipment WHERE castle=? AND item_key=?").bind(state.castle,key).first();
+    const used=Number(limitRow?.used||0),oldCount=Number(itemRow?.count||0);
     if(used>=def.limit)return json({error:`سقف ساخت ${def.label} برای این ${def.period==="day"?"روز":"هفته"} پر شده است.`},400);
     if(!addCostCheck(state,def.cost))return json({error:"منابع کافی نیست."},400);
-    const cost=safeCost(def.cost),sets=Object.keys(cost).map(k=>`${k}=${k}-?`).join(","),cond=Object.keys(cost).map(k=>`${k}>=?`).join(" AND ");
-    const bres=await env.DB.batch([
-      env.DB.prepare(`UPDATE castle_state SET ${sets} WHERE castle=? AND ${cond}`).bind(...Object.values(cost),state.castle,...Object.values(cost)),
-      env.DB.prepare("UPDATE castle_equipment SET count=count+1 WHERE castle=? AND item_key=?").bind(state.castle,key),
-      env.DB.prepare("INSERT INTO castle_equipment_limits(castle,tracker_key,used) VALUES (?,?,1) ON CONFLICT(castle,tracker_key) DO UPDATE SET used=used+1").bind(state.castle,trackerKey)
-    ]);
-    if(!bres[0]?.meta?.changes || !bres[1]?.meta?.changes || !bres[2]?.meta?.changes)return json({error:"منابع یا ساخت همزمان تغییر کرده؛ دوباره تلاش کن."},409);
+    const cost=safeCost(def.cost),sets=Object.keys(cost).map(k=>`${k}=${k}-?`).join(","),availability=Object.keys(cost).map(k=>`${k}>=?`).join(" AND ");
+    const original=Object.keys(cost).map(k=>`${k}=?`).join(" AND ");
+    const q1=env.DB.prepare(`UPDATE castle_equipment SET count=count+1 WHERE castle=? AND item_key=? AND count=? AND EXISTS (SELECT 1 FROM castle_equipment_limits WHERE castle=? AND tracker_key=? AND used=? AND used<${def.limit}) AND EXISTS (SELECT 1 FROM castle_state WHERE castle=? AND workshop_level>=? AND ${availability})`)
+      .bind(state.castle,key,oldCount,state.castle,trackerKey,used,state.castle,def.level,...Object.values(cost));
+    const q2=env.DB.prepare(`UPDATE castle_state SET ${sets} WHERE castle=? AND ${original} AND EXISTS (SELECT 1 FROM castle_equipment WHERE castle=? AND item_key=? AND count=?) AND EXISTS (SELECT 1 FROM castle_equipment_limits WHERE castle=? AND tracker_key=? AND used=? )`)
+      .bind(state.castle,...Object.keys(cost).map(k=>Number(state[k]||0)),state.castle,key,oldCount+1,state.castle,trackerKey,used);
+    const post=Object.keys(cost).map(k=>`${k}=?`).join(" AND "),postValues=Object.keys(cost).map(k=>Number(state[k]||0)-Number(cost[k]||0));
+    const q3=env.DB.prepare(`UPDATE castle_equipment_limits SET used=used+1 WHERE castle=? AND tracker_key=? AND used=? AND used<${def.limit} AND EXISTS (SELECT 1 FROM castle_equipment WHERE castle=? AND item_key=? AND count=?) AND EXISTS (SELECT 1 FROM castle_state WHERE castle=? AND workshop_level>=? AND ${post})`)
+      .bind(state.castle,trackerKey,used,state.castle,key,oldCount+1,state.castle,def.level,...postValues);
+    const bres=await env.DB.batch([q1,q2,q3]);
+    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes||!bres[2]?.meta?.changes)return json({error:"منابع، سهم ساخت یا تعداد همزمان تغییر کرده؛ دوباره تلاش کن."},409);
     return json({ok:true});
   }
-
   if (method==="POST" && path==="/api/my-castle/port/upgrade") {
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
     if(!Number(state.port_enabled))return json({error:"این قلعه فعلاً بندری تعریف نشده است."},400);
     if(Number(state.port_level)>=15)return json({error:"اسکله به حداکثر سطح 15 رسیده است."},400);
-    if(Number(state.coins)<1500||Number(state.wood)<1000)return json({error:"برای ارتقای اسکله 1500 سکه و 1000 چوب لازم است."},400);
-    const bres=await env.DB.batch([env.DB.prepare("UPDATE castle_state SET coins=coins-1500,wood=wood-1000 WHERE castle=? AND coins>=1500 AND wood>=1000").bind(state.castle),env.DB.prepare("UPDATE castle_state SET port_level=port_level+1 WHERE castle=? AND port_level=?").bind(state.castle,state.port_level)]);
-    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes)return json({error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن."},409); return json({ok:true,newLevel:state.port_level+1});
+    const oldCoins=Number(state.coins||0),oldWood=Number(state.wood||0); if(oldCoins<1500||oldWood<1000)return json({error:"برای ارتقای اسکله 1500 سکه و 1000 چوب لازم است."},400);
+    const nextLevel=Number(state.port_level)+1;
+    const bres=await env.DB.batch([
+      env.DB.prepare("UPDATE castle_state SET port_level=port_level+1 WHERE castle=? AND port_level=? AND coins>=1500 AND wood>=1000").bind(state.castle,state.port_level),
+      env.DB.prepare("UPDATE castle_state SET coins=coins-1500,wood=wood-1000 WHERE castle=? AND coins=? AND wood=? AND port_level=?").bind(state.castle,oldCoins,oldWood,nextLevel)
+    ]);
+    if(!bres[0]?.meta?.changes||!bres[1]?.meta?.changes)return json({error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن."},409);
+    return json({ok:true,newLevel:nextLevel});
   }
 
   if (method==="GET" && path==="/api/war-expeditions/status") {
