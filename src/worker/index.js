@@ -339,7 +339,7 @@ async function handleApi(request, env, url) {
     const exists=await env.DB.prepare("SELECT id FROM users WHERE lower(username)=lower(?)").bind(username).first(); if(exists) return json({error:"این نام کاربری قبلاً ثبت شده است."},409);
     const h=await hashPassword(password), id=newId(); await env.DB.prepare("INSERT INTO users (id,username,salt,hash,created_at) VALUES (?,?,?,?,?)").bind(id,username,h.salt,h.hash,new Date().toISOString()).run();
     await deleteSession(request,env);
-    const sid=await createSession(env,id); return new Response(JSON.stringify({ok:true,user:{id,username}}),{status:200,headers:{"content-type":"application/json","set-cookie":cookie(SESSION_COOKIE_NAME,sid)}});
+    const sid=await createSession(env,id); return json({ok:true,user:{id,username}},200,{"set-cookie":cookie(SESSION_COOKIE_NAME,sid)});
   }
   if (method === "POST" && path === "/api/auth/login") {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
@@ -347,7 +347,7 @@ async function handleApi(request, env, url) {
     const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||""); if(username.length>24 || password.length>MAX_PASSWORD_LENGTH) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); const u=await env.DB.prepare("SELECT * FROM users WHERE lower(username)=lower(?)").bind(username).first();
     if(!u || !(await verifyPassword(password,u.salt,u.hash))) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); await deleteSession(request,env); const sid=await createSession(env,u.id); return json({ok:true,user:publicUser(u)},200,{"set-cookie":cookie(SESSION_COOKIE_NAME,sid)});
   }
-  if (method === "POST" && path === "/api/auth/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return new Response(JSON.stringify({ok:true}),{status:200,headers:{"content-type":"application/json","set-cookie":clearCookie(SESSION_COOKIE_NAME)}}); }
+  if (method === "POST" && path === "/api/auth/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return json({ok:true},200,{"set-cookie":clearCookie(SESSION_COOKIE_NAME)}); }
   if (method === "GET" && path === "/api/houses") return json(await dynamicHouses(env));
   if (method === "GET" && path === "/api/players") return json(await players(env));
   const session=await getSession(request,env);
