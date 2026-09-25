@@ -261,7 +261,7 @@ async function runWeeklyUpdate(env, force=false) {
     const a=Object.fromEntries(army.map(x=>[x.unit_key,Number(x.count)]));
     for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k))) a[unit]=(a[unit]||0)+Number(gain||0);
     const grainNeed=(a.swordsman||0)+(a.archer||0)+(a.spearman||0)+((a.cavalry||0)*2)+Object.entries(a).filter(([key])=>!["swordsman","archer","spearman","cavalry","giants"].includes(key)).reduce((sum,[,count])=>sum+Number(count||0)*2,0);
-    const meatNeed=(a.giants||0)*2;
+    const meatNeed=Math.ceil(((a.giants||0)*2)/2);
     const grainUsed=Math.min(Number(s.grain||0),grainNeed);
     let rem=Math.max(0,grainNeed-grainUsed);
     const fishUsed=Math.min(Number(s.fish||0),Math.ceil(rem/2));
