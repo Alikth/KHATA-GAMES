@@ -522,7 +522,7 @@ async function handleApi(request, env, url) {
     if(Number(row.cancelled))return json({error:"این لشکرکشی قبلاً لغو شده است."},409);
     if(!warIsActive(row,rt))return json({error:"این لشکرکشی دیگر قابل لغو نیست."},409);
     const assets=JSON.parse(row.assets_json||"{}"),updates=[];
-    if(!Number(row.is_fake))for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=?`).bind(Math.floor(Number(raw)||0),row.source_castle,key));}
+    if(!Number(row.is_fake))for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=? AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND cancelled=0 AND command IS NULL)`).bind(Math.floor(Number(raw)||0),row.source_castle,key,id));}
     updates.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by=?,run_started_at=NULL WHERE id=? AND cancelled=0").bind(new Date().toISOString(),session.user_id,id));
     const result=await env.DB.batch(updates); if(!result[updates.length-1]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ دوباره تلاش کن."},409); return json({ok:true});
   }
