@@ -33,7 +33,7 @@ export const SPECIAL_CAMPS = {
   "The Wall":[{key:"ranger",label:"🥷 کمپ رنجر",cost:{wood:200,iron:20,peasants:50},max:20,unit:"ranger",yield:50}],
   "North":[{key:"winter_soldier",label:"🐺 کمپ سرباز زمستان",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"winter_soldier",yield:50}],
   "Riverlands":[
-    {key:"vale_knight",label:"😀 کمپ شوالیه ویل",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"vale_knight",yield:50},
+    {key:"vale_knight",label:"⚔️ کمپ شوالیه ویل",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"vale_knight",yield:50},
     {key:"crossbowman",label:"🏹 کمپ کراسبو‌دار",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"crossbowman",yield:50}
   ],
   "Westerlands":[{key:"red_cloak",label:"🩸 کمپ ردا سرخ",cost:{coins:300,wood:200,iron:20,peasants:50},max:20,unit:"red_cloak",yield:50}],
