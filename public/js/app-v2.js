@@ -547,6 +547,22 @@ window.addEventListener("DOMContentLoaded", () => {
     try{await api('/api/admin/players/'+encodeURIComponent(player)+'/castles',{method:'POST',body:JSON.stringify({region,castle})});await refreshAdmin();showToast('قلعه به لیست پلیر اضافه شد.');}catch(e){showToast(e.message,true);}
   }
 
+  async function addAdminLord(){
+    const username=$("adminUsername").value.trim();
+    const region=$("adminRegion").value;
+    const castle=$("adminCastle").value;
+    if(!username||!region||!castle)return showToast('Username، اقلیم و قلعه را انتخاب کن.',true);
+    if(!adminConfirm('لرد «'+username+'» برای قلعه «'+castle+'» ثبت شود؟'))return;
+    try{
+      await api('/api/admin/players',{method:'POST',body:JSON.stringify({username,region,castle})});
+      $("adminUsername").value="";
+      await refreshAdmin();
+      showToast('لرد با موفقیت ثبت شد.');
+    }catch(e){
+      showToast(e.message||'ثبت لرد انجام نشد.',true);
+    }
+  }
+
   async function setAdminGameRuntime(action){try{await api('/api/admin/game-runtime',{method:'POST',body:JSON.stringify({action})});await refreshAdmin();showToast(action==='start'?'بازی شروع شد.':'بازی متوقف شد.');}catch(e){showToast(e.message,true);}}
   async function saveAdminCasualties(id){
     const payload={attacker:{army:{},equipment:{}},defender:{army:{}}};
@@ -569,6 +585,7 @@ window.addEventListener("DOMContentLoaded", () => {
   $("adminGameStop").onclick=()=>setAdminGameRuntime('stop');
   $("adminRefreshCasualties").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
   $("adminNewCastleBtn").onclick=addAdminCastle;
+  $("adminAdd").onclick=addAdminLord;
   $("adminTradeLockBtn").onclick=()=>toggleAdminControl('trade');
   $("adminWeeklyUpdate").onclick=runAdminWeeklyUpdate;
   $("adminAssignCastleBtn").onclick=assignAdminCastle;
