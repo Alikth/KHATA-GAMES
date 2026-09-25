@@ -12,9 +12,11 @@
     m.classList.remove('hidden');document.body.classList.add('modal-open');
     $('tradeRoot').innerHTML='<div class="trade-loading">در حال بارگذاری دارایی‌ها و قلعه‌ها...</div>';
     try{
-      const [assets,houses]=await Promise.all([api('/api/my-castle/assets?castle='+encodeURIComponent(sourceCastle||'')),api('/api/houses')]);
+      const [assets,houses,players]=await Promise.all([api('/api/my-castle/assets?castle='+encodeURIComponent(sourceCastle||'')),api('/api/houses'),api('/api/players')]);
+      const ownedBy=new Map(players.map(p=>[p.castle,p]));
       const castles=[];houses.forEach(r=>r.castles.forEach(c=>castles.push(c)));
-      const options=castles.filter(c=>c.castle!==sourceCastle).map(c=>'<option value="'+esc(c.castle)+'">'+esc(c.castle)+' — '+esc(c.house)+'</option>').join('');
+      const options=castles.filter(c=>c.castle!==sourceCastle&&ownedBy.has(c.castle)).map(c=>{const p=ownedBy.get(c.castle);return '<option value="'+esc(c.castle)+'">'+esc(c.castle)+' — '+esc(c.house)+(p?.username?' · '+esc(p.username):'')+'</option>';}).join('');
+
       $('tradeRoot').innerHTML='<div class="trade-modal-head"><div><span>TRADE</span><h2>⚖️ تجارت</h2><p>قلعه مبدا: <b>'+esc(sourceCastle)+'</b></p></div><button id="tradeClose" class="trade-close">×</button></div><div class="trade-body"><h3>مایل به ارسال چه کالایی هستید؟</h3><div class="trade-list">'+rows('send',assets.resources)+'</div><h3>مایل به دریافت چه کالایی هستید؟</h3><div class="trade-list">'+rows('receive',{})+'</div><div class="trade-field"><label>مقصد</label><select id="tradeDestination">'+options+'</select></div><div class="trade-actions"><button id="tradeSubmit" class="trade-btn primary">ارسال درخواست تجارت</button><button id="tradeRequests" class="trade-btn">درخواست‌های تجارت</button></div><div id="tradeError" class="trade-error"></div><div id="tradeIncoming" class="trade-incoming hidden"></div></div>';
       $('tradeClose').onclick=close;
       $('tradeSubmit').onclick=()=>submit(sourceCastle);
@@ -40,8 +42,10 @@
   }
   function assetText(obj){return Object.entries(obj||{}).map(([k,v])=>labels[k]+' × '+fmt(v)).join(' · ')||'—';}
   async function respond(id,action){
+    const button=document.querySelector('[data-trade-response][data-trade-id="'+CSS.escape(id)+'"]');
+    if(button){button.disabled=true;}
     try{await api('/api/trades/'+encodeURIComponent(id)+'/respond',{method:'POST',body:JSON.stringify({action})});await showIncoming();await refreshNotifications();alert(action==='accept'?'تجارت تأیید شد.':'درخواست تجارت رد شد.');}
-    catch(e){alert(e.message);}
+    catch(e){if(button)button.disabled=false;alert(e.message);}
   }
   async function refreshNotifications(){
     try{const d=await api('/api/trades/notifications');document.querySelectorAll('[data-trade-notification]').forEach(x=>{x.textContent=d.count||'';x.classList.toggle('hidden',!d.count);});return d.count||0;}catch{return 0;}
