@@ -5,14 +5,14 @@
   const labels={coins:'💰 سکه',wood:'🪵 چوب',stone:'🪨 سنگ',iron:'⛓ آهن',meat:'🥩 گوشت',fish:'🐟 ماهی',grain:'🌾 غلات',horses:'🐎 اسب',dragon_glass:'🌑 شیشه اژدها',wildfire:'🧪 وایلدفایر',tar:'🛢 قیر',grapes:'🍇 انگور'};
   const keys=Object.keys(labels);
   async function api(url,options={}){const h=new Headers(options.headers||{});if(options.body&&!h.has('Content-Type'))h.set('Content-Type','application/json');const r=await fetch(url,{cache:'no-store',...options,headers:h});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'خطایی رخ داد.');return d;}
-  function rows(prefix,resources){return keys.map(k=>'<div class="trade-item"><span>'+labels[k]+'</span><small>موجودی: '+fmt(resources?.[k])+'</small><input type="number" min="0" max="'+Number(resources?.[k]||0)+'" value="0" data-trade-side="'+prefix+'" data-trade-key="'+k+'"></div>').join('');}
+  function rows(prefix,resources){return keys.map(k=>{const max=resources?Number(resources[k]||0):1000000000;return '<div class="trade-item"><span>'+labels[k]+'</span><small>موجودی: '+(resources?fmt(resources[k]):'مقدار درخواستی')+'</small><input type="number" min="0" max="'+max+'" value="0" data-trade-side="'+prefix+'" data-trade-key="'+k+'"></div>';}).join('');}
   function modal(){return $('tradeModal');}
   async function open(sourceCastle){
     const m=modal(); if(!m)return;
     m.classList.remove('hidden');document.body.classList.add('modal-open');
     $('tradeRoot').innerHTML='<div class="trade-loading">در حال بارگذاری دارایی‌ها و قلعه‌ها...</div>';
     try{
-      const [assets,houses]=await Promise.all([api('/api/my-castle/assets'),api('/api/houses')]);
+      const [assets,houses]=await Promise.all([api('/api/my-castle/assets?castle='+encodeURIComponent(sourceCastle||'')),api('/api/houses')]);
       const castles=[];houses.forEach(r=>r.castles.forEach(c=>castles.push(c)));
       const options=castles.filter(c=>c.castle!==sourceCastle).map(c=>'<option value="'+esc(c.castle)+'">'+esc(c.castle)+' — '+esc(c.house)+'</option>').join('');
       $('tradeRoot').innerHTML='<div class="trade-modal-head"><div><span>TRADE</span><h2>⚖️ تجارت</h2><p>قلعه مبدا: <b>'+esc(sourceCastle)+'</b></p></div><button id="tradeClose" class="trade-close">×</button></div><div class="trade-body"><h3>مایل به ارسال چه کالایی هستید؟</h3><div class="trade-list">'+rows('send',assets.resources)+'</div><h3>مایل به دریافت چه کالایی هستید؟</h3><div class="trade-list">'+rows('receive',{})+'</div><div class="trade-field"><label>مقصد</label><select id="tradeDestination">'+options+'</select></div><div class="trade-actions"><button id="tradeSubmit" class="trade-btn primary">ارسال درخواست تجارت</button><button id="tradeRequests" class="trade-btn">درخواست‌های تجارت</button></div><div id="tradeError" class="trade-error"></div><div id="tradeIncoming" class="trade-incoming hidden"></div></div>';
