@@ -36,53 +36,53 @@ export const castleInfo = {
 
 export const houses = [
   { region: "The Wall", icon: "🌓", castles: [
-    { house: "Night's Watch", castle: "Castle Black", icon: "🌟🏰" },
+    { house: "Night's Watch", flag: "/assets/houses/nights-watch.svg", castle: "Castle Black", icon: "🌟🏰" },
     { house: "Night's Watch", castle: "Eastwatch", icon: "⚓" },
     { house: "Night's Watch", castle: "Shadow Tower", icon: "🏰" }
   ]},
   { region: "North", icon: "🐺", castles: [
-    { house: "Stark", castle: "Winterfell", icon: "🌟🔱" },
-    { house: "Bolton", castle: "The Dreadfort", icon: "🏯" },
-    { house: "Karstark", castle: "Karhold", icon: "⚓" }
+    { house: "Stark", flag: "/assets/houses/stark.svg", castle: "Winterfell", icon: "🌟🔱" },
+    { house: "Bolton", flag: "/assets/houses/bolton.svg", castle: "The Dreadfort", icon: "🏯" },
+    { house: "Karstark", flag: "/assets/houses/karstark.svg", castle: "Karhold", icon: "⚓" }
   ]},
   { region: "Riverlands", icon: "🌊", castles: [
-    { house: "Tully", castle: "Riverrun", icon: "🌟🔱" },
-    { house: "Frey", castle: "The Twins", icon: "🏯" },
-    { house: "Mallister", castle: "Seagard", icon: "⚓" }
+    { house: "Tully", flag: "/assets/houses/tully.svg", castle: "Riverrun", icon: "🌟🔱" },
+    { house: "Frey", flag: "/assets/houses/frey.svg", castle: "The Twins", icon: "🏯" },
+    { house: "Mallister", flag: "/assets/houses/mallister.svg", castle: "Seagard", icon: "⚓" }
   ]},
   { region: "Vale", icon: "⛰️", castles: [
-    { house: "Arryn", castle: "The Eyrie", icon: "🌟🔱" },
-    { house: "Grafton", castle: "Gulltown", icon: "⚓" },
-    { house: "Redfort", castle: "Redfort", icon: "🏯" }
+    { house: "Arryn", flag: "/assets/houses/arryn.svg", castle: "The Eyrie", icon: "🌟🔱" },
+    { house: "Grafton", flag: "/assets/houses/grafton.svg", castle: "Gulltown", icon: "⚓" },
+    { house: "Redfort", flag: "/assets/houses/redfort.svg", castle: "Redfort", icon: "🏯" }
   ]},
   { region: "Iron Islands", icon: "⚒️", castles: [
-    { house: "Greyjoy", castle: "Pyke", icon: "🌟🔱⚓" },
-    { house: "Harlaw", castle: "Ten Towers", icon: "⚓" },
-    { house: "Goodbrother", castle: "Hammerhorn", icon: "⚓" }
+    { house: "Greyjoy", flag: "/assets/houses/greyjoy.svg", castle: "Pyke", icon: "🌟🔱⚓" },
+    { house: "Harlaw", flag: "/assets/houses/harlaw.svg", castle: "Ten Towers", icon: "⚓" },
+    { house: "Goodbrother", flag: "/assets/houses/goodbrother.svg", castle: "Hammerhorn", icon: "⚓" }
   ]},
   { region: "Westerlands", icon: "🦁", castles: [
-    { house: "Lannister", castle: "Casterly Rock", icon: "🌟🔱⚓" },
-    { house: "Brax", castle: "Hornvale", icon: "🏯" },
-    { house: "Marbrand", castle: "Ashemark", icon: "🏯" }
+    { house: "Lannister", flag: "/assets/houses/lannister.svg", castle: "Casterly Rock", icon: "🌟🔱⚓" },
+    { house: "Brax", flag: "/assets/houses/brax.svg", castle: "Hornvale", icon: "🏯" },
+    { house: "Marbrand", flag: "/assets/houses/marbrand.svg", castle: "Ashemark", icon: "🏯" }
   ]},
   { region: "Crownlands", icon: "🐉", castles: [
-    { house: "Crownlands", castle: "King's Landing", icon: "🌟👑⚓" },
-    { house: "Targaryen", castle: "Dragonstone", icon: "⚓" },
-    { house: "Bar Emmon", castle: "Sharp Point", icon: "🏯" }
+    { house: "Crownlands", flag: "/assets/houses/crownlands.svg", castle: "King's Landing", icon: "🌟👑⚓" },
+    { house: "Targaryen", flag: "/assets/houses/targaryen.svg", castle: "Dragonstone", icon: "⚓" },
+    { house: "Bar Emmon", flag: "/assets/houses/bar-emmon.svg", castle: "Sharp Point", icon: "🏯" }
   ]},
   { region: "Stormlands", icon: "🦌", castles: [
-    { house: "Baratheon", castle: "Storm's End", icon: "🌟🔱⚓" },
-    { house: "Fell", castle: "Fellwood", icon: "🏯" },
-    { house: "Dondarrion", castle: "Blackhaven", icon: "🏯" }
+    { house: "Baratheon", flag: "/assets/houses/baratheon.svg", castle: "Storm's End", icon: "🌟🔱⚓" },
+    { house: "Fell", flag: "/assets/houses/fell.svg", castle: "Fellwood", icon: "🏯" },
+    { house: "Dondarrion", flag: "/assets/houses/dondarrion.svg", castle: "Blackhaven", icon: "🏯" }
   ]},
   { region: "Reach", icon: "🏵️", castles: [
-    { house: "Tyrell", castle: "Highgarden", icon: "🌟🔱" },
-    { house: "Tarly", castle: "Horn Hill", icon: "🏯" },
-    { house: "Hightower", castle: "Oldtown", icon: "⚓" }
+    { house: "Tyrell", flag: "/assets/houses/tyrell.svg", castle: "Highgarden", icon: "🌟🔱" },
+    { house: "Tarly", flag: "/assets/houses/tarly.svg", castle: "Horn Hill", icon: "🏯" },
+    { house: "Hightower", flag: "/assets/houses/hightower.svg", castle: "Oldtown", icon: "⚓" }
   ]},
   { region: "Dorne", icon: "☀️", castles: [
-    { house: "Martell", castle: "Sunspear", icon: "🌟🔱⚓" },
-    { house: "Manwoody", castle: "Kingsgrave", icon: "🏯" },
-    { house: "Yronwood", castle: "Yronwood", icon: "⚓" }
+    { house: "Martell", flag: "/assets/houses/martell.svg", castle: "Sunspear", icon: "🌟🔱⚓" },
+    { house: "Manwoody", flag: "/assets/houses/manwoody.svg", castle: "Kingsgrave", icon: "🏯" },
+    { house: "Yronwood", flag: "/assets/houses/yronwood.svg", castle: "Yronwood", icon: "⚓" }
   ]}
 ];
