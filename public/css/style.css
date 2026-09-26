@@ -222,3 +222,6 @@ body.nav-slide-demo .page.nav-slide-old{z-index:2}
 .castle-icon,.castle-mini-icon{display:flex;align-items:center;justify-content:center}
 .my-castle-art{display:flex;align-items:center;justify-content:center}
 .player small{display:flex;align-items:center;gap:7px}
+
+.house-with-flag{display:flex;align-items:center;gap:8px}
+.house-with-flag .house-flag-small{flex:0 0 auto}
