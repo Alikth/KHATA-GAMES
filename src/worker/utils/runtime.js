@@ -81,19 +81,26 @@ function bytes(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
 function passwordHashInfo(storedHash) {
   const value = String(storedHash || "");
   const match = /^v2\$(\d+)\$([A-Za-z0-9+/=]+)$/.exec(value);
-  return match
-    ? { iterations: Number(match[1]), rawHash: match[2], version: "v2" }
-    : { iterations: LEGACY_PASSWORD_HASH_ITERATIONS, rawHash: value, version: "legacy" };
+  if (match) return { iterations: Number(match[1]), rawHash: match[2], version: "v2" };
+  // Compatibility with hashes created by the previous broken v2 formatter:
+  // v2600000<base64 hash>
+  const compact = /^v2(\d+)([A-Za-z0-9+/=]+)$/.exec(value);
+  if (compact) return { iterations: Number(compact[1]), rawHash: compact[2], version: "v2-compact" };
+  return { iterations: LEGACY_PASSWORD_HASH_ITERATIONS, rawHash: value, version: "legacy" };
 }
 async function verifyPassword(password, salt, storedHash) {
   const info = passwordHashInfo(storedHash);
   if (!Number.isSafeInteger(info.iterations) || info.iterations < 1) return false;
   let made;
-  try { made = await derivePasswordHash(password, bytes(salt), info.iterations); } catch { return false; }
-  const a = bytes(made), b = bytes(info.rawHash);
-  if (a.length !== b.length) return false;
-  let diff = 0; for (let i=0;i<a.length;i++) diff |= a[i]^b[i];
-  return diff === 0;
+  try {
+    made = await derivePasswordHash(password, bytes(salt), info.iterations);
+    const a = bytes(made), b = bytes(info.rawHash);
+    if (a.length !== b.length) return false;
+    let diff = 0; for (let i=0;i<a.length;i++) diff |= a[i]^b[i];
+    return diff === 0;
+  } catch {
+    return false;
+  }
 }
 function passwordNeedsUpgrade(storedHash) {
   const info = passwordHashInfo(storedHash);
