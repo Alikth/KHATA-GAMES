@@ -62,15 +62,42 @@ function cookie(name, value, maxAge = SESSION_TTL / 1000) { return `${name}=${va
 function clearCookie(name) { return `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`; }
 function getCookie(request, name) { const raw = request.headers.get("Cookie") || ""; const m = raw.match(new RegExp(`(?:^|; )${name}=([^;]*)`)); if(!m)return null; try{return decodeURIComponent(m[1]);}catch{return null;} }
 function newId() { return crypto.randomUUID(); }
-async function hashPassword(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
+const PASSWORD_HASH_VERSION = "v2";
+const PASSWORD_HASH_ITERATIONS = 600000;
+const LEGACY_PASSWORD_HASH_ITERATIONS = 12000;
+async function derivePasswordHash(password, salt, iterations) {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations: 12000, hash: "SHA-256" }, key, 256);
-  return { salt: btoa(String.fromCharCode(...salt)), hash: btoa(String.fromCharCode(...new Uint8Array(bits))) };
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations, hash: "SHA-256" }, key, 256);
+  return btoa(String.fromCharCode(...new Uint8Array(bits)));
+}
+async function hashPassword(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
+  const raw = await derivePasswordHash(password, salt, PASSWORD_HASH_ITERATIONS);
+  return {
+    salt: btoa(String.fromCharCode(...salt)),
+    hash: `${PASSWORD_HASH_VERSION}${PASSWORD_HASH_ITERATIONS}${raw}`
+  };
 }
 function bytes(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+function passwordHashInfo(storedHash) {
+  const value = String(storedHash || "");
+  const match = /^v2\$(\d+)\$([A-Za-z0-9+/=]+)$/.exec(value);
+  return match
+    ? { iterations: Number(match[1]), rawHash: match[2], version: "v2" }
+    : { iterations: LEGACY_PASSWORD_HASH_ITERATIONS, rawHash: value, version: "legacy" };
+}
 async function verifyPassword(password, salt, storedHash) {
-  const made = await hashPassword(password, bytes(salt));
-  const a = bytes(made.hash), b = bytes(storedHash); if (a.length !== b.length) return false; let diff = 0; for (let i=0;i<a.length;i++) diff |= a[i]^b[i]; return diff === 0;
+  const info = passwordHashInfo(storedHash);
+  if (!Number.isSafeInteger(info.iterations) || info.iterations < 1) return false;
+  let made;
+  try { made = await derivePasswordHash(password, bytes(salt), info.iterations); } catch { return false; }
+  const a = bytes(made), b = bytes(info.rawHash);
+  if (a.length !== b.length) return false;
+  let diff = 0; for (let i=0;i<a.length;i++) diff |= a[i]^b[i];
+  return diff === 0;
+}
+function passwordNeedsUpgrade(storedHash) {
+  const info = passwordHashInfo(storedHash);
+  return info.version !== PASSWORD_HASH_VERSION || info.iterations < PASSWORD_HASH_ITERATIONS;
 }
 async function getSession(request, env) {
   const token = getCookie(request, SESSION_COOKIE_NAME); if (!token) return null;
@@ -115,6 +142,8 @@ export {
   SESSION_COOKIE_NAME,
   MAX_BODY_BYTES,
   MAX_PASSWORD_LENGTH,
+  PASSWORD_HASH_VERSION,
+  PASSWORD_HASH_ITERATIONS,
   SECURITY_HEADERS,
   json,
   body,
@@ -133,6 +162,7 @@ export {
   hashPassword,
   bytes,
   verifyPassword,
+  passwordNeedsUpgrade,
   getSession,
   requireUser,
   createSession,
