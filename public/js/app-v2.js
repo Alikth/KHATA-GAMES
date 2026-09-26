@@ -332,11 +332,18 @@ window.addEventListener("DOMContentLoaded", () => {
     let tradeNotice = {byCastle:{}};
     let scenarioNotice = {items:[]};
     let roleStatus = {available:true,remainingSeconds:0};
-    try { mine = await api("/api/my-castles"); } catch (e) { mineError = e; }
-    try { activeWars = await api("/api/my-war-expeditions/active"); } catch (e) { activeWarsError = e; }
-    try { tradeNotice = await api("/api/trades/notifications"); } catch {}
-    try { scenarioNotice = await api("/api/my-scenarios"); } catch (e) { console.warn("Scenario status failed", e); }
-    try { roleStatus = await api("/api/roles/status"); } catch (e) { console.warn("Role status failed", e); }
+    const results=await Promise.allSettled([
+      api("/api/my-castles"),
+      api("/api/my-war-expeditions/active"),
+      api("/api/trades/notifications"),
+      api("/api/my-scenarios"),
+      api("/api/roles/status")
+    ]);
+    if(results[0].status==="fulfilled")mine=results[0].value;else mineError=results[0].reason;
+    if(results[1].status==="fulfilled")activeWars=results[1].value;else activeWarsError=results[1].reason;
+    if(results[2].status==="fulfilled")tradeNotice=results[2].value;
+    if(results[3].status==="fulfilled")scenarioNotice=results[3].value;else console.warn("Scenario status failed",results[3].reason);
+    if(results[4].status==="fulfilled")roleStatus=results[4].value;else console.warn("Role status failed",results[4].reason);
     if (mineError) {
       root.innerHTML = '<div class="my-castles-empty"><div class="empty-castle-icon">⚠️</div><h3>خطا در دریافت قلعه‌ها</h3><p>'+escapeHTML(mineError.message||"دریافت قلعه‌ها انجام نشد.")+'</p></div>';
       return;
