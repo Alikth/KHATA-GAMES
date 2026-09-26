@@ -36,53 +36,53 @@ export const castleInfo = {
 
 export const houses = [
   { region: "The Wall", icon: "🌓", castles: [
-    { house: "Night's Watch", flag: "/assets/houses/nights-watch.svg", castle: "Castle Black", icon: "🌟🏰" },
-    { house: "Night's Watch", flag: "/assets/houses/nights-watch.svg", castle: "Eastwatch", icon: "⚓" },
-    { house: "Night's Watch", flag: "/assets/houses/nights-watch.svg", castle: "Shadow Tower", icon: "🏰" }
+    { house: "Night's Watch", flag: "https://awoiaf.westeros.org/images/8/8b/Night%27s_Watch.svg", castle: "Castle Black", icon: "🌟🏰" },
+    { house: "Night's Watch", flag: "https://awoiaf.westeros.org/images/8/8b/Night%27s_Watch.svg", castle: "Eastwatch", icon: "⚓" },
+    { house: "Night's Watch", flag: "https://awoiaf.westeros.org/images/8/8b/Night%27s_Watch.svg", castle: "Shadow Tower", icon: "🏰" }
   ]},
   { region: "North", icon: "🐺", castles: [
-    { house: "Stark", flag: "/assets/houses/stark.svg", castle: "Winterfell", icon: "🌟🔱" },
-    { house: "Bolton", flag: "/assets/houses/bolton.svg", castle: "The Dreadfort", icon: "🏯" },
-    { house: "Karstark", flag: "/assets/houses/karstark.svg", castle: "Karhold", icon: "⚓" }
+    { house: "Stark", flag: "https://awoiaf.westeros.org/images/d/d1/House_Stark.svg", castle: "Winterfell", icon: "🌟🔱" },
+    { house: "Bolton", flag: "https://awoiaf.westeros.org/images/0/03/House_Bolton.svg", castle: "The Dreadfort", icon: "🏯" },
+    { house: "Karstark", flag: "https://awoiaf.westeros.org/images/f/f5/House_Karstark.svg", castle: "Karhold", icon: "⚓" }
   ]},
   { region: "Riverlands", icon: "🌊", castles: [
-    { house: "Tully", flag: "/assets/houses/tully.svg", castle: "Riverrun", icon: "🌟🔱" },
-    { house: "Frey", flag: "/assets/houses/frey.svg", castle: "The Twins", icon: "🏯" },
-    { house: "Mallister", flag: "/assets/houses/mallister.svg", castle: "Seagard", icon: "⚓" }
+    { house: "Tully", flag: "https://awoiaf.westeros.org/images/3/36/House_Tully.svg", castle: "Riverrun", icon: "🌟🔱" },
+    { house: "Frey", flag: "https://awoiaf.westeros.org/images/6/66/House_Frey.svg", castle: "The Twins", icon: "🏯" },
+    { house: "Mallister", flag: "https://awoiaf.westeros.org/images/d/d1/House_Mallister.svg", castle: "Seagard", icon: "⚓" }
   ]},
   { region: "Vale", icon: "⛰️", castles: [
-    { house: "Arryn", flag: "/assets/houses/arryn.svg", castle: "The Eyrie", icon: "🌟🔱" },
-    { house: "Grafton", flag: "/assets/houses/grafton.svg", castle: "Gulltown", icon: "⚓" },
-    { house: "Redfort", flag: "/assets/houses/redfort.svg", castle: "Redfort", icon: "🏯" }
+    { house: "Arryn", flag: "https://awoiaf.westeros.org/images/6/61/House_Arryn.svg", castle: "The Eyrie", icon: "🌟🔱" },
+    { house: "Grafton", flag: "https://awoiaf.westeros.org/images/d/d3/House_Grafton.svg", castle: "Gulltown", icon: "⚓" },
+    { house: "Redfort", flag: "https://awoiaf.westeros.org/images/5/5f/House_Redfort.svg", castle: "Redfort", icon: "🏯" }
   ]},
   { region: "Iron Islands", icon: "⚒️", castles: [
-    { house: "Greyjoy", flag: "/assets/houses/greyjoy.svg", castle: "Pyke", icon: "🌟🔱⚓" },
-    { house: "Harlaw", flag: "/assets/houses/harlaw.svg", castle: "Ten Towers", icon: "⚓" },
-    { house: "Goodbrother", flag: "/assets/houses/goodbrother.svg", castle: "Hammerhorn", icon: "⚓" }
+    { house: "Greyjoy", flag: "https://awoiaf.westeros.org/images/7/7d/House_Greyjoy.svg", castle: "Pyke", icon: "🌟🔱⚓" },
+    { house: "Harlaw", flag: "https://awoiaf.westeros.org/images/5/5c/House_Harlaw.svg", castle: "Ten Towers", icon: "⚓" },
+    { house: "Goodbrother", flag: "https://awoiaf.westeros.org/images/8/83/House_Goodbrother.svg", castle: "Hammerhorn", icon: "⚓" }
   ]},
   { region: "Westerlands", icon: "🦁", castles: [
-    { house: "Lannister", flag: "/assets/houses/lannister.svg", castle: "Casterly Rock", icon: "🌟🔱⚓" },
-    { house: "Brax", flag: "/assets/houses/brax.svg", castle: "Hornvale", icon: "🏯" },
-    { house: "Marbrand", flag: "/assets/houses/marbrand.svg", castle: "Ashemark", icon: "🏯" }
+    { house: "Lannister", flag: "https://awoiaf.westeros.org/images/b/b2/House_Lannister.svg", castle: "Casterly Rock", icon: "🌟🔱⚓" },
+    { house: "Brax", flag: "https://awoiaf.westeros.org/images/c/c4/House_Brax.svg", castle: "Hornvale", icon: "🏯" },
+    { house: "Marbrand", flag: "https://awoiaf.westeros.org/images/5/54/House_Marbrand.svg", castle: "Ashemark", icon: "🏯" }
   ]},
   { region: "Crownlands", icon: "🐉", castles: [
     { house: "Crownlands", flag: "/assets/houses/crownlands.svg", castle: "King's Landing", icon: "🌟👑⚓" },
-    { house: "Targaryen", flag: "/assets/houses/targaryen.svg", castle: "Dragonstone", icon: "⚓" },
-    { house: "Bar Emmon", flag: "/assets/houses/bar-emmon.svg", castle: "Sharp Point", icon: "🏯" }
+    { house: "Targaryen", flag: "https://awoiaf.westeros.org/images/3/36/House_Targaryen.svg", castle: "Dragonstone", icon: "⚓" },
+    { house: "Bar Emmon", flag: "https://awoiaf.westeros.org/images/6/66/House_Bar_Emmon.svg", castle: "Sharp Point", icon: "🏯" }
   ]},
   { region: "Stormlands", icon: "🦌", castles: [
-    { house: "Baratheon", flag: "/assets/houses/baratheon.svg", castle: "Storm's End", icon: "🌟🔱⚓" },
-    { house: "Fell", flag: "/assets/houses/fell.svg", castle: "Fellwood", icon: "🏯" },
-    { house: "Dondarrion", flag: "/assets/houses/dondarrion.svg", castle: "Blackhaven", icon: "🏯" }
+    { house: "Baratheon", flag: "https://awoiaf.westeros.org/images/8/81/House_Baratheon.svg", castle: "Storm's End", icon: "🌟🔱⚓" },
+    { house: "Fell", flag: "https://awoiaf.westeros.org/images/a/a2/House_Fell.svg", castle: "Fellwood", icon: "🏯" },
+    { house: "Dondarrion", flag: "https://awoiaf.westeros.org/images/5/54/House_Dondarrion.svg", castle: "Blackhaven", icon: "🏯" }
   ]},
   { region: "Reach", icon: "🏵️", castles: [
-    { house: "Tyrell", flag: "/assets/houses/tyrell.svg", castle: "Highgarden", icon: "🌟🔱" },
-    { house: "Tarly", flag: "/assets/houses/tarly.svg", castle: "Horn Hill", icon: "🏯" },
-    { house: "Hightower", flag: "/assets/houses/hightower.svg", castle: "Oldtown", icon: "⚓" }
+    { house: "Tyrell", flag: "https://awoiaf.westeros.org/images/f/fe/House_Tyrell.svg", castle: "Highgarden", icon: "🌟🔱" },
+    { house: "Tarly", flag: "https://awoiaf.westeros.org/images/5/55/House_Tarly.svg", castle: "Horn Hill", icon: "🏯" },
+    { house: "Hightower", flag: "https://awoiaf.westeros.org/images/b/b3/House_Hightower.svg", castle: "Oldtown", icon: "⚓" }
   ]},
   { region: "Dorne", icon: "☀️", castles: [
-    { house: "Martell", flag: "/assets/houses/martell.svg", castle: "Sunspear", icon: "🌟🔱⚓" },
-    { house: "Manwoody", flag: "/assets/houses/manwoody.svg", castle: "Kingsgrave", icon: "🏯" },
-    { house: "Yronwood", flag: "/assets/houses/yronwood.svg", castle: "Yronwood", icon: "⚓" }
+    { house: "Martell", flag: "https://awoiaf.westeros.org/images/8/8e/House_Martell.svg", castle: "Sunspear", icon: "🌟🔱⚓" },
+    { house: "Manwoody", flag: "https://awoiaf.westeros.org/images/2/22/House_Manwoody.svg", castle: "Kingsgrave", icon: "🏯" },
+    { house: "Yronwood", flag: "https://awoiaf.westeros.org/images/7/78/House_Yronwood.svg", castle: "Yronwood", icon: "⚓" }
   ]}
 ];
