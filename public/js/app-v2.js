@@ -687,24 +687,24 @@ window.addEventListener("DOMContentLoaded", () => {
   async function setAdminOutcome(id,outcome){if(!adminConfirm(outcome==='attacker'?'پیروزی مهاجم ثبت شود؟':'پیروزی مدافع ثبت شود؟'))return;try{await api('/api/admin/war-expeditions/'+encodeURIComponent(id)+'/outcome',{method:'POST',body:JSON.stringify({outcome})});await refreshAdmin();await window.khataLoadWarLog?.();showToast('نتیجه ثبت شد.');}catch(e){showToast(e.message,true);}}
   async function addAdminCastle(){const name=$('adminNewCastleName').value.trim(),region=$('adminNewCastleRegion').value,naval=$('adminNewCastleNaval').checked;if(!name)return showToast('نام قلعه را وارد کن.',true);if(!adminConfirm('قلعه «'+name+'» ثبت شود؟'))return;try{await api('/api/admin/castles',{method:'POST',body:JSON.stringify({name,region,naval})});$('adminNewCastleName').value='';$('adminNewCastleNaval').checked=false;await refreshAdmin();showToast('قلعه با موفقیت اضافه شد.');}catch(e){showToast(e.message,true);}}
 
-  $("adminRegion").addEventListener("change",updateAdminCastles);
+  $("adminRegion")?.addEventListener("change",updateAdminCastles);
   $("adminAssignRegion")?.addEventListener("change",updateAdminAssignCastles);
   $("adminAssignPlayer")?.addEventListener("change",updateAdminAssignCastles);
   $("adminCastleSelect")?.addEventListener("change",()=>loadAdminCastleAssets($("adminCastleSelect").value));
-  $("adminRefreshWars").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
-  $("adminRefreshTrades").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
-  $("adminWarLockBtn").onclick=()=>toggleAdminControl('war');
-  $("adminClaimLockBtn").onclick=()=>toggleAdminControl('claim');
-  $("adminRefreshScenarios").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
-  $("adminRefreshRoles").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
-  $("adminGameStart").onclick=()=>setAdminGameRuntime('start');
-  $("adminGameStop").onclick=()=>setAdminGameRuntime('stop');
-  $("adminRefreshCasualties").onclick=()=>refreshAdmin().catch(e=>showToast(e.message,true));
-  $("adminNewCastleBtn").onclick=addAdminCastle;
-  $("adminAdd").onclick=addAdminLord;
-  $("adminTradeLockBtn").onclick=()=>toggleAdminControl('trade');
-  $("adminWeeklyUpdate").onclick=runAdminWeeklyUpdate;
-  $("adminAssignCastleBtn").onclick=assignAdminCastle;
+  $("adminRefreshWars")?.addEventListener("click",()=>refreshAdmin().catch(e=>showToast(e.message,true)));
+  $("adminRefreshTrades")?.addEventListener("click",()=>refreshAdmin().catch(e=>showToast(e.message,true)));
+  $("adminWarLockBtn")?.addEventListener("click",()=>toggleAdminControl('war'));
+  $("adminClaimLockBtn")?.addEventListener("click",()=>toggleAdminControl('claim'));
+  $("adminRefreshScenarios")?.addEventListener("click",()=>refreshAdmin().catch(e=>showToast(e.message,true)));
+  $("adminRefreshRoles")?.addEventListener("click",()=>refreshAdmin().catch(e=>showToast(e.message,true)));
+  $("adminGameStart")?.addEventListener("click",()=>setAdminGameRuntime('start'));
+  $("adminGameStop")?.addEventListener("click",()=>setAdminGameRuntime('stop'));
+  $("adminRefreshCasualties")?.addEventListener("click",()=>refreshAdmin().catch(e=>showToast(e.message,true)));
+  $("adminNewCastleBtn")?.addEventListener("click",addAdminCastle);
+  $("adminAdd")?.addEventListener("click",addAdminLord);
+  $("adminTradeLockBtn")?.addEventListener("click",()=>toggleAdminControl('trade'));
+  $("adminWeeklyUpdate")?.addEventListener("click",runAdminWeeklyUpdate);
+  $("adminAssignCastleBtn")?.addEventListener("click",assignAdminCastle);
 
   function openAdminPanel(target){
     const panels=document.querySelectorAll("[data-admin-panel]");
