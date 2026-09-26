@@ -6,6 +6,17 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const escapeHTML = value => String(value ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[ch]));
   const stripAt = value => String(value || "").replace(/^@+/, "");
+  const houseFlag = (castle, cls = "house-flag") => {
+    if (!castle?.flag) return "";
+    return `<img class="${cls}" src="${escapeHTML(castle.flag)}" alt="${escapeHTML(castle.house || "House")}" loading="lazy" decoding="async">`;
+  };
+  const houseFlagByName = house => {
+    for (const region of houses) {
+      const castle = region.castles.find(c => c.house === house && c.flag);
+      if (castle) return houseFlag(castle, "house-flag house-flag-small");
+    }
+    return "";
+  };
 
   const apiCache=new Map();
   const API_CACHE_TTL={"/api/houses":30000,"/api/players":5000,"/api/world-state":5000};
@@ -265,7 +276,7 @@ window.addEventListener("DOMContentLoaded", () => {
     $("castles").classList.remove("hidden");
     $("castles").innerHTML = `<button class="back" type="button" data-action="back-regions">← بازگشت به اقلیم‌ها</button><div class="page-title"><span>${escapeHTML(r.icon)}</span><div><h2>${escapeHTML(r.region)}</h2><p>قلعه را انتخاب کن و مشخصات آن را ببین</p></div></div><div class="castle-grid">${r.castles.map((c, j) => {
       const p = players.find(x => x.region === r.region && x.castle === c.castle);
-      return `<button class="castle-card ${p ? "claimed" : "available"}" type="button" data-action="castle" data-region="${i}" data-castle="${j}"><div class="castle-top"><span class="castle-icon">${escapeHTML(c.icon)}</span><span class="status">${p ? "🔒 CLAIMED" : "🟢 AVAILABLE"}</span></div><h3>${escapeHTML(c.castle)}</h3><div class="house">HOUSE ${escapeHTML(c.house)}</div><div class="claim-by">${p ? escapeHTML(p.username) : "مشاهده اطلاعات و موقعیت قلعه"}</div>${window.khataLordByCastle?.[c.castle] ? `<span class="lord-link" data-action="lord" data-lord="${escapeHTML(window.khataLordByCastle[c.castle])}">مشاهده لرد</span>` : ""}</button>`;
+      return `<button class="castle-card ${p ? "claimed" : "available"}" type="button" data-action="castle" data-region="${i}" data-castle="${j}"><div class="castle-top"><span class="castle-icon">${houseFlag(c)}</span><span class="status">${p ? "🔒 CLAIMED" : "🟢 AVAILABLE"}</span></div><h3>${escapeHTML(c.castle)}</h3><div class="house">HOUSE ${escapeHTML(c.house)}</div><div class="claim-by">${p ? escapeHTML(p.username) : "مشاهده اطلاعات و موقعیت قلعه"}</div>${window.khataLordByCastle?.[c.castle] ? `<span class="lord-link" data-action="lord" data-lord="${escapeHTML(window.khataLordByCastle[c.castle])}">مشاهده لرد</span>` : ""}</button>`;
     }).join("")}</div>`;
   }
   function backRegions() { $("castles").classList.add("hidden"); $("regions").classList.remove("hidden"); }
@@ -281,7 +292,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let info = {};
     try { info = await api("/api/castles/" + encodeURIComponent(c.castle)); } catch (e) { console.warn(e); }
     if (requestId !== castleRequestId) return;
-    $("castleDetails").innerHTML = `<div class="detail-icon">${escapeHTML(c.icon)}</div><div class="eyebrow">${escapeHTML(r.region)}</div><h2>${escapeHTML(c.castle)}</h2><div class="detail-house">HOUSE ${escapeHTML(c.house)}</div><div class="detail-grid"><div><span>📍 LOCATION</span><b>${escapeHTML(info.location || r.region)}</b></div><div><span>🏰 CASTLE</span><b>${escapeHTML(c.castle)}</b></div><div><span>👑 RULING HOUSE</span><b>${escapeHTML(c.house)}</b></div><div><span>STATUS</span><b class="${p ? "taken" : "free"}">${p ? "OCCUPIED · " + escapeHTML(p.username) : "FREE"}</b></div></div><p class="detail-description">${escapeHTML(info.description || "اطلاعات این قلعه در حال تکمیل است.")}</p>${p ? "" : `<button class="primary wide" type="button" data-action="claim" data-region="${regionIndex}" data-castle="${castleIndex}" ${claimLocked ? "disabled" : ""}>${claimLocked ? "انتخاب قلعه فعلاً قفل است." : "CLAIM THIS CASTLE"}</button>`}`;
+    $("castleDetails").innerHTML = `<div class="detail-icon">${houseFlag(c,"house-flag house-flag-detail")}</div><div class="eyebrow">${escapeHTML(r.region)}</div><h2>${escapeHTML(c.castle)}</h2><div class="detail-house">HOUSE ${escapeHTML(c.house)}</div><div class="detail-grid"><div><span>📍 LOCATION</span><b>${escapeHTML(info.location || r.region)}</b></div><div><span>🏰 CASTLE</span><b>${escapeHTML(c.castle)}</b></div><div><span>👑 RULING HOUSE</span><b>${escapeHTML(c.house)}</b></div><div><span>STATUS</span><b class="${p ? "taken" : "free"}">${p ? "OCCUPIED · " + escapeHTML(p.username) : "FREE"}</b></div></div><p class="detail-description">${escapeHTML(info.description || "اطلاعات این قلعه در حال تکمیل است.")}</p>${p ? "" : `<button class="primary wide" type="button" data-action="claim" data-region="${regionIndex}" data-castle="${castleIndex}" ${claimLocked ? "disabled" : ""}>${claimLocked ? "انتخاب قلعه فعلاً قفل است." : "CLAIM THIS CASTLE"}</button>`}`;
   }
 
   function openModal(id) { $(id).classList.remove("hidden"); document.body.classList.add("modal-open"); }
@@ -340,7 +351,7 @@ window.addEventListener("DOMContentLoaded", () => {
   function showRegionPanel(index) {
     const r = houses[index]; if (!r) return;
     const claimed = players.filter(p => p.region === r.region).length;
-    $("regionPanel").innerHTML = `<div class="region-panel-head"><div class="panel-icon">${escapeHTML(r.icon)}</div><div><span>REALM</span><h3>${escapeHTML(regionShort[r.region] || r.region)}</h3><small>${r.castles.length} CASTLES · ${claimed} CLAIMED</small></div></div><div class="region-panel-divider"></div><p class="panel-hint">خاندان‌ها و قلعه‌ها</p><div class="region-castles">${r.castles.map((c, i) => { const p = players.find(x => x.region === r.region && x.castle === c.castle); return `<button class="region-castle ${p ? "claimed" : "free"}" type="button" data-action="castle" data-region="${index}" data-castle="${i}"><span class="castle-mini-icon">${escapeHTML(c.icon)}</span><span class="castle-info"><strong>${escapeHTML(c.castle)}</strong><small>HOUSE ${escapeHTML(c.house)}</small></span><span class="castle-state">${p ? "♛ " + escapeHTML(p.username) : "FREE"}</span></button>`; }).join("")}</div>`;
+    $("regionPanel").innerHTML = `<div class="region-panel-head"><div class="panel-icon">${escapeHTML(r.icon)}</div><div><span>REALM</span><h3>${escapeHTML(regionShort[r.region] || r.region)}</h3><small>${r.castles.length} CASTLES · ${claimed} CLAIMED</small></div></div><div class="region-panel-divider"></div><p class="panel-hint">خاندان‌ها و قلعه‌ها</p><div class="region-castles">${r.castles.map((c, i) => { const p = players.find(x => x.region === r.region && x.castle === c.castle); return `<button class="region-castle ${p ? "claimed" : "free"}" type="button" data-action="castle" data-region="${index}" data-castle="${i}"><span class="castle-mini-icon">${houseFlag(c,"house-flag house-flag-small")}</span><span class="castle-info"><strong>${escapeHTML(c.castle)}</strong><small>HOUSE ${escapeHTML(c.house)}</small></span><span class="castle-state">${p ? "♛ " + escapeHTML(p.username) : "FREE"}</span></button>`; }).join("")}</div>`;
   }
 
   function renderPlayers() {
@@ -348,7 +359,7 @@ window.addEventListener("DOMContentLoaded", () => {
     $("playerList").innerHTML = houses.map(r => {
       const rp = players.filter(p => p.region === r.region);
       if (!rp.length) return `<div class="realm-group empty"><div class="realm-heading"><span>${escapeHTML(r.icon)} ${escapeHTML(r.region)}</span><small>0 / ${r.castles.length} CLAIMED</small></div><div class="empty-realm">هنوز لردی در این اقلیم ثبت نشده است.</div></div>`;
-      return `<div class="realm-group"><div class="realm-heading"><span>${escapeHTML(r.icon)} ${escapeHTML(r.region)}</span><small>${rp.length} / ${r.castles.length} CLAIMED</small></div>${rp.map(p => `<div class="player"><div><strong>${escapeHTML(p.username)}</strong><small>${escapeHTML(p.house)}</small></div><div class="castle">${escapeHTML(p.castle)}</div></div>`).join("")}</div>`;
+      return `<div class="realm-group"><div class="realm-heading"><span>${escapeHTML(r.icon)} ${escapeHTML(r.region)}</span><small>${rp.length} / ${r.castles.length} CLAIMED</small></div>${rp.map(p => `<div class="player"><div><strong>${escapeHTML(p.username)}</strong><small>${houseFlagByName(p.house)}${escapeHTML(p.house)}</small></div><div class="castle">${escapeHTML(p.castle)}</div></div>`).join("")}</div>`;
     }).join("");
   }
 
