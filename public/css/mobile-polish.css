@@ -38,13 +38,46 @@
 }
 @media(prefers-reduced-motion:reduce){.my-castle-war .active-war-card{transition:none!important;}}
 
-/* Homepage navigation only: the six game buttons, and nothing else. */
-.game-app .nav .nav-btn{overflow:hidden;isolation:isolate;transform:translateZ(0);transition:color .28s ease,border-color .28s ease,background .28s ease,box-shadow .28s ease,transform .28s cubic-bezier(.2,.8,.2,1);box-shadow:0 5px 18px rgba(0,0,0,.28),inset 0 0 0 rgba(214,75,83,0);}
-.game-app .nav .nav-btn::before{content:"";position:absolute;inset:-45%;z-index:-1;background:conic-gradient(from 0deg,transparent 0 28%,rgba(214,75,83,.38) 36%,rgba(255,255,255,.16) 42%,transparent 50% 100%);animation:khataNavOrbit 5.5s linear infinite;opacity:.5;}
-.game-app .nav .nav-btn::after{content:"";position:absolute;left:-35%;bottom:0;width:170%;height:2px;background:linear-gradient(90deg,transparent,#d64b53 45%,#fff 50%,#d64b53 55%,transparent);transform:translateX(-28%);opacity:.35;transition:opacity .25s ease,transform .45s ease;}
-.game-app .nav .nav-btn:hover{transform:translateY(-3px) scale(1.025);border-color:#a43e48;color:#fff;background:linear-gradient(145deg,rgba(49,13,18,.98),rgba(15,8,11,.98));box-shadow:0 10px 28px rgba(0,0,0,.5),0 0 22px rgba(170,45,55,.18),inset 0 0 22px rgba(214,75,83,.08);}
-.game-app .nav .nav-btn:hover::after,.game-app .nav .nav-btn.active::after{opacity:1;transform:translateX(8%);box-shadow:0 0 12px rgba(214,75,83,.8);}
-.game-app .nav .nav-btn.active{color:#fff;border-color:#a43e48;background:linear-gradient(145deg,rgba(48,13,18,.98),rgba(17,8,11,.98));box-shadow:0 7px 24px rgba(0,0,0,.45),0 0 20px rgba(170,45,55,.12),inset 0 0 25px rgba(214,75,83,.09);}
-.game-app .nav .nav-btn:active{transform:translateY(0) scale(.97);}
-@keyframes khataNavOrbit{to{transform:rotate(360deg);}}
-@media(prefers-reduced-motion:reduce){.game-app .nav .nav-btn::before{animation:none;}.game-app .nav .nav-btn,.game-app .nav .nav-btn::after{transition:none;}}
+/* Homepage navigation only: six game buttons. Royal Medieval Shine. */
+.game-app .nav .nav-btn{
+  position:relative;overflow:hidden;isolation:isolate;transform:translateZ(0);
+  color:#9ba4a8;border-color:#343c40;
+  background:linear-gradient(145deg,rgba(18,22,25,.94),rgba(7,9,11,.98));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 6px 20px rgba(0,0,0,.3);
+  transition:transform .3s cubic-bezier(.2,.8,.2,1),color .3s ease,border-color .3s ease,box-shadow .3s ease,background .3s ease;
+}
+.game-app .nav .nav-btn::before{
+  content:"";position:absolute;inset:1px;z-index:-1;pointer-events:none;
+  background:linear-gradient(112deg,transparent 0%,transparent 38%,rgba(255,239,190,.06) 45%,rgba(255,220,125,.72) 50%,rgba(255,239,190,.08) 55%,transparent 63%,transparent 100%);
+  transform:translateX(-125%);opacity:0;
+}
+.game-app .nav .nav-btn::after{
+  content:"";position:absolute;left:10%;right:10%;bottom:3px;height:1px;
+  background:linear-gradient(90deg,transparent,#9f2830 20%,#e7c878 50%,#9f2830 80%,transparent);
+  transform:scaleX(.18);transform-origin:center;opacity:.35;
+  transition:transform .45s ease,opacity .3s ease,box-shadow .3s ease;
+}
+.game-app .nav .nav-btn:hover,.game-app .nav .nav-btn:focus-visible{
+  transform:translateY(-3px);
+  color:#fff;border-color:#806b3c;
+  background:linear-gradient(145deg,rgba(31,24,17,.98),rgba(13,10,10,.98));
+  box-shadow:inset 0 0 20px rgba(216,172,77,.055),0 10px 28px rgba(0,0,0,.48),0 0 18px rgba(190,150,60,.1);
+}
+.game-app .nav .nav-btn:hover::before,.game-app .nav .nav-btn:focus-visible::before{animation:khataRoyalShine .8s cubic-bezier(.2,.7,.2,1) forwards;opacity:1;}
+.game-app .nav .nav-btn:hover::after,.game-app .nav .nav-btn.active::after{
+  transform:scaleX(1);opacity:1;box-shadow:0 0 9px rgba(224,184,88,.5);
+}
+.game-app .nav .nav-btn.active{
+  color:#f5eee0;border-color:#806b3c;
+  background:linear-gradient(145deg,rgba(43,28,18,.96),rgba(15,10,10,.98));
+  box-shadow:inset 0 0 24px rgba(207,158,56,.07),0 8px 24px rgba(0,0,0,.42),0 0 15px rgba(183,138,48,.08);
+}
+.game-app .nav .nav-btn:active{transform:translateY(-1px) scale(.965);}
+@keyframes khataRoyalShine{0%{transform:translateX(-125%)}100%{transform:translateX(125%)}}
+@media(max-width:700px){
+  .game-app .nav .nav-btn{min-width:0;padding:10px 11px;font-size:10px;}
+}
+@media(prefers-reduced-motion:reduce){
+  .game-app .nav .nav-btn::before{animation:none!important;}
+  .game-app .nav .nav-btn,.game-app .nav .nav-btn::after{transition:none!important;}
+}
