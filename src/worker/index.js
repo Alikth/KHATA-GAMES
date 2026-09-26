@@ -461,48 +461,30 @@ async function requireCastleOwner(request,env,castleName=""){
 function safeCost(cost){return Object.fromEntries(Object.entries(cost).filter(([k,v])=>RESOURCE_KEYS.includes(k)&&Number(v)>0));}
 async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
   const where=table==="castle_production"?"production_key":"camp_key";
-  const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
-  if(!state)return {error:"دادهٔ قلعه پیدا نشد.",status:404};
   const row=await env.DB.prepare(`SELECT level FROM ${table} WHERE castle=? AND ${where}=?`).bind(castle,key).first();
   const level=Number(row?.level||0);
   if(!row)return {error:"این مورد برای این قلعه تعریف نشده است.",status:404};
   if(level>=maxLevel)return {error:"این مورد به حداکثر سطح رسیده است.",status:400};
 
-  const cost=safeCost(def.cost),entries=Object.entries(cost);
-  if(!entries.length)return {error:"هزینهٔ ارتقا معتبر نیست.",status:500};
-  if(!addCostCheck(state,Object.fromEntries(entries)))return {error:"منابع کافی نیست.",status:400};
+  const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
+  if(!state)return {error:"دادهٔ قلعه پیدا نشد.",status:404};
+  if(!addCostCheck(state,def.cost))return {error:"منابع کافی نیست.",status:400};
 
-  const sets=entries.map(([k])=>`${k}=${k}-?`).join(",");
-  const original=entries.map(([k])=>`${k}=?`).join(" AND ");
-  const availability=entries.map(([k])=>`${k}>=?`).join(" AND ");
+  const cost=safeCost(def.cost);
+  const keys=Object.keys(cost);
+  if(!keys.length)return {error:"هزینهٔ ارتقا معتبر نیست.",status:500};
 
-  const q1=env.DB.prepare(
-    `UPDATE ${table}
-     SET level=level+1
-     WHERE castle=? AND ${where}=? AND level=?
-       AND EXISTS (
-         SELECT 1 FROM castle_state
-         WHERE castle=? AND ${availability}
-       )`
-  ).bind(castle,key,level,castle,...entries.map(([,v])=>Number(v)));
+  const sets=keys.map(k=>`${k}=${k}-?`).join(",");
+  const cond=keys.map(k=>`${k}>=?`).join(" AND ");
 
-  const q2=env.DB.prepare(
-    `UPDATE castle_state
-     SET ${sets}
-     WHERE castle=? AND ${original}
-       AND EXISTS (
-         SELECT 1 FROM ${table}
-         WHERE castle=? AND ${where}=? AND level=?
-       )`
-  ).bind(
-    ...entries.map(([,v])=>Number(v)),
-    castle,
-    ...entries.map(([k])=>Number(state[k]||0)),
-    castle,key,level+1
-  );
+  const b=await env.DB.batch([
+    env.DB.prepare(`UPDATE castle_state SET ${sets} WHERE castle=? AND ${cond}`)
+      .bind(...keys.map(k=>Number(cost[k])),castle,...keys.map(k=>Number(cost[k]))),
+    env.DB.prepare(`UPDATE ${table} SET level=level+1 WHERE castle=? AND ${where}=? AND level=?`)
+      .bind(castle,key,level)
+  ]);
 
-  const result=await env.DB.batch([q1,q2]);
-  if(!result[0]?.meta?.changes || !result[1]?.meta?.changes){
+  if(!b[0]?.meta?.changes||!b[1]?.meta?.changes){
     return {error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن.",status:409};
   }
   return {ok:true,newLevel:level+1};
