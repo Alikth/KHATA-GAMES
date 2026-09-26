@@ -8,7 +8,8 @@ window.addEventListener("DOMContentLoaded", () => {
   const stripAt = value => String(value || "").replace(/^@+/, "");
 
   const apiCache=new Map();
-  const API_CACHE_TTL={"/api/houses":30000,"/api/players":5000};
+  const API_CACHE_TTL={"/api/houses":30000,"/api/players":5000,"/api/world-state":5000};
+  let lastLocalMutationAt=0;
   function invalidateApiCache(paths=null){
     if(!paths){apiCache.clear();return;}
     for(const key of paths) apiCache.delete(key);
@@ -32,7 +33,7 @@ window.addEventListener("DOMContentLoaded", () => {
       throw error;
     }
     if(ttl)apiCache.set(cacheKey,{data,expiresAt:Date.now()+ttl});
-    if(method!=="GET")invalidateApiCache();
+    if(method!=="GET"){lastLocalMutationAt=Date.now();invalidateApiCache();}
     return data;
   }
 
@@ -48,6 +49,7 @@ window.addEventListener("DOMContentLoaded", () => {
       try{
         const page=document.querySelector(".nav-btn.active")?.dataset.page;
         const detail=window.khataRealtimeDetail||{};
+        if(lastLocalMutationAt&&Date.now()-lastLocalMutationAt<2000){window.khataRealtimeDetail=null;return;}
         invalidateApiCache();
         if(page==="players"){
           const world=await api("/api/world-state");
