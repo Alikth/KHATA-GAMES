@@ -103,4 +103,6 @@
     if(e.target.id==='cmClose'||e.target.id==='castleManagementModal'){$('castleManagementModal').classList.add('hidden');document.body.classList.remove('modal-open');}
   });
   window.khataOpenCastleManagement=async(castle)=>{$('castleManagementModal').classList.remove('hidden');document.body.classList.add('modal-open');await load(castle);};
+  window.addEventListener('khata:realtime',()=>{if(currentData?.castle&&!$('castleManagementModal')?.classList.contains('hidden'))load(currentData.castle);});
+
 })();
