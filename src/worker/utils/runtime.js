@@ -84,7 +84,7 @@ function passwordHashInfo(storedHash) {
   if (match) return { iterations: Number(match[1]), rawHash: match[2], version: "v2" };
   // Compatibility with hashes created by the previous broken v2 formatter:
   // v2600000<base64 hash>
-  const compact = /^v2(\d+)([A-Za-z0-9+/=]+)$/.exec(value);
+  const compact = /^v2(600000)([A-Za-z0-9+/=]{44})$/.exec(value);
   if (compact) return { iterations: Number(compact[1]), rawHash: compact[2], version: "v2-compact" };
   return { iterations: LEGACY_PASSWORD_HASH_ITERATIONS, rawHash: value, version: "legacy" };
 }
