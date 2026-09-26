@@ -75,6 +75,20 @@ export class RealtimeHub extends DurableObject {
   webSocketClose(ws,code,reason){ try{ws.close(code,reason)}catch{} }
   webSocketError(ws,error){ console.error("realtime websocket error",error); }
 }
+function shouldBroadcastRealtime(path){
+  return path==="/api/register" ||
+    path==="/api/scenarios" ||
+    path==="/api/roles" ||
+    path==="/api/trades" ||
+    /^\/api\/trades\/[^/]+\/respond$/.test(path) ||
+    path==="/api/war-expeditions" ||
+    /^\/api\/war-expeditions\/[^/]+\/cancel$/.test(path) ||
+    path.startsWith("/api/my-castle/") ||
+    path==="/api/admin/weekly-update" ||
+    /^\/api\/admin\/war-expeditions\/[^/]+\/cancel$/.test(path) ||
+    /^\/api\/admin\/players(?:\/[^/]+)?$/.test(path) ||
+    /^\/api\/admin\/castles(?:\/[^/]+)?$/.test(path);
+}
 async function broadcastRealtime(env,payload){
   try{
     if(!env.REALTIME)return;
@@ -1284,7 +1298,7 @@ export default {
       if(url.pathname.startsWith("/api/")){
         if(url.pathname==="/api/auth/status"||url.pathname==="/api/auth/login"||url.pathname==="/api/auth/register")await cleanupExpiredSessions(env);
         const response=await handleApi(request,env,url);
-        if(request.method!=="GET" && response.ok)ctx.waitUntil(broadcastRealtime(env,{type:"game_update",path:url.pathname,at:Date.now()}));
+        if(request.method!=="GET" && response.ok && shouldBroadcastRealtime(url.pathname))ctx.waitUntil(broadcastRealtime(env,{type:"game_update",path:url.pathname,at:Date.now()}));
         return response;
       }
       const characterImage = await serveCharacterImage(request, env, url);
