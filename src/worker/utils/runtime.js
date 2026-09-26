@@ -4,175 +4,37 @@ const SESSION_TTL = 8 * 60 * 60 * 1000;
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_PASSWORD_LENGTH = 128;
 const SESSION_COOKIE_NAME = "__Host-khata_session";
-const SECURITY_HEADERS = {
-  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
-  "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self'; connect-src 'self'; upgrade-insecure-requests"
-};
-
-function json(data, status = 200, headers = {}) {
-  return new Response(JSON.stringify(data), { status, headers: { ...SECURITY_HEADERS, "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
-}
-async function body(request) {
-  const type = request.headers.get("content-type") || "";
-  if (!type.toLowerCase().startsWith("application/json")) { const e = new Error("JSON required"); e.status = 415; throw e; }
-  const raw = await request.text();
-  if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) { const e = new Error("Request body too large"); e.status = 413; throw e; }
-  try {
-    const parsed = JSON.parse(raw);
-    if(!parsed || typeof parsed !== "object" || Array.isArray(parsed)){ const e = new Error("JSON object required"); e.status = 400; throw e; }
-    return parsed;
-  } catch(e) {
-    if(e?.status) throw e;
-    const err = new Error("Invalid JSON"); err.status = 400; throw err;
-  }
-}
-function sameOrigin(request) {
-  const origin = request.headers.get("Origin");
-  if (!origin) return false;
-  return origin === new URL(request.url).origin;
-}
-async function sha256Base64Url(value) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return base64url(new Uint8Array(digest));
-}
-function base64url(bytes) {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-function randomToken() {
-  return base64url(crypto.getRandomValues(new Uint8Array(32)));
-}
-async function constantTimeSecretEqual(a, b) {
-  const [ha, hb] = await Promise.all([sha256Base64Url(String(a)), sha256Base64Url(String(b))]);
-  if (ha.length !== hb.length) return false;
-  let diff = 0;
-  for (let i = 0; i < ha.length; i++) diff |= ha.charCodeAt(i) ^ hb.charCodeAt(i);
-  return diff === 0;
-}
-function normalizeUsername(value) { return String(value || "").trim().replace(/^@+/, "").replace(/\s+/g, ""); }
-function validTelegramUsername(value) { return /^[A-Za-z0-9_]{5,32}$/.test(value); }
-function validAccountUsername(value) { return /^[A-Za-z0-9_]{3,24}$/.test(value); }
-function cookie(name, value, maxAge = SESSION_TTL / 1000) { return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(maxAge)}`; }
-function clearCookie(name) { return `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`; }
-function getCookie(request, name) { const raw = request.headers.get("Cookie") || ""; const m = raw.match(new RegExp(`(?:^|; )${name}=([^;]*)`)); if(!m)return null; try{return decodeURIComponent(m[1]);}catch{return null;} }
-function newId() { return crypto.randomUUID(); }
-const PASSWORD_HASH_VERSION = "v2";
-const PASSWORD_HASH_ITERATIONS = 600000;
-const LEGACY_PASSWORD_HASH_ITERATIONS = 12000;
-async function derivePasswordHash(password, salt, iterations) {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt, iterations, hash: "SHA-256" }, key, 256);
-  return btoa(String.fromCharCode(...new Uint8Array(bits)));
-}
-async function hashPassword(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
-  const raw = await derivePasswordHash(password, salt, PASSWORD_HASH_ITERATIONS);
-  return {
-    salt: btoa(String.fromCharCode(...salt)),
-    hash: `${PASSWORD_HASH_VERSION}$${PASSWORD_HASH_ITERATIONS}$${raw}`
-  };
-}
-function bytes(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
-function passwordHashInfo(storedHash) {
-  const value = String(storedHash || "");
-  const match = /^v2\$(\d+)\$([A-Za-z0-9+/=]+)$/.exec(value);
-  if(match) return { iterations: Number(match[1]), rawHash: match[2], version: "v2" };
-  // Transitional support for hashes created by the short-lived malformed v2 encoder.
-  const malformed = /^v2(600000)([A-Za-z0-9+/=]+)$/.exec(value);
-  if(malformed) return { iterations: Number(malformed[1]), rawHash: malformed[2], version: "legacy-v2" };
-  return { iterations: LEGACY_PASSWORD_HASH_ITERATIONS, rawHash: value, version: "legacy" };
-}
-async function verifyPassword(password, salt, storedHash) {
-  const info = passwordHashInfo(storedHash);
-  if (!Number.isSafeInteger(info.iterations) || info.iterations < 1) return false;
-  let made;
-  try { made = await derivePasswordHash(password, bytes(salt), info.iterations); } catch { return false; }
-  let a,b;
-  try { a = bytes(made); b = bytes(info.rawHash); } catch { return false; }
-  if (a.length !== b.length) return false;
-  let diff = 0; for (let i=0;i<a.length;i++) diff |= a[i]^b[i];
-  return diff === 0;
-}
-function passwordNeedsUpgrade(storedHash) {
-  const info = passwordHashInfo(storedHash);
-  return info.version !== PASSWORD_HASH_VERSION || info.iterations < PASSWORD_HASH_ITERATIONS;
-}
-async function getSession(request, env) {
-  const token = getCookie(request, SESSION_COOKIE_NAME); if (!token) return null;
-  const sid = await sha256Base64Url(token);
-  const row = await env.DB.prepare("SELECT * FROM sessions WHERE id = ? AND expires_at > ?").bind(sid, Date.now()).first();
-  return row || null;
-}
-async function requireUser(request, env) {
-  const s = await getSession(request, env);
-  if (!s || s.is_admin) return null;
-  const user = await env.DB.prepare("SELECT id FROM users WHERE id=?").bind(s.user_id).first();
-  return user ? s : null;
-}
-async function createSession(env, userId, admin = 0) {
-  const token = randomToken(), id = await sha256Base64Url(token), expires = Date.now() + SESSION_TTL;
-  await env.DB.prepare("INSERT INTO sessions (id,user_id,is_admin,expires_at) VALUES (?,?,?,?)").bind(id,userId,admin,expires).run();
-  return token;
-}
-async function deleteSession(request, env) {
-  const token=getCookie(request,SESSION_COOKIE_NAME);
-  if(token){ const sid=await sha256Base64Url(token); await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(sid).run(); }
-}
-async function cleanupExpiredSessions(env) {
-  await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(Date.now()).run();
-}
-async function rateLimit(request, env, action, limit, windowMs = 15 * 60 * 1000) {
-  // Keep login/register usable after deployments where the security migration has
-  // not yet been applied to the bound D1 database.
-  await env.DB.prepare("CREATE TABLE IF NOT EXISTS rate_limits (bucket_key TEXT PRIMARY KEY, window_start INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0)").run();
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  const key = action + ":" + await sha256Base64Url(ip);
-  const now = Date.now(), bucket = now - (now % windowMs);
-  await env.DB.prepare("DELETE FROM rate_limits WHERE window_start < ?").bind(bucket - (windowMs * 2)).run();
-  const row = await env.DB.prepare(`INSERT INTO rate_limits (bucket_key, window_start, count) VALUES (?, ?, 1)
-    ON CONFLICT(bucket_key) DO UPDATE SET count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END, window_start = excluded.window_start
-    RETURNING count`).bind(key, bucket).first();
-  return Number(row?.count || 1) <= limit;
-}
-function publicUser(u) { return u ? { id: u.id, username: u.username } : null; }
-async function players(env) { return (await env.DB.prepare("SELECT id, username, region, house, castle, created_at AS createdAt FROM players ORDER BY created_at").all()).results; }
-
-export {
-  SESSION_TTL,
-  SESSION_COOKIE_NAME,
-  MAX_BODY_BYTES,
-  MAX_PASSWORD_LENGTH,
-  PASSWORD_HASH_VERSION,
-  PASSWORD_HASH_ITERATIONS,
-  SECURITY_HEADERS,
-  json,
-  body,
-  sameOrigin,
-  sha256Base64Url,
-  base64url,
-  randomToken,
-  constantTimeSecretEqual,
-  normalizeUsername,
-  validTelegramUsername,
-  validAccountUsername,
-  cookie,
-  clearCookie,
-  getCookie,
-  newId,
-  hashPassword,
-  bytes,
-  verifyPassword,
-  passwordNeedsUpgrade,
-  getSession,
-  requireUser,
-  createSession,
-  deleteSession,
-  cleanupExpiredSessions,
-  rateLimit,
-  publicUser,
-  players
-};
+const SECURITY_HEADERS = {"Strict-Transport-Security":"max-age=31536000; includeSubDomains","X-Content-Type-Options":"nosniff","X-Frame-Options":"DENY","Referrer-Policy":"strict-origin-when-cross-origin","Permissions-Policy":"camera=(), microphone=(), geolocation=(), payment=()","Content-Security-Policy":"default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self'; connect-src 'self'; upgrade-insecure-requests"};
+function json(data,status=200,headers={}){return new Response(JSON.stringify(data),{status,headers:{...SECURITY_HEADERS,"content-type":"application/json; charset=utf-8","cache-control":"no-store",...headers}})}
+async function body(request){const type=request.headers.get("content-type")||"";if(!type.toLowerCase().startsWith("application/json")){const e=new Error("JSON required");e.status=415;throw e}const raw=await request.text();if(new TextEncoder().encode(raw).byteLength>MAX_BODY_BYTES){const e=new Error("Request body too large");e.status=413;throw e}try{const parsed=JSON.parse(raw);if(!parsed||typeof parsed!=="object"||Array.isArray(parsed)){const e=new Error("JSON object required");e.status=400;throw e}return parsed}catch(e){if(e?.status)throw e;const err=new Error("Invalid JSON");err.status=400;throw err}}
+function sameOrigin(request){const origin=request.headers.get("Origin");if(!origin)return false;return origin===new URL(request.url).origin}
+async function sha256Base64Url(value){const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value));return base64url(new Uint8Array(digest))}
+function base64url(bytes){let binary="";for(const b of bytes)binary+=String.fromCharCode(b);return btoa(binary).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/g,"")}
+function randomToken(){return base64url(crypto.getRandomValues(new Uint8Array(32)))}
+async function constantTimeSecretEqual(a,b){const[ha,hb]=await Promise.all([sha256Base64Url(String(a)),sha256Base64Url(String(b))]);if(ha.length!==hb.length)return false;let diff=0;for(let i=0;i<ha.length;i++)diff|=ha.charCodeAt(i)^hb.charCodeAt(i);return diff===0}
+function normalizeUsername(value){return String(value||"").trim().replace(/^@+/,"").replace(/\s+/g,"")}
+function validTelegramUsername(value){return /^[A-Za-z0-9_]{5,32}$/.test(value)}
+function validAccountUsername(value){return /^[A-Za-z0-9_]{3,24}$/.test(value)}
+function cookie(name,value,maxAge=SESSION_TTL/1000){return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(maxAge)}`}
+function clearCookie(name){return `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`}
+function getCookie(request,name){const raw=request.headers.get("Cookie")||"";const m=raw.match(new RegExp(`(?:^|; )${name}=([^;]*)`));if(!m)return null;try{return decodeURIComponent(m[1])}catch{return null}}
+function newId(){return crypto.randomUUID()}
+const PASSWORD_HASH_VERSION="v2";
+// Cloudflare Workers WebCrypto rejects PBKDF2 iteration counts above 100,000.
+const PASSWORD_HASH_ITERATIONS=100000;
+const LEGACY_PASSWORD_HASH_ITERATIONS=12000;
+async function derivePasswordHash(password,salt,iterations){if(!Number.isSafeInteger(iterations)||iterations<1||iterations>100000)throw new RangeError("Unsupported PBKDF2 iteration count");const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveBits"]);const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt,iterations,hash:"SHA-256"},key,256);return btoa(String.fromCharCode(...new Uint8Array(bits)))}
+async function hashPassword(password,salt=crypto.getRandomValues(new Uint8Array(16))){const raw=await derivePasswordHash(password,salt,PASSWORD_HASH_ITERATIONS);return{salt:btoa(String.fromCharCode(...salt)),hash:`${PASSWORD_HASH_VERSION}$${PASSWORD_HASH_ITERATIONS}$${raw}`}}
+function bytes(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
+function passwordHashInfo(storedHash){const value=String(storedHash||"");const match=/^v2\$(\d+)\$([A-Za-z0-9+/=]+)$/.exec(value);if(match)return{iterations:Number(match[1]),rawHash:match[2],version:"v2"};const malformed=/^v2(\d+)([A-Za-z0-9+/=]+)$/.exec(value);if(malformed)return{iterations:Number(malformed[1]),rawHash:malformed[2],version:"legacy-v2"};return{iterations:LEGACY_PASSWORD_HASH_ITERATIONS,rawHash:value,version:"legacy"}}
+async function verifyPassword(password,salt,storedHash){const info=passwordHashInfo(storedHash);if(!Number.isSafeInteger(info.iterations)||info.iterations<1||info.iterations>100000)return false;let made;try{made=await derivePasswordHash(password,bytes(salt),info.iterations)}catch{return false}let a,b;try{a=bytes(made);b=bytes(info.rawHash)}catch{return false}if(a.length!==b.length)return false;let diff=0;for(let i=0;i<a.length;i++)diff|=a[i]^b[i];return diff===0}
+function passwordNeedsUpgrade(storedHash){const info=passwordHashInfo(storedHash);return info.version!==PASSWORD_HASH_VERSION||info.iterations<PASSWORD_HASH_ITERATIONS}
+async function getSession(request,env){const token=getCookie(request,SESSION_COOKIE_NAME);if(!token)return null;const sid=await sha256Base64Url(token);const row=await env.DB.prepare("SELECT * FROM sessions WHERE id = ? AND expires_at > ?").bind(sid,Date.now()).first();return row||null}
+async function requireUser(request,env){const s=await getSession(request,env);if(!s||s.is_admin)return null;const user=await env.DB.prepare("SELECT id FROM users WHERE id=?").bind(s.user_id).first();return user?s:null}
+async function createSession(env,userId,admin=0){const token=randomToken(),id=await sha256Base64Url(token),expires=Date.now()+SESSION_TTL;await env.DB.prepare("INSERT INTO sessions (id,user_id,is_admin,expires_at) VALUES (?,?,?,?)").bind(id,userId,admin,expires).run();return token}
+async function deleteSession(request,env){const token=getCookie(request,SESSION_COOKIE_NAME);if(token){const sid=await sha256Base64Url(token);await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(sid).run()}}
+async function cleanupExpiredSessions(env){await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(Date.now()).run()}
+async function rateLimit(request,env,action,limit,windowMs=15*60*1000){await env.DB.prepare("CREATE TABLE IF NOT EXISTS rate_limits (bucket_key TEXT PRIMARY KEY, window_start INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0)").run();const ip=request.headers.get("CF-Connecting-IP")||"unknown";const key=action+":"+await sha256Base64Url(ip);const now=Date.now(),bucket=now-(now%windowMs);await env.DB.prepare("DELETE FROM rate_limits WHERE window_start < ?").bind(bucket-(windowMs*2)).run();const row=await env.DB.prepare(`INSERT INTO rate_limits (bucket_key, window_start, count) VALUES (?, ?, 1) ON CONFLICT(bucket_key) DO UPDATE SET count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END, window_start = excluded.window_start RETURNING count`).bind(key,bucket).first();return Number(row?.count||1)<=limit}
+function publicUser(u){return u?{id:u.id,username:u.username}:null}
+async function players(env){return(await env.DB.prepare("SELECT id, username, region, house, castle, created_at AS createdAt FROM players ORDER BY created_at").all()).results}
+export{SESSION_TTL,SESSION_COOKIE_NAME,MAX_BODY_BYTES,MAX_PASSWORD_LENGTH,PASSWORD_HASH_VERSION,PASSWORD_HASH_ITERATIONS,SECURITY_HEADERS,json,body,sameOrigin,sha256Base64Url,base64url,randomToken,constantTimeSecretEqual,normalizeUsername,validTelegramUsername,validAccountUsername,cookie,clearCookie,getCookie,newId,hashPassword,bytes,verifyPassword,passwordNeedsUpgrade,getSession,requireUser,createSession,deleteSession,cleanupExpiredSessions,rateLimit,publicUser,players};
