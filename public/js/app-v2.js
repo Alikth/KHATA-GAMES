@@ -203,6 +203,7 @@ window.addEventListener("DOMContentLoaded", () => {
   async function logoutUser() {
     try { await api("/api/auth/logout", { method: "POST" }); }
     catch (err) { console.error(err); }
+    closeRealtime();
     currentUser = null;
     adminRequested = false;
     sessionStorage.removeItem("khata_admin_requested");
