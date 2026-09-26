@@ -212,3 +212,13 @@ body.nav-slide-demo .page.nav-slide-old{z-index:2}
 .my-castle-submissions{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:8px}
 .scenario-submit-btn,.role-submit-btn{width:100%}
 .admin-special-item-input{display:block;width:100%;min-height:150px;resize:vertical;background:#080a0c;border:1px solid #30363a;color:#eee;padding:12px;font-family:monospace;line-height:1.6;margin:8px 0}
+
+
+/* House heraldry */
+.house-flag{display:block;width:48px;height:48px;object-fit:cover;border-radius:6px;box-shadow:0 5px 14px rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.16)}
+.house-flag-small{width:32px;height:32px;border-radius:4px}
+.house-flag-detail{width:96px;height:96px;border-radius:10px}
+.house-flag-card{width:110px;height:110px;border-radius:10px}
+.castle-icon,.castle-mini-icon{display:flex;align-items:center;justify-content:center}
+.my-castle-art{display:flex;align-items:center;justify-content:center}
+.player small{display:flex;align-items:center;gap:7px}
