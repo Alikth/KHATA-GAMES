@@ -307,12 +307,8 @@ async function settleFoodCredit(env,castle,resource,amount){
     await env.DB.prepare("UPDATE castle_state SET "+resource+"="+resource+"+? WHERE castle=?").bind(n,castle).run();
     return;
   }
-  const factor=resource==="grain"?1:2,credit=n*factor,usedCredit=Math.min(d,credit),usedUnits=Math.ceil(usedCredit/factor),remainingDebt=d-usedCredit;
-  if(resource==="grain"){
-    await env.DB.prepare("UPDATE castle_state SET grain=MAX(0,grain-?) WHERE castle=?").bind(usedUnits,castle).run();
-  }else{
-    await env.DB.prepare("UPDATE castle_state SET "+resource+"=MAX(0,"+resource+"-?) WHERE castle=?").bind(usedUnits,castle).run();
-  }
+  const factor=resource==="grain"?1:2,credit=n*factor,usedCredit=Math.min(d,credit),usedUnits=Math.ceil(usedCredit/factor),remainingDebt=d-usedCredit,remainingUnits=n-usedUnits;
+  if(remainingUnits>0)await env.DB.prepare("UPDATE castle_state SET "+resource+"="+resource+"+? WHERE castle=?").bind(remainingUnits,castle).run();
   if(remainingDebt>0)await env.DB.prepare("UPDATE food_debts SET debt_grain=? WHERE castle=?").bind(remainingDebt,castle).run();
   else await env.DB.prepare("DELETE FROM food_debts WHERE castle=?").bind(castle).run();
 }
