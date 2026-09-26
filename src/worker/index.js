@@ -84,6 +84,7 @@ const ECONOMY_SCHEMA = [
   `CREATE TABLE IF NOT EXISTS game_week_runs (week_key TEXT PRIMARY KEY, processed_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS castle_week_state (castle TEXT PRIMARY KEY, last_week_key TEXT)`,
   `CREATE TABLE IF NOT EXISTS castle_equipment_limits (castle TEXT NOT NULL, tracker_key TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(castle,tracker_key))`,
+  `CREATE TABLE IF NOT EXISTS food_debts (castle TEXT PRIMARY KEY, debt_grain INTEGER NOT NULL DEFAULT 0, due_at TEXT, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS game_controls (control_key TEXT PRIMARY KEY, locked INTEGER NOT NULL DEFAULT 0)`,
   `CREATE TABLE IF NOT EXISTS war_logs (
     id TEXT PRIMARY KEY, week_key TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -203,7 +204,10 @@ function gameDayKey(date=new Date()) { return new Date(date).toISOString().slice
 function addCostCheck(state,cost){ return Object.entries(cost).every(([k,v])=>Number(state[k]||0)>=Number(v)); }
 function costText(cost){ return Object.entries(cost).map(([k,v])=>`${RESOURCE_LABELS[k]||k} ${v}`).join(" + "); }
 
+let economySchemaPromise=null;
 async function ensureEconomySchema(env) {
+  if(economySchemaPromise)return economySchemaPromise;
+  economySchemaPromise=(async()=>{
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS economy_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
   // CREATE TABLE IF NOT EXISTS is cheap enough for the economy entry point and
   // guarantees that the two runtime support tables exist after an old deploy.
@@ -246,18 +250,64 @@ async function ensureEconomySchema(env) {
   }
   await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('seeded','1')").run();
   await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('schema_version','5')").run();
+  })().catch(e=>{economySchemaPromise=null;throw e;});
+  return economySchemaPromise;
 }
 
+async function getFoodDebt(env,castle){
+  await ensureEconomySchema(env);
+  return await env.DB.prepare("SELECT debt_grain,due_at FROM food_debts WHERE castle=?").bind(castle).first();
+}
+async function createFoodDebt(env,castle,amount){
+  const n=Math.max(0,Math.floor(Number(amount)||0)); if(!n)return;
+  const now=new Date(), existing=await env.DB.prepare("SELECT debt_grain,due_at FROM food_debts WHERE castle=?").bind(castle).first();
+  const due=existing?.due_at&&Date.parse(existing.due_at)>Date.now()?existing.due_at:new Date(now.getTime()+24*60*60*1000).toISOString();
+  await env.DB.prepare("INSERT INTO food_debts(castle,debt_grain,due_at,created_at) VALUES(?,?,?,?) ON CONFLICT(castle) DO UPDATE SET debt_grain=food_debts.debt_grain+excluded.debt_grain,due_at=excluded.due_at").bind(castle,n,due,existing?.created_at||now.toISOString()).run();
+}
+async function settleFoodCredit(env,castle,resource,amount){
+  const n=Math.max(0,Math.floor(Number(amount)||0)); if(!n||!["grain","fish","meat"].includes(resource))return;
+  const debt=await env.DB.prepare("SELECT debt_grain FROM food_debts WHERE castle=?").bind(castle).first();
+  const d=Math.max(0,Math.floor(Number(debt?.debt_grain||0)));
+  if(!d)return;
+  const factor=resource==="grain"?1:2,credit=n*factor,usedCredit=Math.min(d,credit),usedUnits=Math.ceil(usedCredit/factor),remainingDebt=d-usedCredit;
+  if(resource==="grain"){
+    await env.DB.prepare("UPDATE castle_state SET grain=MAX(0,grain-?) WHERE castle=?").bind(usedUnits,castle).run();
+  }else{
+    await env.DB.prepare("UPDATE castle_state SET "+resource+"=MAX(0,"+resource+"-?) WHERE castle=?").bind(usedUnits,castle).run();
+  }
+  if(remainingDebt>0)await env.DB.prepare("UPDATE food_debts SET debt_grain=? WHERE castle=?").bind(remainingDebt,castle).run();
+  else await env.DB.prepare("DELETE FROM food_debts WHERE castle=?").bind(castle).run();
+}
+async function settleExpiredFoodDebts(env){
+  await ensureEconomySchema(env);
+  const rows=(await env.DB.prepare("SELECT castle,debt_grain FROM food_debts WHERE debt_grain>0 AND due_at IS NOT NULL AND due_at<=?").bind(new Date().toISOString()).all()).results;
+  for(const row of rows){
+    const army=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=? AND count>0").bind(row.castle).all()).results;
+    const total=army.reduce((s,x)=>s+Math.max(0,Number(x.count)||0),0), target=Math.min(total,Math.max(0,Math.ceil(Number(row.debt_grain)||0)));
+    if(target>0&&total>0){
+      const deaths=army.map(x=>({key:x.unit_key,count:Number(x.count)||0,raw:(Number(x.count)||0)*target/total}));
+      let assigned=0; for(const x of deaths){x.death=Math.floor(x.raw);assigned+=x.death;}
+      let left=target-assigned;
+      deaths.sort((a,b)=>(b.raw-b.death)-(a.raw-a.death));
+      for(const x of deaths){if(left<=0)break;if(x.death<x.count){x.death++;left--;}}
+      const qs=deaths.filter(x=>x.death>0).map(x=>env.DB.prepare("UPDATE castle_army SET count=MAX(0,count-?) WHERE castle=? AND unit_key=?").bind(x.death,row.castle,x.key));
+      if(qs.length)await env.DB.batch(qs);
+    }
+    await env.DB.prepare("DELETE FROM food_debts WHERE castle=?").bind(row.castle).run();
+  }
+}
 async function loadCastleEconomy(env, castle) {
+  await settleExpiredFoodDebts(env);
   const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
   if(!state) return null;
-  const [prod,camps,specialCamps,army,equipment,fleet]=await Promise.all([
+  const [prod,camps,specialCamps,army,equipment,fleet,debt]=await Promise.all([
     env.DB.prepare("SELECT production_key,level FROM castle_production WHERE castle=?").bind(castle).all(),
     env.DB.prepare("SELECT camp_key,level FROM castle_camps WHERE castle=?").bind(castle).all(),
     env.DB.prepare("SELECT camp_key,level FROM castle_special_camps WHERE castle=?").bind(castle).all(),
     env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(castle).all(),
     env.DB.prepare("SELECT item_key,count FROM castle_equipment WHERE castle=?").bind(castle).all(),
-    env.DB.prepare("SELECT ship_key,count FROM castle_fleet WHERE castle=?").bind(castle).all()
+    env.DB.prepare("SELECT ship_key,count FROM castle_fleet WHERE castle=?").bind(castle).all(),
+    env.DB.prepare("SELECT debt_grain,due_at FROM food_debts WHERE castle=?").bind(castle).first()
   ]);
   const production=Object.fromEntries(prod.results.map(x=>[x.production_key,{level:Number(x.level),...GENERAL_PRODUCTIONS[x.production_key]}]));
   const campMap=Object.fromEntries(camps.results.map(x=>[x.camp_key,{level:Number(x.level),...GENERAL_CAMPS[x.camp_key]}]));
@@ -266,61 +316,58 @@ async function loadCastleEconomy(env, castle) {
   for(const spc of (SPECIAL_CAMPS[state.region]||[])) if(!Object.prototype.hasOwnProperty.call(armyMap,spc.unit)) armyMap[spc.unit]=0;
   const equipmentMap=Object.fromEntries(equipment.results.map(x=>[x.item_key,Number(x.count)]));
   const fleetMap=Object.fromEntries(fleet.results.map(x=>[x.ship_key,Number(x.count)]));
-  let parsedSpecialItem=null; try{parsedSpecialItem=state.special_item?JSON.parse(state.special_item):null;}catch{parsedSpecialItem=null;}
+  let parsedSpecialItem=null; try{parsedSpecialItem=state.special_item?JSON.parse(state.special_item):null}catch{parsedSpecialItem=null}
   const sp=SPECIAL_PRODUCTIONS[state.region]||null;
   const specialProduction=sp?{key:sp.key,level:Number(production[sp.key]?.level||0),label:sp.label,max:sp.max,cost:sp.cost,base:sp.base,yield:sp.yield}:null;
-  return {castle:state.castle,region:state.region,ownerAccountId:state.owner_account_id,resources:Object.fromEntries(RESOURCE_KEYS.map(k=>[k,Number(state[k]||0)])),production,camps:campMap,specialCamps:specialCampMap,specialProduction,army:armyMap,equipment:equipmentMap,fleet:fleetMap,workshop:{level:Number(state.workshop_level),maxLevel:5,upgradeCost:EQUIPMENT_UPGRADE_COST},port:{enabled:!!state.port_enabled,level:Number(state.port_level),maxLevel:15,weeklyYieldPerShipType:Number(state.port_level)},specialItem:parsedSpecialItem,gameWeek:gameWeekKey()};
+  const debtGrain=Math.max(0,Number(debt?.debt_grain||0));
+  return {castle:state.castle,region:state.region,ownerAccountId:state.owner_account_id,resources:Object.fromEntries(RESOURCE_KEYS.map(k=>[k,k==="grain"?Number(state[k]||0)-debtGrain:Number(state[k]||0)])),foodDebt:{grain:debtGrain,dueAt:debt?.due_at||null},production,camps:campMap,specialCamps:specialCampMap,specialProduction,army:armyMap,equipment:equipmentMap,fleet:fleetMap,workshop:{level:Number(state.workshop_level),maxLevel:5,upgradeCost:EQUIPMENT_UPGRADE_COST},port:{enabled:!!state.port_enabled,level:Number(state.port_level),maxLevel:15,weeklyYieldPerShipType:Number(state.port_level)},specialItem:parsedSpecialItem,gameWeek:gameWeekKey()};
 }
 
 async function runWeeklyUpdate(env, force=false) {
+  await settleExpiredFoodDebts(env);
   const week=gameWeekKey();
   const rows=(await env.DB.prepare("SELECT * FROM castle_state").all()).results;
   for(const s of rows){
     const marker=await env.DB.prepare("SELECT last_week_key FROM castle_week_state WHERE castle=?").bind(s.castle).first();
     if(!force && marker?.last_week_key===week) continue;
-    const prods=(await env.DB.prepare("SELECT production_key,level FROM castle_production WHERE castle=?").bind(s.castle).all()).results;
-    const camps=(await env.DB.prepare("SELECT camp_key,level FROM castle_camps WHERE castle=?").bind(s.castle).all()).results;
-    const scamps=(await env.DB.prepare("SELECT camp_key,level FROM castle_special_camps WHERE castle=?").bind(s.castle).all()).results;
-    const army=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(s.castle).all()).results;
+    const [prods,camps,scamps,armyRows]=await Promise.all([
+      env.DB.prepare("SELECT production_key,level FROM castle_production WHERE castle=?").bind(s.castle).all(),
+      env.DB.prepare("SELECT camp_key,level FROM castle_camps WHERE castle=?").bind(s.castle).all(),
+      env.DB.prepare("SELECT camp_key,level FROM castle_special_camps WHERE castle=?").bind(s.castle).all(),
+      env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(s.castle).all()
+    ]);
     const changes={}; const add=(k,v)=>changes[k]=(changes[k]||0)+v;
-    for(const p of prods){
-      const def=GENERAL_PRODUCTIONS[p.production_key]; if(!def||!p.level) continue;
-      let gain=Number(p.level)*def.yield;
-      gain*=REGION_MULTIPLIERS[s.region]?.[p.production_key]||1;
-      add(def.base,gain);
-    }
-    const sp=SPECIAL_PRODUCTIONS[s.region];
-    if(sp){const lvl=Number(prods.find(x=>x.production_key===sp.key)?.level||0);if(lvl)add(sp.base,lvl*sp.yield);}
-    for(const c of camps){const d=GENERAL_CAMPS[c.camp_key];if(d&&c.level)add(d.unit,c.level*d.yield);}
-    for(const c of scamps){const d=(SPECIAL_CAMPS[s.region]||[]).find(x=>x.key===c.camp_key);if(d&&c.level)add(d.unit,c.level*d.yield);}
-    const a=Object.fromEntries(army.map(x=>[x.unit_key,Number(x.count)]));
-    for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k))) a[unit]=(a[unit]||0)+Number(gain||0);
+    for(const p of prods.results){const def=GENERAL_PRODUCTIONS[p.production_key];if(!def||!p.level)continue;let gain=Number(p.level)*def.yield;gain*=REGION_MULTIPLIERS[s.region]?.[p.production_key]||1;add(def.base,gain);}
+    const sp=SPECIAL_PRODUCTIONS[s.region];if(sp){const lvl=Number(prods.results.find(x=>x.production_key===sp.key)?.level||0);if(lvl)add(sp.base,lvl*sp.yield);}
+    for(const c of camps.results){const d=GENERAL_CAMPS[c.camp_key];if(d&&c.level)add(d.unit,c.level*d.yield);}
+    for(const c of scamps.results){const d=(SPECIAL_CAMPS[s.region]||[]).find(x=>x.key===c.camp_key);if(d&&c.level)add(d.unit,c.level*d.yield);}
+    const a=Object.fromEntries(armyRows.results.map(x=>[x.unit_key,Number(x.count)]));
     const grainNeed=(a.swordsman||0)+(a.archer||0)+(a.spearman||0)+((a.cavalry||0)*2)+Object.entries(a).filter(([key])=>!["swordsman","archer","spearman","cavalry","giants"].includes(key)).reduce((sum,[,count])=>sum+Number(count||0)*2,0);
-    const meatNeed=Math.ceil(((a.giants||0)*2)/2);
-    const grainUsed=Math.min(Number(s.grain||0),grainNeed);
-    let rem=Math.max(0,grainNeed-grainUsed);
-    const fishUsed=Math.min(Number(s.fish||0),Math.ceil(rem/2));
-    rem=Math.max(0,rem-fishUsed*2);
-    const meatUsed=Math.min(Number(s.meat||0),Math.max(meatNeed,Math.ceil(rem/2)));
-    rem=Math.max(0,rem-meatUsed*2);
-    const grapeUsed=Math.min(Number(s.grapes||0),Math.ceil(rem*2));
-    const resourceParts=[]; const resourceBind=[];
-    for(const [k,v] of Object.entries(changes)){if(RESOURCE_KEYS.includes(k)&&v){resourceParts.push(k+"="+k+"+?");resourceBind.push(Math.floor(v));}}
-    resourceParts.push("grain=MAX(0,grain-?)","fish=MAX(0,fish-?)","meat=MAX(0,meat-?)","grapes=MAX(0,grapes-?)");
-    resourceBind.push(grainUsed,fishUsed,meatUsed,grapeUsed);
-    const statements=[env.DB.prepare("UPDATE castle_state SET "+resourceParts.join(",")+" WHERE castle=?").bind(...resourceBind,s.castle)];
-    for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k))){
-      statements.push(env.DB.prepare("INSERT INTO castle_army(castle,unit_key,count) VALUES (?,?,?) ON CONFLICT(castle,unit_key) DO UPDATE SET count=count+excluded.count").bind(s.castle,unit,Math.floor(gain)));
-    }
+    const grainUsed=Math.min(Number(s.grain||0),grainNeed);let rem=Math.max(0,grainNeed-grainUsed);
+    const fishUsed=Math.min(Number(s.fish||0),Math.ceil(rem/2));rem=Math.max(0,rem-fishUsed*2);
+    const meatUsed=Math.min(Number(s.meat||0),Math.ceil(rem/2));rem=Math.max(0,rem-meatUsed*2);
+    const grapeUsed=Math.min(Number(s.grapes||0),Math.ceil(rem*2));rem=Math.max(0,rem-grapeUsed/2);
+    if(rem>0)await createFoodDebt(env,s.castle,rem);
+    const statements=[];
+    if(grainUsed)statements.push(env.DB.prepare("UPDATE castle_state SET grain=MAX(0,grain-?) WHERE castle=?").bind(grainUsed,s.castle));
+    if(fishUsed)statements.push(env.DB.prepare("UPDATE castle_state SET fish=MAX(0,fish-?) WHERE castle=?").bind(fishUsed,s.castle));
+    if(meatUsed)statements.push(env.DB.prepare("UPDATE castle_state SET meat=MAX(0,meat-?) WHERE castle=?").bind(meatUsed,s.castle));
+    if(grapeUsed)statements.push(env.DB.prepare("UPDATE castle_state SET grapes=MAX(0,grapes-?) WHERE castle=?").bind(grapeUsed,s.castle));
+    for(const [unit,gain] of Object.entries(changes).filter(([k])=>!RESOURCE_KEYS.includes(k)))statements.push(env.DB.prepare("INSERT INTO castle_army(castle,unit_key,count) VALUES (?,?,?) ON CONFLICT(castle,unit_key) DO UPDATE SET count=count+excluded.count").bind(s.castle,unit,Math.floor(gain)));
     if(Number(s.port_enabled)&&Number(s.port_level)>0){
       statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='transport'").bind(Number(s.port_level),s.castle));
       statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='warship'").bind(Number(s.port_level),s.castle));
     }
-    statements.push(env.DB.prepare("UPDATE castle_week_state SET last_week_key=? WHERE castle=?").bind(week,s.castle));
     await env.DB.batch(statements);
+    for(const [resource,gain] of Object.entries(changes).filter(([k])=>["grain","fish","meat"].includes(k))){
+      if(Number(gain)>0)await settleFoodCredit(env,s.castle,resource,Math.floor(gain));
+    }
+    for(const [resource,gain] of Object.entries(changes).filter(([k])=>k==="grapes")){
+      if(Number(gain)>0)await env.DB.prepare("UPDATE castle_state SET grapes=grapes+? WHERE castle=?").bind(Math.floor(gain),s.castle).run();
+    }
+    await env.DB.prepare("UPDATE castle_week_state SET last_week_key=? WHERE castle=?").bind(week,s.castle).run();
   }
 }
-
 async function requireCastleOwner(request,env,castleName=""){
   const s=await requireUser(request,env); if(!s)return null;
   const name=String(castleName||"").trim();
