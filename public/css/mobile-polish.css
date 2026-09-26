@@ -11,7 +11,7 @@
 
   /* Mobile-only fantasy atmosphere */
   body.mobile-fx-enabled{overflow-x:hidden;}
-  .mobile-fx-layer{position:fixed;inset:0;pointer-events:none;z-index:9990;overflow:hidden;isolation:isolate;}
+  .mobile-fx-layer{position:fixed;inset:0;pointer-events:none;z-index:900;overflow:hidden;isolation:isolate;}
   .mobile-fx-vignette{position:absolute;inset:0;background:radial-gradient(ellipse at center,transparent 48%,rgba(0,0,0,.28) 100%);opacity:.72;}
   .mobile-fx-glow{position:absolute;left:50%;top:17%;width:70vw;height:70vw;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(255,190,74,.12),transparent 68%);animation:mobileFxPulse 5s ease-in-out infinite;}
   .mobile-fx-ember{position:absolute;width:3px;height:3px;border-radius:50%;background:rgba(255,190,92,.9);box-shadow:0 0 7px rgba(255,140,30,.9);opacity:0;animation:mobileFxFloat linear infinite;}
