@@ -15,3 +15,14 @@
 @keyframes khataAssetGlow{0%,100%{opacity:.3;transform:translateY(-12%)}50%{opacity:.9;transform:translateY(12%)}}
 @keyframes khataLabelFloat{0%,100%{transform:translateY(0);opacity:.88}50%{transform:translateY(-1px);opacity:1}}
 @media(prefers-reduced-motion:reduce){.we-asset:before,.admin-asset-line:before,.we-asset-head strong,.admin-asset-line span{animation:none!important}}
+
+/* Action feedback + meaningful motion */
+.we-btn{position:relative;overflow:hidden;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease}.we-btn:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.28)}.we-btn:not(:disabled):active{transform:translateY(1px) scale(.985)}
+.we-btn.positive:not(:disabled){box-shadow:0 0 0 0 rgba(79,139,99,0);animation:khataActionReady 2.8s ease-in-out infinite}.we-btn.positive:disabled{position:relative;background:linear-gradient(90deg,#173a24,#285d3a,#173a24);background-size:220% 100%;animation:khataLoading 1.1s linear infinite;box-shadow:0 0 18px rgba(79,139,99,.16)}
+.we-btn.positive:disabled::after{content:'در حال ارسال…';margin-right:8px;font-size:.9em;color:#d7eadb}.we-btn.negative:not(:disabled):hover{box-shadow:0 0 16px rgba(139,79,79,.18)}
+.we-error{padding:9px 11px;border:1px solid rgba(224,138,138,.25);border-radius:9px;background:rgba(90,20,25,.16);animation:khataErrorIn .22s ease both}.we-arrival-preview{transition:border-color .2s ease,box-shadow .2s ease,transform .2s ease}.we-arrival-preview:not(:empty){box-shadow:0 0 18px rgba(199,164,86,.08)}
+.we-log-banner{transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}.we-log-banner:hover{transform:translateY(-2px);border-color:rgba(199,164,86,.35);box-shadow:0 12px 28px rgba(0,0,0,.24)}.we-log-banner.cancelled{opacity:.72;filter:saturate(.75)}
+@keyframes khataActionReady{0%,100%{box-shadow:0 0 0 0 rgba(79,139,99,0)}50%{box-shadow:0 0 0 4px rgba(79,139,99,.06)}}
+@keyframes khataLoading{to{background-position:220% 0}}
+@keyframes khataErrorIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.we-btn,.we-btn.positive,.we-btn.positive:disabled,.we-error,.we-arrival-preview,.we-log-banner{animation:none!important;transition:none!important}.we-log-banner:hover{transform:none;box-shadow:none}}
