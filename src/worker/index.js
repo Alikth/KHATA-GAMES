@@ -85,7 +85,10 @@ function shouldBroadcastRealtime(path){
     /^\/api\/war-expeditions\/[^/]+\/cancel$/.test(path) ||
     path.startsWith("/api/my-castle/") ||
     path==="/api/admin/weekly-update" ||
-    /^\/api\/admin\/war-expeditions\/[^/]+\/cancel$/.test(path) ||
+    path==="/api/admin/controls" ||
+    path==="/api/admin/game-runtime" ||
+    path==="/api/admin/castle-assets" ||
+    path.startsWith("/api/admin/war-expeditions/") ||
     /^\/api\/admin\/players(?:\/[^/]+)?$/.test(path) ||
     /^\/api\/admin\/castles(?:\/[^/]+)?$/.test(path);
 }
