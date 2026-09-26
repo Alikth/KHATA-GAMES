@@ -509,7 +509,12 @@ async function handleApi(request, env, url) {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
     if (!(await rateLimit(request, env, "login", 10))) return json({error:"تعداد تلاش‌های ورود زیاد است. ۱۵ دقیقه بعد دوباره تلاش کنید."},429, {"retry-after":"900"});
     const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||""); if(username.length>24 || password.length>MAX_PASSWORD_LENGTH) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); const u=await env.DB.prepare("SELECT * FROM users WHERE lower(username)=lower(?)").bind(username).first();
-    if(!u || !(await verifyPassword(password,u.salt,u.hash))) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); await deleteSession(request,env); const sid=await createSession(env,u.id); return json({ok:true,user:publicUser(u)},200,{"set-cookie":cookie(SESSION_COOKIE_NAME,sid)});
+    if(!u || !(await verifyPassword(password,u.salt,u.hash))) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401);
+    if(passwordNeedsUpgrade(u.hash)){
+      const upgraded=await hashPassword(password);
+      await env.DB.prepare("UPDATE users SET salt=?,hash=? WHERE id=?").bind(upgraded.salt,upgraded.hash,u.id).run();
+    }
+    await deleteSession(request,env); const sid=await createSession(env,u.id); return json({ok:true,user:publicUser(u)},200,{"set-cookie":cookie(SESSION_COOKIE_NAME,sid)});
   }
   if (method === "POST" && path === "/api/auth/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return json({ok:true},200,{"set-cookie":clearCookie(SESSION_COOKIE_NAME)}); }
   if (method === "GET" && path === "/api/world-state") {
@@ -1200,6 +1205,8 @@ async function handleApi(request, env, url) {
     const sourceRow=source?await env.DB.prepare("SELECT * FROM castle_state WHERE castle=? AND owner_account_id=?").bind(source,session.user_id).first():state;
     if(!sourceRow)return json({error:"قلعه مبدا متعلق به این حساب نیست."},403);
     const sendAssets=tradeAssets(b.sendAssets), receiveAssets=tradeAssets(b.receiveAssets);
+    const pendingCount=await env.DB.prepare("SELECT COUNT(*) AS count FROM trade_requests WHERE sender_account_id=? AND status='pending'").bind(session.user_id).first();
+    if(Number(pendingCount?.count||0)>=20)return json({error:"حداکثر ۲۰ درخواست تجارت همزمان برای این حساب مجاز است."},429);
     if(!destination || destination===sourceRow.castle)return json({error:"مقصد تجارت را انتخاب کن."},400);
     if(!hasAssets(sendAssets)||!hasAssets(receiveAssets))return json({error:"حداقل یک کالا برای ارسال و یک کالا برای دریافت انتخاب کن."},400);
     const dest=await env.DB.prepare("SELECT castle,owner_account_id AS accountId FROM castle_state WHERE castle=?").bind(destination).first();
