@@ -501,7 +501,7 @@ async function handleApi(request, env, url) {
       env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(accountId).all(),
       env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(accountId).all(),
       tradeRowsForAccount(env,accountId),
-      env.DB.prepare(`SELECT w.id,w.attacker_username AS attackerUsername,w.source_castle AS sourceCastle,w.destination_castle AS destinationCastle,
+      env.DB.prepare(`SELECT w.id,w.attacker_username AS attackerUsername,w.source_castle AS sourceCastle,w.destination_castle AS destinationCastle,w.created_at AS createdAt,
         CASE WHEN w.attacker_account_id=? THEN 'attacker' ELSE 'defender' END AS side,
         CASE WHEN w.attacker_account_id=? THEN w.source_castle ELSE w.destination_castle END AS castle
         FROM war_logs w
