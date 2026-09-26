@@ -13,7 +13,6 @@ const SECURITY_HEADERS = {
   "Content-Security-Policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self'; connect-src 'self'; upgrade-insecure-requests"
 };
 
-
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: { ...SECURITY_HEADERS, "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
 }
@@ -74,23 +73,26 @@ async function hashPassword(password, salt = crypto.getRandomValues(new Uint8Arr
   const raw = await derivePasswordHash(password, salt, PASSWORD_HASH_ITERATIONS);
   return {
     salt: btoa(String.fromCharCode(...salt)),
-    hash: `${PASSWORD_HASH_VERSION}${PASSWORD_HASH_ITERATIONS}${raw}`
+    hash: `${PASSWORD_HASH_VERSION}$${PASSWORD_HASH_ITERATIONS}$${raw}`
   };
 }
 function bytes(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
 function passwordHashInfo(storedHash) {
   const value = String(storedHash || "");
   const match = /^v2\$(\d+)\$([A-Za-z0-9+/=]+)$/.exec(value);
-  return match
-    ? { iterations: Number(match[1]), rawHash: match[2], version: "v2" }
-    : { iterations: LEGACY_PASSWORD_HASH_ITERATIONS, rawHash: value, version: "legacy" };
+  if(match) return { iterations: Number(match[1]), rawHash: match[2], version: "v2" };
+  // Transitional support for hashes created by the short-lived malformed v2 encoder.
+  const malformed = /^v2(600000)([A-Za-z0-9+/=]+)$/.exec(value);
+  if(malformed) return { iterations: Number(malformed[1]), rawHash: malformed[2], version: "legacy-v2" };
+  return { iterations: LEGACY_PASSWORD_HASH_ITERATIONS, rawHash: value, version: "legacy" };
 }
 async function verifyPassword(password, salt, storedHash) {
   const info = passwordHashInfo(storedHash);
   if (!Number.isSafeInteger(info.iterations) || info.iterations < 1) return false;
   let made;
   try { made = await derivePasswordHash(password, bytes(salt), info.iterations); } catch { return false; }
-  const a = bytes(made), b = bytes(info.rawHash);
+  let a,b;
+  try { a = bytes(made); b = bytes(info.rawHash); } catch { return false; }
   if (a.length !== b.length) return false;
   let diff = 0; for (let i=0;i<a.length;i++) diff |= a[i]^b[i];
   return diff === 0;
@@ -124,6 +126,9 @@ async function cleanupExpiredSessions(env) {
   await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(Date.now()).run();
 }
 async function rateLimit(request, env, action, limit, windowMs = 15 * 60 * 1000) {
+  // Keep login/register usable after deployments where the security migration has
+  // not yet been applied to the bound D1 database.
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS rate_limits (bucket_key TEXT PRIMARY KEY, window_start INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0)").run();
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
   const key = action + ":" + await sha256Base64Url(ip);
   const now = Date.now(), bucket = now - (now % windowMs);
@@ -135,7 +140,6 @@ async function rateLimit(request, env, action, limit, windowMs = 15 * 60 * 1000)
 }
 function publicUser(u) { return u ? { id: u.id, username: u.username } : null; }
 async function players(env) { return (await env.DB.prepare("SELECT id, username, region, house, castle, created_at AS createdAt FROM players ORDER BY created_at").all()).results; }
-
 
 export {
   SESSION_TTL,
