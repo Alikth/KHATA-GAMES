@@ -73,7 +73,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const ws=new WebSocket(protocol+"//"+location.host+"/api/realtime"); realtimeSocket=ws;
     ws.onopen=()=>{realtimeReconnectDelay=1000;try{ws.send("ping")}catch{}};
     ws.onmessage=e=>{try{const data=JSON.parse(e.data);if(data.type==="game_update"){window.khataRealtimeDetail=data;window.dispatchEvent(new CustomEvent("khata:realtime",{detail:data}));scheduleRealtimeRefresh();}}catch{}};
-    ws.onclose=()=>{if(realtimeSocket!==ws)return;realtimeSocket=null;if(currentUser){const delay=realtimeReconnectDelay;realtimeReconnectDelay=Math.min(15000,realtimeReconnectDelay*2);realtimeReconnectTimer=setTimeout(connectRealtime,delay);}};
+    ws.onclose=()=>{if(realtimeSocket!==ws)return;realtimeSocket=null;if(currentUser){const delay=realtimeReconnectDelay;realtimeReconnectDelay=Math.min(300000,realtimeReconnectDelay*2);realtimeReconnectTimer=setTimeout(connectRealtime,delay);}};
     ws.onerror=()=>{try{ws.close()}catch{}};
   }
 
