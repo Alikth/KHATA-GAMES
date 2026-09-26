@@ -281,6 +281,15 @@ async function settleFoodCredit(env,castle,resource,amount){
   if(remainingDebt>0)await env.DB.prepare("UPDATE food_debts SET debt_grain=? WHERE castle=?").bind(remainingDebt,castle).run();
   else await env.DB.prepare("DELETE FROM food_debts WHERE castle=?").bind(castle).run();
 }
+async function consumeFoodDebtCredit(env,castle,resource,amount){
+  const n=Math.max(0,Math.floor(Number(amount)||0)); if(!n||!["grain","fish","meat"].includes(resource))return;
+  const debt=await env.DB.prepare("SELECT debt_grain FROM food_debts WHERE castle=?").bind(castle).first();
+  const d=Math.max(0,Math.floor(Number(debt?.debt_grain||0))); if(!d)return;
+  const factor=resource==="grain"?1:2,usedCredit=Math.min(d,n*factor),usedUnits=Math.ceil(usedCredit/factor),remainingDebt=d-usedCredit;
+  await env.DB.prepare("UPDATE castle_state SET "+resource+"=MAX(0,"+resource+"-?) WHERE castle=?").bind(usedUnits,castle).run();
+  if(remainingDebt>0)await env.DB.prepare("UPDATE food_debts SET debt_grain=? WHERE castle=?").bind(remainingDebt,castle).run();
+  else await env.DB.prepare("DELETE FROM food_debts WHERE castle=?").bind(castle).run();
+}
 async function settleExpiredFoodDebts(env){
   await ensureEconomySchema(env);
   const rows=(await env.DB.prepare("SELECT castle,debt_grain FROM food_debts WHERE debt_grain>0 AND due_at IS NOT NULL AND due_at<=?").bind(new Date().toISOString()).all()).results;
@@ -859,6 +868,7 @@ async function handleApi(request, env, url) {
     const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
      if(!state)return json({error:"قلعه پیدا نشد."},404);
      const naval=await isNavalCastle(env,castle);
+     const oldFoodValues={grain:Number(state.grain||0),fish:Number(state.fish||0),meat:Number(state.meat||0)};
      if(changes.portEnabled!==undefined){
        if((changes.portEnabled?1:0)!==(naval?1:0))return json({error:naval?"قلعه بندری باید اسکله فعال داشته باشد.":"قلعه غیربندری نمی‌تواند اسکله فعال داشته باشد."},400);
      }
@@ -903,7 +913,11 @@ async function handleApi(request, env, url) {
         if(maxLevel!==null&&n>Number(maxLevel))throw new Error("سطح واردشده از حداکثر مجاز بیشتر است.");
         if(table==="castle_fleet"&&!naval&&n>0)throw new Error("قلعه غیربندری نمی‌تواند کشتی داشته باشد.");
         const valueField=(table==="castle_army"||table==="castle_equipment"||table==="castle_fleet")?"count":"level";
-        updates.push(env.DB.prepare("UPDATE "+table+" SET "+valueField+"=? WHERE castle=? AND "+keyField+"=?").bind(n,castle,k));
+        if(table==="castle_army"){
+          updates.push(env.DB.prepare("INSERT INTO castle_army(castle,unit_key,count) VALUES(?,?,?) ON CONFLICT(castle,unit_key) DO UPDATE SET count=excluded.count").bind(castle,k,n));
+        }else{
+          updates.push(env.DB.prepare("UPDATE "+table+" SET "+valueField+"=? WHERE castle=? AND "+keyField+"=?").bind(n,castle,k));
+        }
       }
     };
 
@@ -918,6 +932,11 @@ async function handleApi(request, env, url) {
     if(changes.specialItem!==undefined)updates.push(env.DB.prepare("UPDATE castle_state SET special_item=? WHERE castle=?").bind(changes.specialItem==null?null:JSON.stringify(changes.specialItem),castle));
     if(!updates.length)return json({ok:true});
     await env.DB.batch(updates);
+    for(const resource of ["grain","fish","meat"]){
+      const newValue=Object.prototype.hasOwnProperty.call(res,resource)?Math.floor(Number(res[resource])):oldFoodValues[resource];
+      const delta=newValue-oldFoodValues[resource];
+      if(delta>0)await consumeFoodDebtCredit(env,castle,resource,delta);
+    }
     return json({ok:true});
   }
   if (method==="GET" && path==="/api/my-scenarios") {
@@ -1104,6 +1123,8 @@ async function handleApi(request, env, url) {
     const q3=env.DB.prepare(`UPDATE trade_requests SET status='accepted',responded_at=? WHERE id=? AND status='pending' AND EXISTS (SELECT 1 FROM castle_state WHERE castle=? AND ${senderPost.join(" AND ")}) AND EXISTS (SELECT 1 FROM castle_state WHERE castle=? AND ${receiverPost.join(" AND ")})`).bind(new Date().toISOString(),id,row.sender_castle,...senderExpected,row.receiver_castle,...receiverExpected);
     const result=await env.DB.batch([q1,q2,q3]);
     if(!result[0]?.meta?.changes||!result[1]?.meta?.changes||!result[2]?.meta?.changes)return json({error:"تجارت همزمان تغییر کرده؛ دوباره تلاش کن."},409);
+    for(const [resource,amount] of Object.entries(receiveAssets))if(["grain","fish","meat"].includes(resource)&&Number(amount)>0)await consumeFoodDebtCredit(env,row.sender_castle,resource,amount);
+    for(const [resource,amount] of Object.entries(sendAssets))if(["grain","fish","meat"].includes(resource)&&Number(amount)>0)await consumeFoodDebtCredit(env,row.receiver_castle,resource,amount);
     return json({ok:true});
   }
   return json({error:"Not found"},404);
