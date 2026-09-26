@@ -107,8 +107,7 @@ window.addEventListener("DOMContentLoaded", () => {
     $("welcomeUser").textContent = stripAt(currentUser.username);
     $("currentUser").textContent = stripAt(currentUser.username);
     $("gameLobby").classList.remove("hidden");
-    houses = await api("/api/houses");
-    players = await api("/api/players");
+    [houses,players]=await Promise.all([api("/api/houses"),api("/api/players")]);
     renderRegions();
     renderPlayers();
     renderMap();
