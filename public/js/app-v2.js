@@ -33,7 +33,7 @@ window.addEventListener("DOMContentLoaded", () => {
       throw error;
     }
     if(ttl)apiCache.set(cacheKey,{data,expiresAt:Date.now()+ttl});
-    if(method!=="GET"){lastLocalMutationAt=Date.now();invalidateApiCache();}
+    if(method!=="GET"){lastLocalMutationAt=Date.now();window.khataRealtimeLocalMutationAt=lastLocalMutationAt;invalidateApiCache();}
     return data;
   }
 
