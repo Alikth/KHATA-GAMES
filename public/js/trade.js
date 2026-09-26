@@ -58,6 +58,5 @@
   document.addEventListener('click',e=>{const b=e.target.closest('[data-trade-response]');if(b){e.preventDefault();respond(b.dataset.tradeId,b.dataset.tradeResponse,b);}if(e.target.id==='tradeModal'||e.target.id==='tradeClose')close();});
   async function openRequests(){const m=modal();if(!m)return;m.classList.remove('hidden');document.body.classList.add('modal-open');$('tradeRoot').innerHTML='<div class="trade-modal-head"><div><span>TRADE REQUESTS</span><h2>📜 درخواست تجارت</h2></div><button id="tradeClose" class="trade-close">×</button></div><div class="trade-body"><div id="tradeIncoming" class="trade-incoming"></div></div>';$('tradeClose').onclick=close;await showIncoming();}
   window.khataOpenTrade=open;window.khataOpenTradeRequests=openRequests;window.khataRefreshTradeNotifications=refreshNotifications;
-  window.addEventListener('khata:realtime',()=>{refreshNotifications();});
 
 })();
