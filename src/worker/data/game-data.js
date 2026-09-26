@@ -37,8 +37,8 @@ export const castleInfo = {
 export const houses = [
   { region: "The Wall", icon: "🌓", castles: [
     { house: "Night's Watch", flag: "/assets/houses/nights-watch.svg", castle: "Castle Black", icon: "🌟🏰" },
-    { house: "Night's Watch", castle: "Eastwatch", icon: "⚓" },
-    { house: "Night's Watch", castle: "Shadow Tower", icon: "🏰" }
+    { house: "Night's Watch", flag: "/assets/houses/nights-watch.svg", castle: "Eastwatch", icon: "⚓" },
+    { house: "Night's Watch", flag: "/assets/houses/nights-watch.svg", castle: "Shadow Tower", icon: "🏰" }
   ]},
   { region: "North", icon: "🐺", castles: [
     { house: "Stark", flag: "/assets/houses/stark.svg", castle: "Winterfell", icon: "🌟🔱" },
