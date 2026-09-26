@@ -7,16 +7,32 @@ window.addEventListener("DOMContentLoaded", () => {
   const escapeHTML = value => String(value ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[ch]));
   const stripAt = value => String(value || "").replace(/^@+/, "");
 
+  const apiCache=new Map();
+  const API_CACHE_TTL={"/api/houses":30000,"/api/players":5000};
+  function invalidateApiCache(paths=null){
+    if(!paths){apiCache.clear();return;}
+    for(const key of paths) apiCache.delete(key);
+  }
   async function api(url, options = {}) {
     const headers = new Headers(options.headers || {});
     if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-    const res = await fetch(url, { cache: "no-store", ...options, headers });
+    const method=String(options.method||"GET").toUpperCase();
+    const cacheKey=method==="GET"?url:null;
+    const ttl=cacheKey?API_CACHE_TTL[cacheKey]:0;
+    if(ttl){
+      const cached=apiCache.get(cacheKey);
+      if(cached&&cached.expiresAt>Date.now())return cached.data;
+      if(cached)apiCache.delete(cacheKey);
+    }
+    const res = await fetch(url, { cache: "default", ...options, headers });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const error = new Error(data.error || "خطایی رخ داد.");
       error.status = res.status;
       throw error;
     }
+    if(ttl)apiCache.set(cacheKey,{data,expiresAt:Date.now()+ttl});
+    if(method!=="GET")invalidateApiCache();
     return data;
   }
 
@@ -31,10 +47,20 @@ window.addEventListener("DOMContentLoaded", () => {
       realtimeRefreshTimer=null;
       try{
         const page=document.querySelector(".nav-btn.active")?.dataset.page;
-        if(page==="players"){players=await api("/api/players");houses=await api("/api/houses");renderPlayers();renderMap();}
-        else if(page==="myCastles"){players=await api("/api/players");await renderMyCastles();}
-        else if(page==="season")await window.khataLoadWarLog?.();
-        await window.khataRefreshTradeNotifications?.();
+        const detail=window.khataRealtimeDetail||{};
+        invalidateApiCache();
+        if(page==="players"){
+          [players,houses]=await Promise.all([api("/api/players"),api("/api/houses")]);
+          renderPlayers();renderMap();
+        }else if(page==="myCastles"){
+          await renderMyCastles();
+        }else if(page==="season"){
+          await window.khataLoadWarLog?.();
+        }
+        if(page!=="myCastles"||document.getElementById("tradeModal")?.classList.contains("hidden")===false){
+          await window.khataRefreshTradeNotifications?.();
+        }
+        window.khataRealtimeDetail=null;
       }catch(e){console.debug("realtime refresh failed",e);}
     },250);
   }
@@ -43,7 +69,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const protocol=location.protocol==="https:"?"wss:":"ws:";
     const ws=new WebSocket(protocol+"//"+location.host+"/api/realtime"); realtimeSocket=ws;
     ws.onopen=()=>{realtimeReconnectDelay=1000;try{ws.send("ping")}catch{}};
-    ws.onmessage=e=>{try{const data=JSON.parse(e.data);if(data.type==="game_update"){window.dispatchEvent(new CustomEvent("khata:realtime",{detail:data}));scheduleRealtimeRefresh();}}catch{}};
+    ws.onmessage=e=>{try{const data=JSON.parse(e.data);if(data.type==="game_update"){window.khataRealtimeDetail=data;window.dispatchEvent(new CustomEvent("khata:realtime",{detail:data}));scheduleRealtimeRefresh();}}catch{}};
     ws.onclose=()=>{if(realtimeSocket!==ws)return;realtimeSocket=null;if(currentUser){const delay=realtimeReconnectDelay;realtimeReconnectDelay=Math.min(15000,realtimeReconnectDelay*2);realtimeReconnectTimer=setTimeout(connectRealtime,delay);}};
     ws.onerror=()=>{try{ws.close()}catch{}};
   }
@@ -331,18 +357,15 @@ window.addEventListener("DOMContentLoaded", () => {
     let tradeNotice = {byCastle:{}};
     let scenarioNotice = {items:[]};
     let roleStatus = {available:true,remainingSeconds:0};
-    const results=await Promise.allSettled([
-      api("/api/my-castles"),
-      api("/api/my-war-expeditions/active"),
-      api("/api/trades/notifications"),
-      api("/api/my-scenarios"),
-      api("/api/roles/status")
-    ]);
-    if(results[0].status==="fulfilled")mine=results[0].value;else mineError=results[0].reason;
-    if(results[1].status==="fulfilled")activeWars=results[1].value;else activeWarsError=results[1].reason;
-    if(results[2].status==="fulfilled")tradeNotice=results[2].value;
-    if(results[3].status==="fulfilled")scenarioNotice=results[3].value;else console.warn("Scenario status failed",results[3].reason);
-    if(results[4].status==="fulfilled")roleStatus=results[4].value;else console.warn("Role status failed",results[4].reason);
+    try{
+      const dashboard=await api("/api/my-dashboard");
+      mine=dashboard.castles||[];
+      activeWars=dashboard.activeWars||activeWars;
+      tradeNotice=dashboard.tradeNotice||tradeNotice;
+      scenarioNotice=dashboard.scenarioNotice||scenarioNotice;
+      roleStatus=dashboard.roleStatus||roleStatus;
+    }catch(e){mineError=e;}
+
     if (mineError) {
       root.innerHTML = '<div class="my-castles-empty"><div class="empty-castle-icon">⚠️</div><h3>خطا در دریافت قلعه‌ها</h3><p>'+escapeHTML(mineError.message||"دریافت قلعه‌ها انجام نشد.")+'</p></div>';
       return;
