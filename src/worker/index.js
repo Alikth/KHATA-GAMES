@@ -33,6 +33,7 @@ import {
 
 /* Cloudflare build retry marker */
 import { castleInfo, houses } from "./data/game-data.js";
+import { DurableObject } from "cloudflare:workers";
 import {
   GENERAL_PRODUCTIONS,
   SPECIAL_PRODUCTIONS,
@@ -48,6 +49,40 @@ import {
 } from "./data/game-rules.js";
 const NAVAL_CASTLES = new Set(["Eastwatch","Karhold","Seagard","Gulltown","Pyke","Ten Towers","Hammerhorn","Casterly Rock","King's Landing","Dragonstone","Storm's End","Oldtown","Sunspear","Yronwood"]);
 const GAME_REGIONS = houses.map(x=>x.region);
+
+export class RealtimeHub extends DurableObject {
+  async fetch(request){
+    const url=new URL(request.url);
+    if(url.pathname==="/broadcast"){
+      if(request.method!=="POST")return new Response("Method Not Allowed",{status:405});
+      const message=await request.text();
+      for(const ws of this.ctx.getWebSockets()){
+        if(ws.readyState===WebSocket.OPEN){try{ws.send(message)}catch{}}
+      }
+      return new Response("ok");
+    }
+    if(url.pathname==="/connect"){
+      if(request.headers.get("Upgrade")!=="websocket")return new Response("Expected WebSocket",{status:426});
+      const [client,server]=Object.values(new WebSocketPair());
+      this.ctx.acceptWebSocket(server);
+      server.serializeAttachment({connectedAt:Date.now()});
+      server.send(JSON.stringify({type:"connected"}));
+      return new Response(null,{status:101,webSocket:client});
+    }
+    return new Response("Not found",{status:404});
+  }
+  webSocketMessage(ws,message){ if(typeof message==="string"&&message==="ping")ws.send("pong"); }
+  webSocketClose(ws,code,reason){ try{ws.close(code,reason)}catch{} }
+  webSocketError(ws,error){ console.error("realtime websocket error",error); }
+}
+async function broadcastRealtime(env,payload){
+  try{
+    if(!env.REALTIME)return;
+    const id=env.REALTIME.idFromName("global");
+    await env.REALTIME.get(id).fetch("https://realtime/broadcast",{method:"POST",body:JSON.stringify(payload)});
+  }catch(e){console.error("realtime broadcast failed",e);}
+}
+
 async function ensureDynamicCastleSchema(env){await env.DB.prepare("CREATE TABLE IF NOT EXISTS dynamic_castles (name TEXT PRIMARY KEY, region TEXT NOT NULL, naval INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)").run();await env.DB.prepare("CREATE TABLE IF NOT EXISTS deleted_castles (name TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)").run();}
 async function dynamicHouses(env){await ensureDynamicCastleSchema(env);const deletedRows=(await env.DB.prepare("SELECT name FROM deleted_castles").all()).results;const deleted=new Set(deletedRows.map(x=>x.name));const rows=(await env.DB.prepare("SELECT name AS castle,region,naval FROM dynamic_castles ORDER BY region,name").all()).results;const out=houses.map(r=>({...r,castles:r.castles.filter(c=>!deleted.has(c.castle)).map(c=>({...c,naval:NAVAL_CASTLES.has(c.castle)}))}));for(const row of rows){const region=out.find(x=>x.region===row.region);if(region&&!deleted.has(row.castle)&&!region.castles.some(c=>c.castle===row.castle))region.castles.push({house:"",castle:row.castle,icon:Number(row.naval)?"⚓":"🏯",naval:!!Number(row.naval)});}return out;}
 async function dynamicCastle(env,region,castle){const hs=await dynamicHouses(env);return hs.find(x=>x.region===region)?.castles.find(x=>x.castle===castle)||null;}
@@ -1189,12 +1224,22 @@ async function serveCharacterImage(request, env, url) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url=new URL(request.url);
     try {
+      if(url.pathname==="/api/realtime"){
+        if(request.method!=="GET")return json({error:"Method Not Allowed"},405);
+        if(request.headers.get("Upgrade")!=="websocket")return json({error:"WebSocket لازم است."},426);
+        const session=await requireUser(request,env);
+        if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+        const id=env.REALTIME.idFromName("global");
+        return env.REALTIME.get(id).fetch(new Request("https://realtime/connect",{method:"GET",headers:request.headers}));
+      }
       if(url.pathname.startsWith("/api/")){
         if(url.pathname==="/api/auth/status"||url.pathname==="/api/auth/login"||url.pathname==="/api/auth/register")await cleanupExpiredSessions(env);
-        return await handleApi(request,env,url);
+        const response=await handleApi(request,env,url);
+        if(request.method!=="GET" && response.ok)ctx.waitUntil(broadcastRealtime(env,{type:"game_update",path:url.pathname,at:Date.now()}));
+        return response;
       }
       const characterImage = await serveCharacterImage(request, env, url);
       if(characterImage) return characterImage;
