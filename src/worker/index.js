@@ -325,9 +325,12 @@ async function consumeFoodDebtCredit(env,castle,resource,amount){
   if(remainingDebt>0)await env.DB.prepare("UPDATE food_debts SET debt_grain=? WHERE castle=?").bind(remainingDebt,castle).run();
   else await env.DB.prepare("DELETE FROM food_debts WHERE castle=?").bind(castle).run();
 }
-async function settleExpiredFoodDebts(env){
+async function settleExpiredFoodDebts(env,onlyCastle=null){
   await ensureEconomySchema(env);
-  const rows=(await env.DB.prepare("SELECT castle,debt_grain FROM food_debts WHERE debt_grain>0 AND due_at IS NOT NULL AND due_at<=?").bind(new Date().toISOString()).all()).results;
+  const now=new Date().toISOString();
+  const rows=onlyCastle
+    ? (await env.DB.prepare("SELECT castle,debt_grain FROM food_debts WHERE castle=? AND debt_grain>0 AND due_at IS NOT NULL AND due_at<=?").bind(onlyCastle,now).all()).results
+    : (await env.DB.prepare("SELECT castle,debt_grain FROM food_debts WHERE debt_grain>0 AND due_at IS NOT NULL AND due_at<=?").bind(now).all()).results;
   for(const row of rows){
     const army=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=? AND count>0").bind(row.castle).all()).results;
     const total=army.reduce((s,x)=>s+Math.max(0,Number(x.count)||0),0), target=Math.min(total,Math.max(0,Math.ceil(Number(row.debt_grain)||0)));
@@ -344,7 +347,7 @@ async function settleExpiredFoodDebts(env){
   }
 }
 async function loadCastleEconomy(env, castle) {
-  await settleExpiredFoodDebts(env);
+  await settleExpiredFoodDebts(env,castle);
   const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
   if(!state) return null;
   const [prod,camps,specialCamps,army,equipment,fleet,debt]=await Promise.all([
