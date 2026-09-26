@@ -490,6 +490,46 @@ async function handleApi(request, env, url) {
   if (method === "GET" && path === "/api/players") return json(await players(env));
   const session=await getSession(request,env);
   const userSession=await requireUser(request,env);
+  if (method === "GET" && path === "/api/my-dashboard") {
+    if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401);
+    await ensureEconomySchema(env);
+    await ensureWarLogSchema(env);
+    await ensureTradeSchema(env);
+    await ensureNarrativeSchema(env);
+    const accountId=userSession.user_id;
+    const [castleRows,warRows,tradeRows,scenarioRows,roleRow,warRuntimeState]=await Promise.all([
+      env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(accountId).all(),
+      env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(accountId).all(),
+      tradeRowsForAccount(env,accountId),
+      env.DB.prepare(`SELECT w.id,w.attacker_username AS attackerUsername,w.source_castle AS sourceCastle,w.destination_castle AS destinationCastle,
+        CASE WHEN w.attacker_account_id=? THEN 'attacker' ELSE 'defender' END AS side,
+        CASE WHEN w.attacker_account_id=? THEN w.source_castle ELSE w.destination_castle END AS castle
+        FROM war_logs w
+        WHERE w.command='attack' AND w.cancelled=0
+          AND (w.attacker_account_id=? OR EXISTS(SELECT 1 FROM castle_state cs WHERE cs.castle=w.destination_castle AND cs.owner_account_id=?))
+        ORDER BY w.created_at DESC`).bind(accountId,accountId,accountId,accountId).all(),
+      env.DB.prepare("SELECT next_available_at AS nextAvailableAt FROM role_cooldowns WHERE account_id=?").bind(accountId).first(),
+      warRuntime(env)
+    ]);
+    const now=Date.now();
+    const expeditions=warRows.results.map(x=>({...x,active:warIsActive(x,warRuntimeState),arrived:!warIsActive(x,warRuntimeState)}));
+    const submitted=(await env.DB.prepare("SELECT war_id,side FROM scenario_submissions WHERE submitter_account_id=?").bind(accountId).all()).results;
+    const sent=new Set(submitted.map(x=>x.war_id+"|"+x.side));
+    const scenarioItems=scenarioRows.results.filter(x=>!sent.has(x.id+"|"+x.side)).map(x=>({
+      warId:x.id,attackerUsername:x.attackerUsername,sourceCastle:x.sourceCastle,destinationCastle:x.destinationCastle,createdAt:x.createdAt,
+      side:x.side,castle:x.castle,opponentCastle:x.side==="attacker"?x.destinationCastle:x.sourceCastle,lordName:WAR_LORDS[x.castle]||""
+    }));
+    const incoming=tradeRows.filter(x=>x.receiver_account_id===accountId);
+    const byCastle={}; incoming.forEach(x=>byCastle[x.receiver_castle]=(byCastle[x.receiver_castle]||0)+1);
+    const next=roleRow?.nextAvailableAt?Date.parse(roleRow.nextAvailableAt):NaN;
+    return json({
+      castles:castleRows.results,
+      activeWars:{expeditions},
+      tradeNotice:{count:incoming.length,byCastle},
+      scenarioNotice:{items:scenarioItems},
+      roleStatus:{available:!Number.isFinite(next)||next<=now,nextAvailableAt:Number.isFinite(next)?new Date(next).toISOString():null,remainingSeconds:Number.isFinite(next)&&next>now?Math.ceil((next-now)/1000):0}
+    });
+  }
   if (method === "GET" && path === "/api/my-castles") { if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); return json((await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(userSession.user_id).all()).results); }
   if (method === "GET" && path === "/api/claim/status") {
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
