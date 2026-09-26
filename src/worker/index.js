@@ -21,6 +21,7 @@ import {
   hashPassword,
   bytes,
   verifyPassword,
+  passwordNeedsUpgrade,
   getSession,
   requireUser,
   createSession,
@@ -190,6 +191,14 @@ async function ensureWarLogSchema(env){
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_war_logs_attacker_state ON war_logs(attacker_account_id,cancelled,command,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_war_logs_destination_state ON war_logs(destination_castle,cancelled,command,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_war_logs_source_state ON war_logs(source_castle,cancelled,command,created_at)").run();
+  // Enforce the one-fake-expedition-per-player-per-week rule at the database level.
+  // Remove any duplicate legacy rows before creating the unique index.
+  await env.DB.prepare(`DELETE FROM war_logs
+    WHERE is_fake=1
+      AND id NOT IN (
+        SELECT MIN(id) FROM war_logs WHERE is_fake=1 GROUP BY attacker_account_id,week_key
+      )`).run();
+  await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS uq_war_fake_week ON war_logs(attacker_account_id,week_key) WHERE is_fake=1").run();
 }
 async function ensureTradeSchema(env){
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS trade_requests (
@@ -733,6 +742,7 @@ async function handleApi(request, env, url) {
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/cancel$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403); await ensureWarLogSchema(env);
+    if(!(await rateLimit(request,env,"war-cancel",30)))return json({error:"تعداد درخواست‌های لغو لشکرکشی زیاد است. کمی بعد دوباره تلاش کن."},429,{"retry-after":"900"});
     const session=await requireUser(request,env); if(!session)return json({error:"دسترسی لازم است."},401);
     const id=decodeURIComponent(path.split("/")[3]), row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=?").bind(id,session.user_id).first();
     if(!row)return json({error:"لشکرکشی پیدا نشد."},404); const rt=await warRuntime(env);
@@ -746,6 +756,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/war-expeditions") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(await isGameControlLocked(env,"war"))return json({error:"لشکرکشی‌ها فعلاً توسط ادمین قفل شده‌اند."},423);
+    if(!(await rateLimit(request,env,"war-create",30)))return json({error:"تعداد درخواست‌های لشکرکشی زیاد است. کمی بعد دوباره تلاش کن."},429,{"retry-after":"900"});
     await ensureWarLogSchema(env); const rt=await warRuntime(env); if(!rt.running)return json({error:"بازی فعلاً متوقف است؛ شروع بازی را از ادمین صبر کن."},423);
     const b=await body(request),type=String(b.type||""),source=String(b.source||"").trim(),destination=String(b.destination||"").trim(),arrivalTime=String(b.arrivalTime||"").trim(),isFake=!!b.fake,lordPresent=b.lordPresent!==false;
     const durationMinutes=Math.floor(Number(b.durationMinutes||0));
@@ -774,10 +785,18 @@ async function handleApi(request, env, url) {
     const statements=[];for(const d of deductions)statements.push(env.DB.prepare(`UPDATE ${d.table} SET count=count-? WHERE castle=? AND ${d.keyField}=? AND count>=?`).bind(d.n,state.castle,d.key,d.n));
     const id=newId(),createdAt=new Date().toISOString(),lordName=WAR_LORDS[source]||"";
     statements.push(env.DB.prepare("INSERT INTO war_logs(id,week_key,created_at,attacker_account_id,attacker_username,lord_name,type,source_castle,destination_castle,arrival_time,is_fake,assets_json,duration_minutes,elapsed_seconds,run_started_at,lord_present) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,week,createdAt,accountId,user.username,lordName,type,source,destination,arrivalTime,isFake?1:0,JSON.stringify(isFake?{}:sanitizedAssets),durationMinutes,0,createdAt,lordPresent?1:0));
-    const result=await env.DB.batch(statements);for(let i=0;i<deductions.length;i++)if(!result[i]?.meta?.changes)return json({error:"تغییر همزمان دارایی انجام نشد؛ دوباره تلاش کن."},409);return json({ok:true,id});
+    let result;
+    try {
+      result=await env.DB.batch(statements);
+    } catch(e) {
+      if(isFake && String(e?.message||e).toLowerCase().includes("unique"))return json({error:"لشکرکشی فیک این هفته قبلاً استفاده شده است."},409);
+      throw e;
+    }
+    for(let i=0;i<deductions.length;i++)if(!result[i]?.meta?.changes)return json({error:"تغییر همزمان دارایی انجام نشد؛ دوباره تلاش کن."},409);return json({ok:true,id});
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/command$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403); await ensureWarLogSchema(env);
+    if(!(await rateLimit(request,env,"war-command",30)))return json({error:"تعداد درخواست‌های دستور جنگ زیاد است. کمی بعد دوباره تلاش کن."},429,{"retry-after":"900"});
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]),b=await body(request),command=String(b.command||"");
     if(!["attack","deploy","siege"].includes(command))return json({error:"دستور معتبر نیست."},400);
@@ -1057,6 +1076,7 @@ async function handleApi(request, env, url) {
   }
   if (method==="POST" && path==="/api/scenarios") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!(await rateLimit(request,env,"scenario-submit",20)))return json({error:"تعداد ارسال سناریو زیاد است. کمی بعد دوباره تلاش کن."},429,{"retry-after":"900"});
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     await ensureNarrativeSchema(env); await ensureWarLogSchema(env); await ensureEconomySchema(env);
     const b=await body(request),warId=String(b.warId||"").trim(),side=String(b.side||"").trim(),castle=String(b.castle||"").trim(),textValue=String(b.text||"").trim();
@@ -1087,6 +1107,7 @@ async function handleApi(request, env, url) {
   }
   if (method==="POST" && path==="/api/roles") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!(await rateLimit(request,env,"role-submit",5)))return json({error:"تعداد ارسال رول زیاد است. کمی بعد دوباره تلاش کن."},429,{"retry-after":"900"});
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     await ensureNarrativeSchema(env); await ensureEconomySchema(env);
     const b=await body(request),castle=String(b.castle||"").trim(),textValue=String(b.text||"").trim();
@@ -1171,6 +1192,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/trades") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(await isGameControlLocked(env,"trade"))return json({error:"تجارت فعلاً توسط ادمین قفل شده است."},423);
+    if(!(await rateLimit(request,env,"trade-create",60)))return json({error:"تعداد درخواست‌های تجارت زیاد است. کمی بعد دوباره تلاش کن."},429,{"retry-after":"900"});
     await ensureTradeSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const b=await body(request), source=String(b.source||"").trim(), destination=String(b.destination||"").trim();
@@ -1191,6 +1213,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path.match(/^\/api\/trades\/[^/]+\/respond$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(await isGameControlLocked(env,"trade"))return json({error:"تجارت فعلاً توسط ادمین قفل شده است."},423);
+    if(!(await rateLimit(request,env,"trade-response",60)))return json({error:"تعداد درخواست‌های پاسخ تجارت زیاد است. کمی بعد دوباره تلاش کن."},429,{"retry-after":"900"});
     await ensureTradeSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]), action=String((await body(request)).action||"");
