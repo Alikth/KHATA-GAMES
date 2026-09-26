@@ -20,6 +20,34 @@ window.addEventListener("DOMContentLoaded", () => {
     return data;
   }
 
+  let realtimeSocket=null,realtimeReconnectTimer=null,realtimeReconnectDelay=1000,realtimeRefreshTimer=null;
+  function closeRealtime(){
+    if(realtimeReconnectTimer)clearTimeout(realtimeReconnectTimer);realtimeReconnectTimer=null;
+    if(realtimeSocket){try{realtimeSocket.close()}catch{}realtimeSocket=null;}
+  }
+  function scheduleRealtimeRefresh(){
+    if(realtimeRefreshTimer)return;
+    realtimeRefreshTimer=setTimeout(async()=>{
+      realtimeRefreshTimer=null;
+      try{
+        const page=document.querySelector(".nav-btn.active")?.dataset.page;
+        if(page==="players"){players=await api("/api/players");houses=await api("/api/houses");renderPlayers();renderMap();}
+        else if(page==="myCastles"){players=await api("/api/players");await renderMyCastles();}
+        else if(page==="season")await window.khataLoadWarLog?.();
+        await window.khataRefreshTradeNotifications?.();
+      }catch(e){console.debug("realtime refresh failed",e);}
+    },250);
+  }
+  function connectRealtime(){
+    closeRealtime(); if(!currentUser)return;
+    const protocol=location.protocol==="https:"?"wss:":"ws:";
+    const ws=new WebSocket(protocol+"//"+location.host+"/api/realtime"); realtimeSocket=ws;
+    ws.onopen=()=>{realtimeReconnectDelay=1000;try{ws.send("ping")}catch{}};
+    ws.onmessage=e=>{try{const data=JSON.parse(e.data);if(data.type==="game_update"){window.dispatchEvent(new CustomEvent("khata:realtime",{detail:data}));scheduleRealtimeRefresh();}}catch{}};
+    ws.onclose=()=>{if(realtimeSocket!==ws)return;realtimeSocket=null;if(currentUser){const delay=realtimeReconnectDelay;realtimeReconnectDelay=Math.min(15000,realtimeReconnectDelay*2);realtimeReconnectTimer=setTimeout(connectRealtime,delay);}};
+    ws.onerror=()=>{try{ws.close()}catch{}};
+  }
+
   function setMessage(id, type, message) {
     const root = $(id);
     if (!root) return;
@@ -58,6 +86,7 @@ window.addEventListener("DOMContentLoaded", () => {
         return;
       }
       currentUser = auth.user;
+      connectRealtime();
       try { claimLocked = !!(await api("/api/claim/status")).locked; } catch { claimLocked = false; }
       await enterAuthenticated();
     } catch (err) {
@@ -115,6 +144,7 @@ window.addEventListener("DOMContentLoaded", () => {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
       currentUser = data.user;
+      connectRealtime();
       adminRequested = adminRequested || sessionStorage.getItem("khata_admin_requested") === "1";
       sessionStorage.removeItem("khata_admin_requested");
       await enterAuthenticated();
