@@ -268,7 +268,10 @@ async function settleFoodCredit(env,castle,resource,amount){
   const n=Math.max(0,Math.floor(Number(amount)||0)); if(!n||!["grain","fish","meat"].includes(resource))return;
   const debt=await env.DB.prepare("SELECT debt_grain FROM food_debts WHERE castle=?").bind(castle).first();
   const d=Math.max(0,Math.floor(Number(debt?.debt_grain||0)));
-  if(!d)return;
+  if(!d){
+    await env.DB.prepare("UPDATE castle_state SET "+resource+"="+resource+"+? WHERE castle=?").bind(n,castle).run();
+    return;
+  }
   const factor=resource==="grain"?1:2,credit=n*factor,usedCredit=Math.min(d,credit),usedUnits=Math.ceil(usedCredit/factor),remainingDebt=d-usedCredit;
   if(resource==="grain"){
     await env.DB.prepare("UPDATE castle_state SET grain=MAX(0,grain-?) WHERE castle=?").bind(usedUnits,castle).run();
