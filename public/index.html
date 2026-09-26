@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=16">
+  <link rel="stylesheet" href="/css/style.css?v=17">
   <link rel="stylesheet" href="/css/mobile-polish.css?v=1">
   <link rel="stylesheet" href="/css/castle-management.css?v=4">
   <link rel="stylesheet" href="/css/war-expedition.css?v=2">
@@ -16,7 +16,6 @@
 </head>
 <body>
   <div class="ambient"></div>
-
   <section id="authScreen" class="auth-screen">
     <div class="auth-card">
       <img class="auth-logo" src="/assets/khata-logo-clean.png" alt="KHATA">
@@ -40,7 +39,6 @@
       <div id="authMessage"></div>
     </div>
   </section>
-
   <section id="gameLobby" class="game-lobby hidden">
     <header class="lobby-header"><img src="/assets/khata-logo-clean.png" alt="KHATA" class="mini-logo"><div class="lobby-user-chip"><button id="welcomeUser" class="ghost user-name" type="button"></button><button id="logoutUser" class="ghost logout-btn" type="button">خروج</button></div></header>
     <div class="lobby-center">
@@ -51,15 +49,12 @@
       </div>
     </div>
   </section>
-
   <div id="gameApp" class="game-app hidden"><div class="wizard-guide" aria-hidden="true"><img src="/assets/wizard-guide.jpg" alt=""></div>
     <header class="hero">
       <div class="hero-top"><img src="/assets/khata-logo-clean.png" class="site-logo" alt="KHATA"><div class="user-chip"><span id="currentUser"></span><button id="backLobby" class="ghost">LOBBY</button><button id="logoutUser2" class="ghost">خروج</button></div></div>
       <div class="hero-copy"><p class="eyebrow">THE REALM AWAITS</p><h1>KILL <span>THE KING</span></h1><p class="subtitle">THE WAR OF WESTEROS</p></div>
     </header>
-
     <nav class="nav"><button class="nav-btn active" data-page="register">⚔ ثبت‌نام</button><button class="nav-btn" data-page="season">⚔️ لاگ وار</button><button class="nav-btn" data-page="players">🗺️ خاندان‌ها</button><button class="nav-btn" data-page="myCastles">🏰 قلعه‌های من</button><button class="nav-btn" data-page="characters">⚔ Characters</button><button class="nav-btn" data-page="shop">🛒 Shop</button></nav>
-
     <main>
       <section id="register" class="page active"><div class="page-title"><span>⚔</span><div><h2>CLAIM YOUR CASTLE</h2><p>قلعه خود را انتخاب کن، لرد.</p></div></div><div id="regions" class="regions"></div><div id="castles" class="castles hidden"></div></section>
       <section id="myCastles" class="page"><div class="page-title"><span>🏰</span><div><h2>MY CASTLES</h2><p>قلعه‌هایی که با حساب شما ثبت شده‌اند</p></div></div><div id="myCastlesList" class="my-castles-list"></div></section>
@@ -86,72 +81,13 @@
                 <button class="admin-menu-item" type="button" data-admin-target="scenarios"><span>سناریوها</span><i>←</i></button>
                 <button class="admin-menu-item" type="button" data-admin-target="roles"><span>رول‌ها</span><i>←</i></button>
               </aside>
-              <div class="admin-panels">
-                <div class="admin-panel-view active" data-admin-panel="control">
-                  <section class="admin-section">
-                    <div class="admin-section-head"><div><span>GAME CONTROL</span><h2>کنترل بازی</h2></div></div>
-                    <div class="admin-control-grid">
-                      <div class="admin-control-card"><div><b>آپدیت هفتگی</b><small>اعمال بازدهی تولیدی‌ها و کمپ‌ها برای همه قلعه‌ها</small></div><button class="primary" id="adminWeeklyUpdate">⬆ آپ</button></div>
-                      <div class="admin-control-card"><div><b>وضعیت بازی</b><small id="adminGameRunState">در حال اجرا</small></div><div class="admin-future-actions"><button class="primary" id="adminGameStart">▶ شروع</button><button class="danger" id="adminGameStop">■ توقف</button></div></div>
-                      <div class="admin-control-card"><div><b>لشکرکشی</b><small id="adminWarLockState">باز است</small></div><button class="danger" id="adminWarLockBtn">🔒 قفل کردن لشکرکشی</button></div>
-                      <div class="admin-control-card"><div><b>تجارت</b><small id="adminTradeLockState">باز است</small></div><button class="danger" id="adminTradeLockBtn">🔒 قفل کردن تجارت</button></div>
-                      <div class="admin-control-card"><div><b>انتخاب قلعه</b><small id="adminClaimLockState">باز است</small></div><button class="danger" id="adminClaimLockBtn">🔒 قفل کردن انتخاب قلعه</button></div>
-                    </div>
-                  </section>
-                  <div class="admin-stats">
-                    <div><b id="adminLordCount">0</b><span>لردها</span></div><div><b id="adminWarCount">0</b><span>لشکرکشی‌ها</span></div><div><b id="adminActiveWarCount">0</b><span>لشکرکشی فعال</span></div><div><b id="adminTradeCount">0</b><span>تجارت‌ها</span></div>
-                  </div>
-                </div>
-
-                <div class="admin-panel-view" data-admin-panel="war">
-                  <section class="admin-section"><div class="admin-section-head"><div><span>WAR EXPEDITIONS</span><h2>گزارش لشکرکشی‌ها</h2></div><button class="ghost" id="adminRefreshWars">↻ بروزرسانی</button></div><div id="adminWarList" class="admin-war-list"></div></section>
-                </div>
-
-                <div class="admin-panel-view" data-admin-panel="casualties">
-                  <section class="admin-section"><div class="admin-section-head"><div><span>CASUALTIES</span><h2>تلفات</h2></div><button class="ghost" id="adminRefreshCasualties">↻ بروزرسانی</button></div><div id="adminCasualtyList" class="admin-war-list"></div></section>
-                </div>
-
-                <div class="admin-panel-view" data-admin-panel="trade">
-                  <section class="admin-section"><div class="admin-section-head"><div><span>TRADE REPORT</span><h2>گزارش تجارت‌ها</h2></div><button class="ghost" id="adminRefreshTrades">↻ بروزرسانی</button></div><div id="adminTradeList" class="admin-trade-list"></div></section>
-                </div>
-
-                <div class="admin-panel-view" data-admin-panel="lords">
-                  <section class="admin-section"><div class="admin-section-head"><div><span>LORDS</span><h2>لردها</h2></div></div>
-                    <div class="admin-grid">
-                      <div class="admin-box"><h3>ADD LORD</h3><input id="adminUsername" placeholder="Telegram Username"><select id="adminRegion"></select><select id="adminCastle"></select><button class="primary" id="adminAdd">ADD PLAYER</button></div>
-                      <div class="admin-box"><h3>ADD CASTLE TO EXISTING PLAYER</h3><select id="adminAssignPlayer"></select><select id="adminAssignRegion"></select><select id="adminAssignCastle"></select><button class="primary" id="adminAssignCastleBtn">اضافه کردن قلعه</button></div>
-                    </div>
-                  </section>
-                </div>
-
-                <div class="admin-panel-view" data-admin-panel="registered">
-                  <section class="admin-section"><div class="admin-section-head"><div><span>REGISTERED LORDS</span><h2>لردهای ثبت‌شده</h2></div></div><div class="admin-box"><div id="adminPlayers"></div></div></section>
-                </div>
-
-                <div class="admin-panel-view" data-admin-panel="castle-editor">
-                  <section class="admin-section"><div class="admin-section-head"><div><span>CASTLE EDITOR</span><h2>مدیریت دارایی قلعه</h2></div></div><div class="admin-box"><select id="adminCastleSelect"></select><div id="adminCastleEditor" class="admin-castle-editor"><div class="admin-empty">یک قلعه انتخاب کن.</div></div></div></section>
-                </div>
-
-                <div class="admin-panel-view" data-admin-panel="add-castle">
-                  <section class="admin-section"><div class="admin-section-head"><div><span>ADD CASTLE</span><h2>افزودن قلعه</h2></div></div>
-                    <div class="admin-box"><input id="adminNewCastleName" placeholder="نام قلعه"><select id="adminNewCastleRegion"></select><label class="admin-check"><input id="adminNewCastleNaval" type="checkbox"> دریایی</label><button class="primary" id="adminNewCastleBtn">ثبت قلعه</button><div class="admin-muted">قلعه دریایی بندر، لشکرکشی دریایی و ساخت کشتی خواهد داشت؛ قلعه غیردریایی هیچ‌کدام را نخواهد داشت.</div></div>
-                  </section>
-                </div>
-
-                <div class="admin-panel-view" data-admin-panel="scenarios">
-                  <section class="admin-section"><div class="admin-section-head"><div><span>SCENARIOS</span><h2>سناریوها</h2></div><button class="ghost" id="adminRefreshScenarios">↻ بروزرسانی</button></div><div id="adminScenarioList" class="admin-war-list"></div></section>
-                </div>
-
-                <div class="admin-panel-view" data-admin-panel="roles">
-                  <section class="admin-section"><div class="admin-section-head"><div><span>ROLES</span><h2>رول‌ها</h2></div><button class="ghost" id="adminRefreshRoles">↻ بروزرسانی</button></div><div id="adminRoleList" class="admin-war-list"></div></section>
-                </div>
-              </div>
+              <div class="admin-panels"></div>
             </div>
-          </div>       </div>
+          </div>
+        </div>
       </section>
     </main>
   </div>
-
   <div id="castleModal" class="modal hidden"><div class="modal-card castle-modal"><button class="close" id="closeCastleModal">×</button><div id="castleDetails"></div></div></div>
   <div id="castleManagementModal" class="castle-management-modal hidden"><div class="castle-management-shell"><div id="castleManagementRoot"></div></div></div>
   <div id="warExpeditionModal" class="war-expedition-modal hidden"><div class="war-expedition-shell"><div class="we-head"><div><span class="cm-kicker">WAR EXPEDITION</span><h2>⚔️ لشکرکشی</h2><p>انتخاب نیرو، مسیر و تأیید نهایی</p></div><button id="weClose" class="we-close">×</button></div><div class="we-body"><section id="weTypeStep" class="we-step active"></section><section id="weFormStep" class="we-step"></section><section id="weConfirmStep" class="we-step"></section></div></div></div>
@@ -159,7 +95,7 @@
   <div id="submissionModal" class="modal hidden"><div class="modal-card submission-modal-card"><button class="close" id="submissionClose">×</button><p id="submissionKicker" class="eyebrow">SUBMISSION</p><h2 id="submissionTitle">ارسال متن</h2><p id="submissionContext" class="silver"></p><textarea id="submissionText" class="submission-textarea" maxlength="8000" placeholder="متن را اینجا وارد یا paste کن..."></textarea><div id="submissionMessage"></div><button id="submissionSend" class="primary wide" type="button">ارسال</button></div></div>
   <div id="registerModal" class="modal hidden"><div class="modal-card"><button class="close" id="closeModal">×</button><p class="eyebrow">HOUSE CLAIM</p><h2 id="selectedCastle"></h2><p id="selectedHouse" class="silver"></p><form id="registerForm"><label>Telegram Username</label><div class="telegram-input"><span>@</span><input id="username" maxlength="32" placeholder="YourUsername" autocomplete="off"></div><small>فقط Username تلگرام؛ آیدی عددی پذیرفته نمی‌شود.</small><button class="primary" type="submit">⚔ CLAIM CASTLE</button></form><div id="formMessage"></div></div></div>
   <footer>KHATA GAMES · THE REALM AWAITS</footer>
-  <script src="/js/app-v2.js?v=15"></script>
+  <script src="/js/app-v2.js?v=16"></script>
   <script src="/js/mobile-header.js?v=1"></script>
   <script src="/js/character-shop.js?v=13"></script>
   <script src="/js/castle-management-v2.js?v=12"></script>
