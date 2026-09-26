@@ -486,6 +486,10 @@ async function handleApi(request, env, url) {
     if(!u || !(await verifyPassword(password,u.salt,u.hash))) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); await deleteSession(request,env); const sid=await createSession(env,u.id); return json({ok:true,user:publicUser(u)},200,{"set-cookie":cookie(SESSION_COOKIE_NAME,sid)});
   }
   if (method === "POST" && path === "/api/auth/logout") { if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403); await deleteSession(request,env); return json({ok:true},200,{"set-cookie":clearCookie(SESSION_COOKIE_NAME)}); }
+  if (method === "GET" && path === "/api/world-state") {
+    const [houseList,playerList]=await Promise.all([dynamicHouses(env),players(env)]);
+    return json({houses:houseList,players:playerList});
+  }
   if (method === "GET" && path === "/api/houses") return json(await dynamicHouses(env));
   if (method === "GET" && path === "/api/players") return json(await players(env));
   const session=await getSession(request,env);
@@ -522,12 +526,15 @@ async function handleApi(request, env, url) {
     const incoming=tradeRows.filter(x=>x.receiver_account_id===accountId);
     const byCastle={}; incoming.forEach(x=>byCastle[x.receiver_castle]=(byCastle[x.receiver_castle]||0)+1);
     const next=roleRow?.nextAvailableAt?Date.parse(roleRow.nextAvailableAt):NaN;
+    await ensureGameControls(env);
+    const claimRow=await env.DB.prepare("SELECT locked FROM game_controls WHERE control_key='claim'").first();
     return json({
       castles:castleRows.results,
       activeWars:{expeditions},
       tradeNotice:{count:incoming.length,byCastle},
       scenarioNotice:{items:scenarioItems},
-      roleStatus:{available:!Number.isFinite(next)||next<=now,nextAvailableAt:Number.isFinite(next)?new Date(next).toISOString():null,remainingSeconds:Number.isFinite(next)&&next>now?Math.ceil((next-now)/1000):0}
+      roleStatus:{available:!Number.isFinite(next)||next<=now,nextAvailableAt:Number.isFinite(next)?new Date(next).toISOString():null,remainingSeconds:Number.isFinite(next)&&next>now?Math.ceil((next-now)/1000):0},
+      claimLocked:Number(claimRow?.locked||0)===1
     });
   }
   if (method === "GET" && path === "/api/my-castles") { if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); return json((await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(userSession.user_id).all()).results); }
