@@ -73,6 +73,7 @@ async function augmentActiveResponse(response) {
     });
     const headers = new Headers(response.headers);
     headers.set("cache-control", "no-store");
+    headers.delete("content-length");
     return new Response(JSON.stringify({...data, expeditions}), {status:response.status, headers});
   } catch {
     return response;
