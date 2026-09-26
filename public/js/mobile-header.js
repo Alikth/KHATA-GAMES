@@ -3,7 +3,7 @@
   if(!window.__khataWarRulesLoaded){
     window.__khataWarRulesLoaded=true;
     const s=document.createElement('script');
-    s.src='/js/war-rules.js?v=1';
+    s.src='/js/war-rules-v2.js?v=2';
     s.async=false;
     document.head.appendChild(s);
   }
