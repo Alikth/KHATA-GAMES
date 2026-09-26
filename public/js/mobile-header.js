@@ -131,11 +131,13 @@
       if(!label)return;
       const b=span.querySelector('b');
       if(!b)return;
-      const count=Number(String(b.textContent).replace(/[^0-9.-]/g,''));
-      span.innerHTML=label+' <b>'+Number.isFinite(count)?count.toLocaleString('fa-IR'):escCount(b.textContent)+'</b>';
+      const raw=String(b.textContent).replace(/[^0-9.-]/g,'');
+      const count=Number(raw);
+      const display=Number.isFinite(count)?count.toLocaleString('fa-IR'):raw;
+      span.innerHTML=label+' <b>'+display+'</b>';
     });
   }
-  function escCount(v){return String(v??'0').replace(/[&<>'"]/g,'');}
+
   const observer=new MutationObserver(()=>decorateArmy());
   observer.observe(document.body,{subtree:true,childList:true});
   decorateArmy();
