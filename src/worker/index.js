@@ -495,6 +495,7 @@ async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
          WHERE castle=? AND ${where}=? AND level=?
        )`
   ).bind(
+    ...entries.map(([,v])=>Number(v)),
     castle,
     ...entries.map(([k])=>Number(state[k]||0)),
     castle,key,level+1
