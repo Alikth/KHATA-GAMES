@@ -74,7 +74,7 @@ async function hashPassword(password, salt = crypto.getRandomValues(new Uint8Arr
   const raw = await derivePasswordHash(password, salt, PASSWORD_HASH_ITERATIONS);
   return {
     salt: btoa(String.fromCharCode(...salt)),
-    hash: `${PASSWORD_HASH_VERSION}${PASSWORD_HASH_ITERATIONS}${raw}`
+    hash: `${PASSWORD_HASH_VERSION}$${PASSWORD_HASH_ITERATIONS}$${raw}`
   };
 }
 function bytes(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
