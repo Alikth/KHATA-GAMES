@@ -387,7 +387,9 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
     if (!mine.length) {
-      root.innerHTML = `<div class="my-castles-empty"><div class="empty-castle-icon">🏰</div><h3>NO CASTLES YET</h3><p>هنوز هیچ قلعه‌ای با این حساب ثبت نشده است.</p><button class="primary" type="button" data-action="go-register">انتخاب قلعه</button></div>`;
+      root.innerHTML = `<div class="my-castles-empty"><div class="empty-castle-icon">🏰</div><h3>NO CASTLES YET</h3><p>هنوز هیچ قلعه‌ای با این حساب ثبت نشده است.</p>${claimLocked
+        ? '<button class="primary" type="button" disabled>🔒 انتخاب قلعه قفل است</button>'
+        : '<button class="primary" type="button" data-action="go-register">انتخاب قلعه</button>'}</div>`;
       return;
     }
     root.innerHTML = mine.map(p => {
