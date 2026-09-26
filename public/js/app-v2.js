@@ -50,7 +50,8 @@ window.addEventListener("DOMContentLoaded", () => {
         const detail=window.khataRealtimeDetail||{};
         invalidateApiCache();
         if(page==="players"){
-          [players,houses]=await Promise.all([api("/api/players"),api("/api/houses")]);
+          const world=await api("/api/world-state");
+          players=world.players||[];houses=world.houses||[];
           renderPlayers();renderMap();
         }else if(page==="myCastles"){
           await renderMyCastles();
@@ -113,7 +114,6 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       currentUser = auth.user;
       connectRealtime();
-      try { claimLocked = !!(await api("/api/claim/status")).locked; } catch { claimLocked = false; }
       await enterAuthenticated();
     } catch (err) {
       console.error(err);
@@ -133,7 +133,9 @@ window.addEventListener("DOMContentLoaded", () => {
     $("welcomeUser").textContent = stripAt(currentUser.username);
     $("currentUser").textContent = stripAt(currentUser.username);
     $("gameLobby").classList.remove("hidden");
-    [houses,players]=await Promise.all([api("/api/houses"),api("/api/players")]);
+    const world=await api("/api/world-state");
+    houses=world.houses||[];
+    players=world.players||[];
     renderRegions();
     renderPlayers();
     renderMap();
@@ -364,6 +366,7 @@ window.addEventListener("DOMContentLoaded", () => {
       tradeNotice=dashboard.tradeNotice||tradeNotice;
       scenarioNotice=dashboard.scenarioNotice||scenarioNotice;
       roleStatus=dashboard.roleStatus||roleStatus;
+      claimLocked=!!dashboard.claimLocked;
     }catch(e){mineError=e;}
 
     if (mineError) {
@@ -384,7 +387,6 @@ window.addEventListener("DOMContentLoaded", () => {
       const warHtml = wars.length ? '<div class="my-castle-war">'+wars.map(w => '<article class="active-war-card"><strong>⚔️ لشکرکشی به '+escapeHTML(w.destinationCastle)+' — رسیدن '+escapeHTML(w.arrivalTime)+'</strong><div>'+(w.type==='sea'?'دریایی':'زمینی')+(w.fake?' · فیک':'')+'</div><button class="war-cancel-btn" type="button" data-action="cancel-war" data-war-id="'+escapeHTML(w.id)+'">لغو لشکرکشی</button></article>').join('')+'</div>' : '';
       return '<article class="my-castle-card"><div class="my-castle-art">'+escapeHTML(c?.icon || "🏰")+'</div><div class="my-castle-body"><span class="my-castle-region">'+escapeHTML(r?.icon || "")+' '+escapeHTML(p.region)+'</span><h3>'+escapeHTML(p.castle)+'</h3><p>HOUSE '+escapeHTML(p.house)+'</p><div class="my-castle-meta"><span>👤 '+escapeHTML(p.username)+'</span><span class="owned-badge">YOUR CASTLE</span></div></div><div class="my-castle-actions"><button class="castle-open" type="button" data-action="my-castle-manage" data-castle="'+escapeHTML(p.castle)+'">🏰 مدیریت قلعه</button><button class="castle-open" type="button" data-action="war-expedition" data-castle="'+escapeHTML(p.castle)+'">⚔️ لشکرکشی</button><button class="castle-open trade-open" type="button" data-action="trade" data-castle="'+escapeHTML(p.castle)+'">⚖️ تجارت <span class="trade-badge-wrap"><span class="trade-badge '+(badge?'':'hidden')+'" data-trade-notification="'+escapeHTML(p.castle)+'">'+(badge||'')+'</span></span></button><button class="castle-open trade-request-open" type="button" data-action="trade-requests">📜 درخواست تجارت</button><button class="castle-open role-submit-btn" type="button" data-action="role-submit" data-castle="'+escapeHTML(p.castle)+'" '+(roleStatus.available?'':'disabled')+'>'+roleLabel+'</button>'+scenarioHtml+'</div>'+warHtml+'</article>';
     }).join("");
-    window.khataRefreshTradeNotifications?.();
     if(activeWarsError)showToast(activeWarsError.message||"دریافت وضعیت لشکرکشی‌ها انجام نشد.",true);
   }
   function formatRoleCooldown(seconds){ const s=Math.max(0,Number(seconds)||0),h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h+"س "+String(m).padStart(2,"0")+"د"; }
