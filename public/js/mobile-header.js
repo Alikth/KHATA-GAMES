@@ -8,6 +8,23 @@
     document.head.appendChild(s);
   }
 
+  // Active expeditions are owned/rendered by castle-management-v2.js.
+  // app-v2.js also renders a summary card inside each castle card; remove
+  // that duplicate presentation whenever the My Castles list is rendered.
+  function suppressDuplicateWarCards(){
+    const root=document.getElementById('myCastlesList');
+    if(!root)return;
+    root.querySelectorAll('.my-castle-war').forEach(el=>el.remove());
+  }
+  function watchMyCastles(){
+    const root=document.getElementById('myCastlesList');
+    if(!root)return;
+    suppressDuplicateWarCards();
+    new MutationObserver(suppressDuplicateWarCards).observe(root,{childList:true,subtree:true});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',watchMyCastles,{once:true});
+  else watchMyCastles();
+
   const mobile=window.matchMedia('(max-width:600px)');
   if(!mobile.matches)return;
 
