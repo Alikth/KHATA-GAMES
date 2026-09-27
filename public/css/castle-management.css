@@ -38,3 +38,24 @@
     gap:6px!important;
   }
 }
+
+
+/* Unified castle army / fleet / siege-equipment presentation. */
+.cm-army{display:block!important;margin-top:16px!important;width:100%!important;}
+.cm-army h4{margin:0 0 9px!important;font-family:Vazirmatn,system-ui,sans-serif;color:#d8caa9!important;font-size:13px!important;}
+.cm-army-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px!important;width:100%!important;}
+.cm-army-unit{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;padding:9px 10px!important;background:linear-gradient(135deg,#121519,#0c0f12)!important;border:1px solid rgba(255,255,255,.07)!important;border-radius:10px!important;box-sizing:border-box!important;font-family:Vazirmatn,system-ui,sans-serif!important;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease!important;}
+.cm-army-unit span{color:#d9dce0!important;font-size:12px!important;line-height:1.5!important;}
+.cm-army-unit b{color:#f0d99e!important;font-size:13px!important;min-width:32px!important;text-align:center!important;}
+.cm-army-unit:active{transform:translateY(-1px)!important;border-color:rgba(199,164,86,.45)!important;box-shadow:0 7px 22px rgba(0,0,0,.3)!important;}
+.cm-equipment-unit{border-color:rgba(199,164,86,.16)!important;background:linear-gradient(135deg,rgba(90,70,28,.11),#0c0f12)!important;}
+.cm-army-empty{padding:10px 12px!important;border:1px dashed rgba(255,255,255,.12)!important;border-radius:10px!important;color:#858993!important;font-family:Vazirmatn,system-ui,sans-serif!important;font-size:11px!important;}
+@media(max-width:700px){
+  .cm-army-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;}
+  .cm-army-unit{min-height:42px!important;padding:8px 9px!important;}
+  .cm-army-unit span{font-size:11px!important;}
+  .cm-army-unit b{font-size:12px!important;}
+}
+@media(max-width:380px){
+  .cm-army-grid{grid-template-columns:1fr!important;}
+}
