@@ -277,6 +277,10 @@ async function ensureEconomySchema(env) {
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_players_account_created ON players(account_id,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_castle_state_owner ON castle_state(owner_account_id)").run();
 
+  // Always repair shared army/fleet/equipment rows for every static and dynamic castle.
+  // INSERT OR IGNORE preserves any existing player/admin counts.
+  await ensureAllCastleSupportRows(env);
+
   const ready=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='seeded'").first();
   const version=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='schema_version'").first();
   if(ready?.value==="1" && version?.value==="5") return;
@@ -313,6 +317,43 @@ async function ensureEconomySchema(env) {
   await env.DB.prepare("INSERT OR REPLACE INTO economy_meta(key,value) VALUES ('schema_version','5')").run();
   })().catch(e=>{economySchemaPromise=null;throw e;});
   return economySchemaPromise;
+}
+
+async function ensureAllCastleSupportRows(env) {
+  await ensureDynamicCastleSchema(env);
+  const rows = (await env.DB.prepare("SELECT name AS castle,region,naval FROM dynamic_castles ORDER BY region,name").all()).results;
+  const all = new Map();
+  for (const r of houses) for (const c of r.castles) {
+    all.set(c.castle, { castle:c.castle, region:r.region, naval:NAVAL_CASTLES.has(c.castle) });
+  }
+  for (const r of rows) {
+    if (!all.has(r.castle)) all.set(r.castle, { castle:r.castle, region:r.region, naval:!!Number(r.naval) });
+  }
+  for (const x of all.values()) {
+    if (!x.castle || !x.region) continue;
+    await env.DB.prepare("INSERT OR IGNORE INTO castle_state(castle,region,port_enabled,port_level) VALUES (?,?,?,0)")
+      .bind(x.castle,x.region,x.naval?1:0).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO castle_week_state(castle,last_week_key) VALUES (?,?)")
+      .bind(x.castle,gameWeekKey()).run();
+
+    const baseUnits = { swordsman:500, archer:200, spearman:100, cavalry:100 };
+    for (const [unit,count] of Object.entries(baseUnits)) {
+      await env.DB.prepare("INSERT OR IGNORE INTO castle_army(castle,unit_key,count) VALUES (?,?,?)")
+        .bind(x.castle,unit,count).run();
+    }
+    for (const item of Object.keys(EQUIPMENT)) {
+      await env.DB.prepare("INSERT OR IGNORE INTO castle_equipment(castle,item_key,count) VALUES (?,?,0)")
+        .bind(x.castle,item).run();
+    }
+    for (const ship of ["transport","warship"]) {
+      await env.DB.prepare("INSERT OR IGNORE INTO castle_fleet(castle,ship_key,count) VALUES (?,?,?)")
+        .bind(x.castle,ship,x.naval?1:0).run();
+    }
+    for (const spc of (SPECIAL_CAMPS[x.region]||[])) {
+      await env.DB.prepare("INSERT OR IGNORE INTO castle_special_camps(castle,camp_key,level) VALUES (?,?,0)")
+        .bind(x.castle,spc.key).run();
+    }
+  }
 }
 
 async function getFoodDebt(env,castle){
