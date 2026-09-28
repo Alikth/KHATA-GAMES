@@ -62,10 +62,34 @@ async function changeSource(){
     $('weFormStep').classList.remove('active');$('weConfirmStep').classList.add('active');$('weFinalNo').onclick=()=>{$('weConfirmStep').classList.remove('active');$('weFormStep').classList.add('active');};$('weFinalYes').onclick=submit;
   }
   async function submit(){const b=$('weFinalYes');b.disabled=true;$('weConfirmError').textContent='';try{const duration=durationMinutes(),arrival=new Date(Date.now()+duration*60000),hh=String(arrival.getHours()).padStart(2,'0'),mm=String(arrival.getMinutes()).padStart(2,'0');await api('/api/war-expeditions',{method:'POST',body:JSON.stringify({type,source:$('weSource').value,destination:$('weDestination').value,durationMinutes:duration,arrivalTime:hh+':'+mm,lordPresent,fake,assets:values})});close();await loadWarLog();await window.khataRefreshMyCastles?.();alert('لشکرکشی با موفقیت ثبت شد.');}catch(e){$('weConfirmError').textContent=e.message;b.disabled=false;}}
-  async function loadWarLog(){const d=await api('/api/war-logs');const root=$('warLogList');if(!root)return;root.innerHTML=d.logs?.length?d.logs.map(x=>'<article class="we-log-banner '+(Number(x.cancelled)?'cancelled':'')+'"><strong>⚔️ '+esc(x.attackerUsername)+' از '+esc(x.sourceCastle)+' به '+esc(x.destinationCastle)+(x.command?' · دستور: '+esc(x.command):'')+'</strong><div>لرد: '+esc(x.lordName||'—')+' · '+(x.lordPresent?'لرد حاضر':'لرد غایب')+(x.outcome?' · نتیجه: '+(x.outcome==='attacker'?'پیروزی مهاجم':'پیروزی مدافع'):'')+(Number(x.cancelled)?' · <b class="we-cancelled-mark">✓ لغو شده</b>':'')+'</div><small>'+esc(x.type==='sea'?'دریایی':'زمینی')+' · رسیدن '+esc(x.arrivalTime)+'</small></article>').join(''):'<div class="war-log-empty">هنوز لشکرکشی‌ای ثبت نشده است.</div>';}
+  function formatTehranDateTime(value){
+    const ms=Date.parse(value||'');
+    if(!Number.isFinite(ms))return '—';
+    return new Intl.DateTimeFormat('fa-IR',{timeZone:'Asia/Tehran',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(ms));
+  }
+  function scenarioState(label,done){return '<span class="we-scenario-state">'+esc(label)+' '+(done?'✓ ارسال شد':'⏳ منتظر ارسال')+'</span>';}
+  async function loadWarList(){
+    const root=$('warListRoot');if(!root)return;
+    try{
+      const d=await api('/api/war-list'),wars=d.wars||[];
+      root.innerHTML=wars.length?wars.map(x=>{
+        const deadline=x.scenarioDeadlineAt?formatTehranDateTime(x.scenarioDeadlineAt):'—';
+        const status=x.outcome?(x.outcome==='attacker'?'🏆 نتیجه: پیروزی مهاجم':'🛡️ نتیجه: پیروزی مدافع'):'⚔️ نبرد در جریان';
+        return '<article class="we-war-card"><div class="we-war-card-head"><div><span class="we-war-kicker">WAR #'+esc(x.id)+'</span><h3>⚔️ '+esc(x.sourceCastle)+' → '+esc(x.destinationCastle)+'</h3></div><strong>'+status+'</strong></div><div class="we-war-sides"><div class="we-war-side attacker"><span>مهاجم</span><b>'+esc(x.attackerUsername||'—')+'</b><small>لرد: '+esc(x.lordName||'—')+'</small><small>Player ID: '+esc(x.attackerAccountId||'—')+'</small><small>قلعه: '+esc(x.sourceCastle)+'</small></div><div class="we-war-side defender"><span>مدافع</span><b>'+esc(x.defenderUsername||'بدون لرد')+'</b><small>لرد: '+esc(x.defenderLordName||'—')+'</small><small>Player ID: '+esc(x.defenderAccountId||'—')+'</small><small>قلعه: '+esc(x.destinationCastle)+'</small></div></div><div class="we-war-deadline"><strong>⏳ مهلت ارسال سناریو</strong><span>'+esc(deadline)+' · ساعت ۱۵:۰۰ روز بعد از ثبت حمله</span></div><div class="we-war-scenarios">'+scenarioState('سناریوی مهاجم:',!!x.attackerScenarioSubmitted)+scenarioState('سناریوی مدافع:',!!x.defenderScenarioSubmitted)+'</div><small class="we-war-meta">ثبت دستور: '+esc(formatTehranDateTime(x.commandAt||x.createdAt))+'</small></article>';
+      }).join(''):'<div class="war-log-empty">هنوز دستوری با عنوان «حمله» ثبت نشده است.</div>';
+    }catch(e){root.innerHTML='<div class="war-log-empty">'+esc(e.message||'لیست جنگ دریافت نشد.')+'</div>';}
+  }
+  async function loadWarLog(){
+    const d=await api('/api/war-logs');const root=$('warLogList');if(!root)return;
+    root.innerHTML=d.logs?.length?d.logs.map(x=>{
+      const siege=x.command==='siege',attack=x.command==='attack';
+      const title=siege?'🏰 '+esc(x.attackerUsername)+' از '+esc(x.sourceCastle)+'، '+esc(x.destinationCastle)+' را محاصره کرد.':attack?'⚔️ '+esc(x.attackerUsername)+' از '+esc(x.sourceCastle)+'، '+esc(x.destinationCastle)+' را مورد حمله قرار داد.':'⚔️ '+esc(x.attackerUsername)+' از '+esc(x.sourceCastle)+' به '+esc(x.destinationCastle)+' لشکر کشید.';
+      return '<article class="we-log-banner '+(Number(x.cancelled)?'cancelled':'')+'"><strong>'+title+'</strong><div>لرد مهاجم: '+esc(x.lordName||'—')+' · لرد مدافع: '+esc(x.defenderLordName||'—')+(x.outcome?' · نتیجه: '+(x.outcome==='attacker'?'پیروزی مهاجم':'پیروزی مدافع'):'')+(Number(x.cancelled)?' · <b class="we-cancelled-mark">✓ لغو شده</b>':'')+'</div><small>'+esc(x.type==='sea'?'دریایی':'زمینی')+' · ثبت دستور '+esc(formatTehranDateTime(x.commandAt||x.createdAt))+'</small></article>';
+    }).join(''):'<div class="war-log-empty">هنوز لاگ جنگی ثبت نشده است.</div>';
+  }
   async function open(sourceCastle){ $('warExpeditionModal').classList.remove('hidden');document.body.classList.add('modal-open');reset();try{[assets,houses,myCastles]=await Promise.all([api('/api/my-castle/assets?castle='+encodeURIComponent(sourceCastle||'')),api('/api/houses'),api('/api/my-castles')]);const st=await api('/api/war-expeditions/status');fakeAvailable=!!st.fakeAvailable;$('weTypeStep').innerHTML='<h3>لشکرکشی شما زمینی است یا دریایی؟</h3><div class="we-types"><button class="we-type" data-we-type="land">⚔️ لشکرکشی زمینی</button><button class="we-type" data-we-type="sea" '+(assets&&houses.some(r=>r.castles.some(c=>c.castle===assets.castle&&c.naval))?'':'disabled')+'>⚓ لشکرکشی دریایی</button></div><div class="we-note">'+(st.gameRunning?'بازی فعال است.':'بازی متوقف است.')+'</div>';document.querySelectorAll('[data-we-type]').forEach(b=>b.onclick=()=>{type=b.dataset.weType;renderForm();$('weTypeStep').classList.remove('active');$('weFormStep').classList.add('active');});}catch(e){$('weTypeStep').innerHTML='<div class="we-error">❌ '+esc(e.message)+'</div>';}}
   function close(){$('warExpeditionModal').classList.add('hidden');document.body.classList.remove('modal-open');}
   document.addEventListener('click',e=>{if(e.target.id==='warExpeditionModal'||e.target.id==='weClose')close();});
   $('weClose')?.addEventListener('click',close);
-  window.khataOpenWarExpedition=open;window.khataLoadWarLog=loadWarLog;document.addEventListener('DOMContentLoaded',loadWarLog);
+  window.khataOpenWarExpedition=open;window.khataLoadWarLog=loadWarLog;window.khataLoadWarList=loadWarList;document.addEventListener('DOMContentLoaded',loadWarLog);
 })();
