@@ -36,53 +36,40 @@ var equipment='';Object.keys(equipmentLabels).forEach(k=>equipment+='<div class=
       section.style.cssText += ';position:relative!important;display:block!important;width:100%!important;max-width:none!important;box-sizing:border-box!important;overflow:visible!important;padding:12px!important;margin-top:12px!important;';
       section.style.textAlign='left';
     }
-    root.style.cssText += ';position:relative!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;width:56%!important;max-width:270px!important;min-width:0!important;margin-left:0!important;margin-right:auto!important;float:none!important;clear:both!important;box-sizing:border-box!important;padding:0!important;';
+    root.style.cssText += ';position:relative!important;display:flex!important;flex-direction:column!important;align-items:stretch!important;width:100%!important;max-width:none!important;min-width:0!important;margin-left:0!important;margin-right:auto!important;float:none!important;clear:both!important;box-sizing:border-box!important;padding:0!important;';
     root.querySelectorAll('.cm-command-card').forEach(card => {
       card.style.cssText += ';position:relative!important;display:block!important;width:100%!important;max-width:none!important;box-sizing:border-box!important;margin:0!important;';
     });
   }
 
+  function commandWindowText(x){
+    const expires=Date.parse(x.commandExpiresAt||'');
+    if(!Number.isFinite(expires))return '';
+    const left=expires-Date.now();
+    if(left<=0)return '⌛ مهلت ۹۰ دقیقه‌ای ارسال دستور تمام شده است.';
+    return '⏳ مهلت ارسال دستور: '+Math.ceil(left/60000)+' دقیقه';
+  }
+  function arrivedCommandCard(x){
+    const expires=Date.parse(x.commandExpiresAt||'');
+    const expired=!!x.commandExpired||(Number.isFinite(expires)&&Date.now()>=expires);
+    const windowText=commandWindowText(x);
+    const controls=expired
+      ? '<div class="cm-command-expired">'+esc(windowText||'⌛ مهلت ارسال دستور تمام شده است.')+'</div>'
+      : '<div class="cm-command-actions"><small>'+esc(windowText||'ارتش رسیده؛ دستور خود را انتخاب کنید.')+'</small><div><button type="button" class="cm-command-btn attack" data-cm-war-command="attack" data-cm-war-id="'+esc(x.id)+'">⚔️ حمله</button><button type="button" class="cm-command-btn deploy" data-cm-war-command="deploy" data-cm-war-id="'+esc(x.id)+'">🛡️ استقرار</button><button type="button" class="cm-command-btn siege" data-cm-war-command="siege" data-cm-war-id="'+esc(x.id)+'">🏰 محاصره</button></div></div>';
+    return '<article class="cm-command-card cm-arrived-expedition"><strong>دستور لشکرکشی را انتخاب کنید</strong><p>⚔️ '+esc(x.attackerUsername)+' از '+esc(x.sourceCastle)+' به '+esc(x.destinationCastle)+' رسیده است.</p><small>'+esc(x.type==='sea'?'دریایی':'زمینی')+' · '+(x.lordPresent?'لرد حاضر':'لرد غایب')+'</small>'+controls+'</article>';
+  }
   async function loadWarCommands(castle){
-    const root = $('cmWarCommands');
-    if (!root) return;
-    try {
-      const active = await api('/api/my-war-expeditions/active');
-      const mine = (active.expeditions || []).filter(x => x.sourceCastle === castle && x.active === true);
-      const activeHtml = mine.map(x =>
-        '<article class="cm-command-card cm-active-expedition">' +
-          '<strong>⚔️ لشکرکشی در مسیر</strong>' +
-          '<p>به ' + esc(x.destinationCastle) + ' · رسیدن ' + esc(x.arrivalTime) + '</p>' +
-          '<small>' + esc(x.type === 'sea' ? 'دریایی' : 'زمینی') + ' · ' + (x.lordPresent ? 'لرد حاضر' : 'لرد غایب') + '</small>' +
-          '<button type="button" class="cm-command-btn cancel" data-cm-cancel-war-id="' + esc(x.id) + '">لغو لشکرکشی</button>' +
-        '</article>'
-      ).join('');
-      root.innerHTML = activeHtml || '<div class="cm-placeholder">لشکرکشی فعالی وجود ندارد.</div>';
+    const root=$('cmWarCommands');
+    if(!root)return;
+    try{
+      const data=await api('/api/my-war-expeditions/active');
+      const mine=(data.expeditions||[]).filter(x=>x.sourceCastle===castle&&!Number(x.cancelled));
+      const activeHtml=mine.filter(x=>x.active).map(x=>'<article class="cm-command-card cm-active-expedition"><strong>⚔️ لشکرکشی در مسیر</strong><p>به '+esc(x.destinationCastle)+' · رسیدن '+esc(x.arrivalTime)+'</p><small>'+esc(x.type==='sea'?'دریایی':'زمینی')+' · '+(x.lordPresent?'لرد حاضر':'لرد غایب')+'</small><button type="button" class="cm-command-btn cancel" data-cm-cancel-war-id="'+esc(x.id)+'">لغو لشکرکشی</button></article>').join('');
+      const arrivedHtml=mine.filter(x=>!x.active).map(arrivedCommandCard).join('');
+      root.innerHTML=activeHtml+arrivedHtml||'<div class="cm-placeholder">لشکرکشی فعالی وجود ندارد.</div>';
       applyMobileWarSideLayout(root);
-
-      try {
-        const arrived = await api('/api/my-war-expeditions/commands?castle=' + encodeURIComponent(castle));
-        const incoming = arrived.commands || [];
-        const arrivedHtml = incoming.length ? incoming.map(x =>
-          '<article class="cm-command-card">' +
-            '<strong>دستور خود را وارد کنید</strong>' +
-            '<p>⚔️ ' + esc(x.attackerUsername) + ' از ' + esc(x.sourceCastle) + ' به ' + esc(x.destinationCastle) + ' رسیده است.</p>' +
-            '<small>' + esc(x.type === 'sea' ? 'دریایی' : 'زمینی') + ' · ' + (x.lordPresent ? 'لرد حاضر' : 'لرد غایب') + '</small>' +
-            '<div class="cm-command-actions">' +
-              '<button type="button" class="cm-command-btn attack" data-cm-war-command="attack" data-cm-war-id="' + esc(x.id) + '">حمله</button>' +
-              '<button type="button" class="cm-command-btn" data-cm-war-command="deploy" data-cm-war-id="' + esc(x.id) + '">استقرار</button>' +
-              '<button type="button" class="cm-command-btn siege" data-cm-war-command="siege" data-cm-war-id="' + esc(x.id) + '">محاصره</button>' +
-            '</div>' +
-          '</article>'
-        ).join('') : '';
-        root.innerHTML = activeHtml + arrivedHtml;
-        if (!activeHtml && !arrivedHtml) root.innerHTML = '<div class="cm-placeholder">لشکرکشی فعالی وجود ندارد.</div>';
-        applyMobileWarSideLayout(root);
-      } catch (e) {
-        // A problem with arrived-command data must not hide active expeditions.
-        if (!activeHtml) root.innerHTML = '<div class="cm-error">❌ ' + esc(e.message) + '</div>';
-      }
-    } catch (e) {
-      root.innerHTML = '<div class="cm-error">❌ ' + esc(e.message) + '</div>';
+    }catch(e){
+      root.innerHTML='<div class="cm-error">❌ '+esc(e.message)+'</div>';
     }
   }
   function actionInfo(a,k){

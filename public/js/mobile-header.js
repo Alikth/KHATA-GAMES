@@ -3,7 +3,7 @@
   if(!window.__khataWarRulesLoaded){
     window.__khataWarRulesLoaded=true;
     const s=document.createElement('script');
-    s.src='/js/war-rules-v2.js?v=2';
+    s.src='/js/war-rules-v2.js?v=3';
     s.async=false;
     document.head.appendChild(s);
   }
@@ -13,7 +13,7 @@
   if(!window.khataOpenCastleManagement&&!window.__khataCastleManagementPreload){
     window.__khataCastleManagementPreload=true;
     const s=document.createElement('script');
-    s.src='/js/castle-management-v2.js?v=16';
+    s.src='/js/castle-management-v2.js?v=17';
     s.async=true;
     s.onload=()=>{window.__khataCastleManagementPreloaded=true;};
     s.onerror=()=>{window.__khataCastleManagementPreload=false;};

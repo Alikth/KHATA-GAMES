@@ -115,6 +115,10 @@ async function initializeCastleEconomy(env,castle,region,naval){const week=gameW
 function warElapsedSeconds(row,nowMs=Date.now(),running=true){let n=Number(row.elapsed_seconds||0);if(running&&row.run_started_at){const t=Date.parse(row.run_started_at);if(Number.isFinite(t))n+=Math.max(0,(nowMs-t)/1000);}return n;}
 function legacyWarArrivalDate(createdAt,arrivalTime){const d=new Date(createdAt),m=/^(\d{2}):(\d{2})$/.exec(String(arrivalTime||""));if(!m||Number.isNaN(d.getTime()))return null;d.setUTCHours(Number(m[1]),Number(m[2]),0,0);if(d.getTime()<=new Date(createdAt).getTime())d.setUTCDate(d.getUTCDate()+1);return d;}
 function warIsActive(row,runtime={running:true}){if(Number(row.cancelled)||row.command)return false;const duration=Number(row.duration_minutes||0)*60;if(duration>0)return warElapsedSeconds(row,Date.now(),runtime.running)<duration;const arrival=legacyWarArrivalDate(row.created_at||row.createdAt,row.arrival_time||row.arrivalTime);return !!arrival&&arrival.getTime()>Date.now();}
+const WAR_COMMAND_WINDOW_MS=90*60*1000;
+function warArrivalMs(row){const duration=Number(row.duration_minutes??row.durationMinutes??0)*60;if(duration>0){const started=Date.parse(row.run_started_at??row.runStartedAt??'');if(Number.isFinite(started))return started+duration*1000;const elapsed=Number(row.elapsed_seconds??row.elapsedSeconds??0);if(elapsed>=duration){const created=Date.parse(row.created_at??row.createdAt??'');if(Number.isFinite(created))return created+duration*1000;}return null;}const d=legacyWarArrivalDate(row.created_at??row.createdAt,row.arrival_time??row.arrivalTime);return d?d.getTime():null;}
+function warCommandExpiresAtMs(row){const arrival=warArrivalMs(row);return arrival==null?null:arrival+WAR_COMMAND_WINDOW_MS;}
+function warCommandMeta(row,now=Date.now()){const expires=warCommandExpiresAtMs(row);return {commandExpiresAt:expires?new Date(expires).toISOString():null,commandExpired:!!(expires&&now>=expires)};}
 let warRuntimeSchemaPromise=null;
 async function ensureWarRuntime(env){
   if(warRuntimeSchemaPromise)return warRuntimeSchemaPromise;
@@ -805,7 +809,7 @@ async function handleApi(request, env, url) {
   if (method==="GET" && path==="/api/my-war-expeditions/active") {
     await ensureWarLogSchema(env); const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const rt=await warRuntime(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(session.user_id).all()).results;
-    return json({expeditions:rows.map(x=>({...x,active:warIsActive(x,rt),arrived:!warIsActive(x,rt)}))});
+    return json({expeditions:rows.map(x=>{const active=warIsActive(x,rt);return {...x,active,arrived:!active,...warCommandMeta(x)};})});
   }
   if (method==="GET" && path==="/api/my-war-expeditions/commands") {
     await ensureWarLogSchema(env);
@@ -816,7 +820,7 @@ async function handleApi(request, env, url) {
     if(!state)return json({error:"این قلعه متعلق به حساب شما نیست."},403);
     const rt=await warRuntime(env);
     const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,source_castle AS sourceCastle,destination_castle AS destinationCastle,type,arrival_time AS arrivalTime,lord_present AS lordPresent,elapsed_seconds AS elapsedSeconds,duration_minutes AS durationMinutes FROM war_logs WHERE attacker_account_id=? AND source_castle=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(session.user_id,castle).all()).results;
-    return json({commands:rows.filter(x=>!warIsActive(x,rt)).map(x=>({...x,arrived:true}))});
+    return json({commands:rows.filter(x=>!warIsActive(x,rt)).map(x=>({...x,arrived:true,...warCommandMeta(x)}))});
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/cancel$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403); await ensureWarLogSchema(env);
@@ -883,6 +887,8 @@ async function handleApi(request, env, url) {
     const rt=await warRuntime(env);
     if(Number(war.cancelled)||warIsActive(war,rt))return json({error:"این لشکرکشی هنوز به مقصد نرسیده است."},409);
     if(war.command)return json({error:"برای این لشکرکشی قبلاً دستور ثبت شده است."},409);
+    const commandExpiresAt=warCommandExpiresAtMs(war);
+    if(commandExpiresAt&&Date.now()>=commandExpiresAt)return json({error:"مهلت ۹۰ دقیقه‌ای ارسال دستور این لشکرکشی تمام شده است."},410);
     let defenderAssets={};
     if(command==="attack"||command==="siege"){
       const rows=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(war.destination_castle).all()).results;
