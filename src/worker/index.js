@@ -101,7 +101,13 @@ async function broadcastRealtime(env,payload){
   }catch(e){console.error("realtime broadcast failed",e);}
 }
 
-async function ensureDynamicCastleSchema(env){await env.DB.prepare("CREATE TABLE IF NOT EXISTS dynamic_castles (name TEXT PRIMARY KEY, region TEXT NOT NULL, naval INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)").run();await env.DB.prepare("CREATE TABLE IF NOT EXISTS deleted_castles (name TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)").run();}
+let dynamicCastleSchemaPromise=null;
+async function ensureDynamicCastleSchema(env){
+  if(dynamicCastleSchemaPromise)return dynamicCastleSchemaPromise;
+  dynamicCastleSchemaPromise=(async()=>{await env.DB.prepare("CREATE TABLE IF NOT EXISTS dynamic_castles (name TEXT PRIMARY KEY, region TEXT NOT NULL, naval INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)").run();await env.DB.prepare("CREATE TABLE IF NOT EXISTS deleted_castles (name TEXT PRIMARY KEY, deleted_at TEXT NOT NULL)").run();
+  })().catch(e=>{dynamicCastleSchemaPromise=null;throw e});
+  return dynamicCastleSchemaPromise;
+}
 async function dynamicHouses(env){await ensureDynamicCastleSchema(env);const deletedRows=(await env.DB.prepare("SELECT name FROM deleted_castles").all()).results;const deleted=new Set(deletedRows.map(x=>x.name));const rows=(await env.DB.prepare("SELECT name AS castle,region,naval FROM dynamic_castles ORDER BY region,name").all()).results;const out=houses.map(r=>({...r,castles:r.castles.filter(c=>!deleted.has(c.castle)).map(c=>({...c,naval:NAVAL_CASTLES.has(c.castle)}))}));for(const row of rows){const region=out.find(x=>x.region===row.region);if(region&&!deleted.has(row.castle)&&!region.castles.some(c=>c.castle===row.castle))region.castles.push({house:"",castle:row.castle,icon:Number(row.naval)?"⚓":"🏯",naval:!!Number(row.naval)});}return out;}
 async function dynamicCastle(env,region,castle){const hs=await dynamicHouses(env);return hs.find(x=>x.region===region)?.castles.find(x=>x.castle===castle)||null;}
 async function isNavalCastle(env,castle){if(NAVAL_CASTLES.has(castle))return true;const row=await env.DB.prepare("SELECT naval FROM dynamic_castles WHERE name=?").bind(castle).first();return !!Number(row?.naval||0);}
@@ -109,7 +115,13 @@ async function initializeCastleEconomy(env,castle,region,naval){const week=gameW
 function warElapsedSeconds(row,nowMs=Date.now(),running=true){let n=Number(row.elapsed_seconds||0);if(running&&row.run_started_at){const t=Date.parse(row.run_started_at);if(Number.isFinite(t))n+=Math.max(0,(nowMs-t)/1000);}return n;}
 function legacyWarArrivalDate(createdAt,arrivalTime){const d=new Date(createdAt),m=/^(\d{2}):(\d{2})$/.exec(String(arrivalTime||""));if(!m||Number.isNaN(d.getTime()))return null;d.setUTCHours(Number(m[1]),Number(m[2]),0,0);if(d.getTime()<=new Date(createdAt).getTime())d.setUTCDate(d.getUTCDate()+1);return d;}
 function warIsActive(row,runtime={running:true}){if(Number(row.cancelled)||row.command)return false;const duration=Number(row.duration_minutes||0)*60;if(duration>0)return warElapsedSeconds(row,Date.now(),runtime.running)<duration;const arrival=legacyWarArrivalDate(row.created_at||row.createdAt,row.arrival_time||row.arrivalTime);return !!arrival&&arrival.getTime()>Date.now();}
-async function ensureWarRuntime(env){await env.DB.prepare("CREATE TABLE IF NOT EXISTS game_runtime (key TEXT PRIMARY KEY,value TEXT)").run();await env.DB.prepare("INSERT OR IGNORE INTO game_runtime(key,value) VALUES ('war_running','1')").run();}
+let warRuntimeSchemaPromise=null;
+async function ensureWarRuntime(env){
+  if(warRuntimeSchemaPromise)return warRuntimeSchemaPromise;
+  warRuntimeSchemaPromise=(async()=>{await env.DB.prepare("CREATE TABLE IF NOT EXISTS game_runtime (key TEXT PRIMARY KEY,value TEXT)").run();await env.DB.prepare("INSERT OR IGNORE INTO game_runtime(key,value) VALUES ('war_running','1')").run();
+  })().catch(e=>{warRuntimeSchemaPromise=null;throw e});
+  return warRuntimeSchemaPromise;
+}
 async function warRuntime(env){await ensureWarRuntime(env);const rows=(await env.DB.prepare("SELECT key,value FROM game_runtime WHERE key IN ('war_running')").all()).results;const m=Object.fromEntries(rows.map(x=>[x.key,x.value]));return {running:m.war_running!=="0"};}
 async function freezeWars(env){await ensureWarLogSchema(env);const rt=await warRuntime(env);if(!rt.running)return;const now=Date.now();const rows=(await env.DB.prepare("SELECT id,elapsed_seconds,run_started_at FROM war_logs WHERE cancelled=0 AND command IS NULL AND run_started_at IS NOT NULL").all()).results;const qs=rows.map(x=>env.DB.prepare("UPDATE war_logs SET elapsed_seconds=?,run_started_at=NULL WHERE id=?").bind(Number(x.elapsed_seconds||0)+Math.max(0,(now-Date.parse(x.run_started_at))/1000),x.id));qs.push(env.DB.prepare("UPDATE game_runtime SET value='0' WHERE key='war_running'"));if(qs.length)await env.DB.batch(qs);}
 async function resumeWars(env){await ensureWarLogSchema(env);const rt=await warRuntime(env);if(rt.running)return;const now=new Date().toISOString();await env.DB.batch([env.DB.prepare("UPDATE game_runtime SET value='1' WHERE key='war_running'"),env.DB.prepare("UPDATE war_logs SET run_started_at=? WHERE cancelled=0 AND command IS NULL AND run_started_at IS NULL AND elapsed_seconds < duration_minutes*60").bind(now)]);}
@@ -165,7 +177,10 @@ function findCastle(region, castle) {
 
 
 
+let warLogSchemaPromise=null;
 async function ensureWarLogSchema(env){
+  if(warLogSchemaPromise)return warLogSchemaPromise;
+  warLogSchemaPromise=(async()=>{
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS war_logs (
     id TEXT PRIMARY KEY, week_key TEXT NOT NULL, created_at TEXT NOT NULL,
     attacker_account_id TEXT NOT NULL, attacker_username TEXT NOT NULL, lord_name TEXT,
@@ -199,8 +214,14 @@ async function ensureWarLogSchema(env){
         SELECT MIN(id) FROM war_logs WHERE is_fake=1 GROUP BY attacker_account_id,week_key
       )`).run();
   await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS uq_war_fake_week ON war_logs(attacker_account_id,week_key) WHERE is_fake=1").run();
+
+  })().catch(e=>{warLogSchemaPromise=null;throw e});
+  return warLogSchemaPromise;
 }
+let tradeSchemaPromise=null;
 async function ensureTradeSchema(env){
+  if(tradeSchemaPromise)return tradeSchemaPromise;
+  tradeSchemaPromise=(async()=>{
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS trade_requests (
     id TEXT PRIMARY KEY, sender_account_id TEXT NOT NULL, sender_castle TEXT NOT NULL,
     receiver_account_id TEXT NOT NULL, receiver_castle TEXT NOT NULL,
@@ -209,8 +230,14 @@ async function ensureTradeSchema(env){
   )`).run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_trade_sender_status ON trade_requests(sender_account_id,status,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_trade_receiver_status ON trade_requests(receiver_account_id,status,created_at)").run();
+
+  })().catch(e=>{tradeSchemaPromise=null;throw e});
+  return tradeSchemaPromise;
 }
+let narrativeSchemaPromise=null;
 async function ensureNarrativeSchema(env){
+  if(narrativeSchemaPromise)return narrativeSchemaPromise;
+  narrativeSchemaPromise=(async()=>{
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS scenario_submissions (
     id TEXT PRIMARY KEY, war_id TEXT NOT NULL, submitter_account_id TEXT NOT NULL,
     submitter_username TEXT NOT NULL, lord_name TEXT NOT NULL DEFAULT '', castle TEXT NOT NULL,
@@ -228,10 +255,19 @@ async function ensureNarrativeSchema(env){
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_scenario_created ON scenario_submissions(created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_scenario_submitter ON scenario_submissions(submitter_account_id,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_role_account_created ON role_submissions(account_id,created_at)").run();
+
+  })().catch(e=>{narrativeSchemaPromise=null;throw e});
+  return narrativeSchemaPromise;
 }
+let gameControlsSchemaPromise=null;
 async function ensureGameControls(env){
+  if(gameControlsSchemaPromise)return gameControlsSchemaPromise;
+  gameControlsSchemaPromise=(async()=>{
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS game_controls (control_key TEXT PRIMARY KEY, locked INTEGER NOT NULL DEFAULT 0)`).run();
   await env.DB.prepare("INSERT OR IGNORE INTO game_controls(control_key,locked) VALUES ('war',0),('trade',0),('claim',0)").run();
+
+  })().catch(e=>{gameControlsSchemaPromise=null;throw e});
+  return gameControlsSchemaPromise;
 }
 async function isGameControlLocked(env,key){
   await ensureGameControls(env);
@@ -253,7 +289,6 @@ async function castleOwner(env,castle){
   return env.DB.prepare("SELECT owner_account_id AS accountId FROM castle_state WHERE castle=?").bind(castle).first();
 }
 async function tradeRowsForAccount(env,accountId){
-  await ensureTradeSchema(env);
   return (await env.DB.prepare("SELECT * FROM trade_requests WHERE (sender_account_id=? OR receiver_account_id=?) AND status='pending' ORDER BY created_at DESC").bind(accountId,accountId).all()).results;
 }
 
@@ -277,13 +312,10 @@ async function ensureEconomySchema(env) {
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_players_account_created ON players(account_id,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_castle_state_owner ON castle_state(owner_account_id)").run();
 
-  // Always repair shared army/fleet/equipment rows for every static and dynamic castle.
-  // INSERT OR IGNORE preserves any existing player/admin counts.
-  await ensureAllCastleSupportRows(env);
-
   const ready=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='seeded'").first();
   const version=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='schema_version'").first();
   if(ready?.value==="1" && version?.value==="5") return;
+  await ensureAllCastleSupportRows(env);
 
   const week=gameWeekKey();
   const defaults={farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0};
@@ -576,13 +608,10 @@ async function handleApi(request, env, url) {
   if (method === "GET" && path === "/api/my-dashboard") {
     if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401);
     await ensureEconomySchema(env);
-    await ensureWarLogSchema(env);
-    await ensureTradeSchema(env);
-    await ensureNarrativeSchema(env);
+    await Promise.all([ensureWarLogSchema(env),ensureTradeSchema(env),ensureNarrativeSchema(env),ensureGameControls(env)]);
     const accountId=userSession.user_id;
-    const [castleRows,warRows,tradeRows,scenarioRows,roleRow,warRuntimeState]=await Promise.all([
+    const [castleRows,tradeRows,scenarioRows,roleRow]=await Promise.all([
       env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(accountId).all(),
-      env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(accountId).all(),
       tradeRowsForAccount(env,accountId),
       env.DB.prepare(`SELECT w.id,w.attacker_username AS attackerUsername,w.source_castle AS sourceCastle,w.destination_castle AS destinationCastle,w.created_at AS createdAt,
         CASE WHEN w.attacker_account_id=? THEN 'attacker' ELSE 'defender' END AS side,
@@ -591,11 +620,9 @@ async function handleApi(request, env, url) {
         WHERE w.command='attack' AND w.cancelled=0
           AND (w.attacker_account_id=? OR EXISTS(SELECT 1 FROM castle_state cs WHERE cs.castle=w.destination_castle AND cs.owner_account_id=?))
         ORDER BY w.created_at DESC`).bind(accountId,accountId,accountId,accountId).all(),
-      env.DB.prepare("SELECT next_available_at AS nextAvailableAt FROM role_cooldowns WHERE account_id=?").bind(accountId).first(),
-      warRuntime(env)
+      env.DB.prepare("SELECT next_available_at AS nextAvailableAt FROM role_cooldowns WHERE account_id=?").bind(accountId).first()
     ]);
     const now=Date.now();
-    const expeditions=warRows.results.map(x=>({...x,active:warIsActive(x,warRuntimeState),arrived:!warIsActive(x,warRuntimeState)}));
     const submitted=(await env.DB.prepare("SELECT war_id,side FROM scenario_submissions WHERE submitter_account_id=?").bind(accountId).all()).results;
     const sent=new Set(submitted.map(x=>x.war_id+"|"+x.side));
     const scenarioItems=scenarioRows.results.filter(x=>!sent.has(x.id+"|"+x.side)).map(x=>({
@@ -605,11 +632,9 @@ async function handleApi(request, env, url) {
     const incoming=tradeRows.filter(x=>x.receiver_account_id===accountId);
     const byCastle={}; incoming.forEach(x=>byCastle[x.receiver_castle]=(byCastle[x.receiver_castle]||0)+1);
     const next=roleRow?.nextAvailableAt?Date.parse(roleRow.nextAvailableAt):NaN;
-    await ensureGameControls(env);
     const claimRow=await env.DB.prepare("SELECT locked FROM game_controls WHERE control_key='claim'").first();
     return json({
       castles:castleRows.results,
-      activeWars:{expeditions},
       tradeNotice:{count:incoming.length,byCastle},
       scenarioNotice:{items:scenarioItems},
       roleStatus:{available:!Number.isFinite(next)||next<=now,nextAvailableAt:Number.isFinite(next)?new Date(next).toISOString():null,remainingSeconds:Number.isFinite(next)&&next>now?Math.ceil((next-now)/1000):0},

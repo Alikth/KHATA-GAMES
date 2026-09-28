@@ -20,25 +20,6 @@
     document.head.appendChild(s);
   }
 
-  // app-v2.js historically rendered active war cards inside each castle card,
-  // while castle-management-v2.js renders the same expeditions in the manager.
-  // Remove the duplicate presentation at the DOM boundary without touching
-  // expedition data or APIs.
-  function suppressDuplicateWarCards(){
-    const root=document.getElementById('myCastlesList');
-    if(!root)return;
-    root.querySelectorAll('.my-castle-war').forEach(el=>el.remove());
-  }
-  function watchMyCastles(){
-    const root=document.getElementById('myCastlesList');
-    if(!root)return;
-    suppressDuplicateWarCards();
-    if(window.__khataMyCastlesWarObserver)window.__khataMyCastlesWarObserver.disconnect();
-    window.__khataMyCastlesWarObserver=new MutationObserver(suppressDuplicateWarCards);
-    window.__khataMyCastlesWarObserver.observe(root,{childList:true,subtree:true});
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',watchMyCastles,{once:true});
-  else watchMyCastles();
 
   const mobile=window.matchMedia('(max-width:600px)');
   if(!mobile.matches)return;
