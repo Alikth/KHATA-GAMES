@@ -13,7 +13,7 @@
   if(!window.khataOpenCastleManagement&&!window.__khataCastleManagementPreload){
     window.__khataCastleManagementPreload=true;
     const s=document.createElement('script');
-    s.src='/js/castle-management-v2.js?v=10';
+    s.src='/js/castle-management-v2.js?v=16';
     s.async=true;
     s.onload=()=>{window.__khataCastleManagementPreloaded=true;};
     s.onerror=()=>{window.__khataCastleManagementPreload=false;};
