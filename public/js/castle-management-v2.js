@@ -19,7 +19,6 @@
     if (!match) return;
     const [key, file] = match;
     const raw = String(el.textContent || '').trim();
-    const label = byLabel[Object.keys(byLabel).find(x => x === raw.replace(/[:].*$/, '').trim())] ? raw : raw;
     const labelName = Object.entries(byLabel).find(([name]) => raw === name || raw.startsWith(name + ':') || raw.startsWith(name + ' '))?.[0];
     if (!labelName) return;
     const suffix = raw.slice(labelName.length);
@@ -39,7 +38,7 @@
     if (document.getElementById('khata-item-icons-style')) return;
     const style = document.createElement('style');
     style.id = 'khata-item-icons-style';
-    style.textContent = '.khata-item-icon{width:24px;height:24px;object-fit:contain;vertical-align:middle;display:inline-block;margin-inline-end:5px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))}.cm-resources span .khata-item-icon{width:22px;height:22px}.cm-army-unit span .khata-item-icon{width:30px;height:30px}.cm-card-head strong .khata-item-icon{width:30px;height:30px}.cm-confirm-row span:first-child .khata-item-icon{width:22px;height:22px}@media(max-width:700px){.cm-army-unit span .khata-item-icon{width:27px;height:27px}}';
+    style.textContent = '.khata-item-icon{width:24px;height:24px;object-fit:contain;vertical-align:middle;display:inline-block;margin-inline-end:5px;background:transparent;mix-blend-mode:darken;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))}.cm-resources span .khata-item-icon{width:22px;height:22px}.cm-army-unit span .khata-item-icon{width:30px;height:30px}.cm-card-head strong .khata-item-icon{width:30px;height:30px}.cm-confirm-row span:first-child .khata-item-icon{width:22px;height:22px}@media(max-width:700px){.cm-army-unit span .khata-item-icon{width:27px;height:27px}}';
     document.head.appendChild(style);
   }
   function bootIcons() {
