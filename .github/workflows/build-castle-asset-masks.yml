@@ -25,6 +25,11 @@ jobs:
       - name: Generate masks
         run: python tools/build_castle_asset_masks.py
 
+      - name: Validate JavaScript
+        run: |
+          node --check public/js/castle-management-v2.js
+          node --check public/js/app-v2.js
+
       - name: Commit masks
         run: |
           if [ -z "$(git status --porcelain -- public/assets/game-icons/masks)" ]; then
