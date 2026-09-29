@@ -3,42 +3,11 @@
 /* Final mobile war-panel layout: the war panel is a true sibling of the castle content. */
 @media(max-width:700px){
   .castle-management-shell{position:relative!important;overflow:visible!important;}
-  .cm-war-external{
-    position:absolute!important;
-    top:240px!important;
-    left:8px!important;
-    right:auto!important;
-    width:44%!important;
-    max-width:235px!important;
-    margin:0!important;
-    padding:12px!important;
-    box-sizing:border-box!important;
-    background:linear-gradient(145deg,rgba(18,12,15,.98),rgba(8,9,12,.98))!important;
-    border:1px solid rgba(199,164,86,.55)!important;
-    border-radius:16px!important;
-    box-shadow:0 18px 55px rgba(0,0,0,.72)!important;
-    z-index:50!important;
-  }
-  .cm-war-external .cm-war-commands{
-    width:100%!important;
-    max-width:none!important;
-    margin:0!important;
-    padding:0!important;
-  }
-  .cm-war-external .cm-command-card,
-  .cm-war-external .cm-active-expedition{
-    width:100%!important;
-    max-width:none!important;
-    margin:0!important;
-    box-sizing:border-box!important;
-  }
-  .cm-war-external .cm-command-actions{
-    display:grid!important;
-    grid-template-columns:1fr!important;
-    gap:6px!important;
-  }
+  .cm-war-external{position:absolute!important;top:240px!important;left:8px!important;right:auto!important;width:44%!important;max-width:235px!important;margin:0!important;padding:12px!important;box-sizing:border-box!important;background:linear-gradient(145deg,rgba(18,12,15,.98),rgba(8,9,12,.98))!important;border:1px solid rgba(199,164,86,.55)!important;border-radius:16px!important;box-shadow:0 18px 55px rgba(0,0,0,.72)!important;z-index:50!important;}
+  .cm-war-external .cm-war-commands{width:100%!important;max-width:none!important;margin:0!important;padding:0!important;}
+  .cm-war-external .cm-command-card,.cm-war-external .cm-active-expedition{width:100%!important;max-width:none!important;margin:0!important;box-sizing:border-box!important;}
+  .cm-war-external .cm-command-actions{display:grid!important;grid-template-columns:1fr!important;gap:6px!important;}
 }
-
 
 /* Unified castle army / fleet / siege-equipment presentation. */
 .cm-army{display:block!important;margin-top:16px!important;width:100%!important;}
@@ -50,12 +19,30 @@
 .cm-army-unit:active{transform:translateY(-1px)!important;border-color:rgba(199,164,86,.45)!important;box-shadow:0 7px 22px rgba(0,0,0,.3)!important;}
 .cm-equipment-unit{border-color:rgba(199,164,86,.16)!important;background:linear-gradient(135deg,rgba(90,70,28,.11),#0c0f12)!important;}
 .cm-army-empty{padding:10px 12px!important;border:1px dashed rgba(255,255,255,.12)!important;border-radius:10px!important;color:#858993!important;font-family:Vazirmatn,system-ui,sans-serif!important;font-size:11px!important;}
-@media(max-width:700px){
-  .cm-army-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;}
-  .cm-army-unit{min-height:42px!important;padding:8px 9px!important;}
-  .cm-army-unit span{font-size:11px!important;}
-  .cm-army-unit b{font-size:12px!important;}
-}
-@media(max-width:380px){
-  .cm-army-grid{grid-template-columns:1fr!important;}
-}
+@media(max-width:700px){.cm-army-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;}.cm-army-unit{min-height:42px!important;padding:8px 9px!important;}.cm-army-unit span{font-size:11px!important;}.cm-army-unit b{font-size:12px!important;}}
+@media(max-width:380px){.cm-army-grid{grid-template-columns:1fr!important;}}
+
+/* Supplied game art replaces the legacy emoji icons in castle assets. */
+.cm-resources>div:nth-child(2)>span,.cm-resources>div:nth-child(3)>span,.cm-resources>div:nth-child(4)>span,.cm-resources>div:nth-child(5)>span,.cm-resources>div:nth-child(6)>span,.cm-resources>div:nth-child(7)>span,.cm-resources>div:nth-child(8)>span,.cm-resources>div:nth-child(9)>span,.cm-resources>div:nth-child(10)>span,.cm-resources>div:nth-child(12)>span,.cm-resources>div:nth-child(13)>span{font-size:0!important;display:inline-flex!important;align-items:center!important;gap:6px!important;color:transparent!important;}
+.cm-resources>div:nth-child(2)>span::before{content:"";background:url('/assets/game-icons/coins.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(2)>span::after{content:'سکه';font-size:13px;color:#d9dce0}
+.cm-resources>div:nth-child(3)>span::before{content:"";background:url('/assets/game-icons/wood.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(3)>span::after{content:'چوب';font-size:13px;color:#d9dce0}
+.cm-resources>div:nth-child(4)>span::before{content:"";background:url('/assets/game-icons/stone.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(4)>span::after{content:'سنگ';font-size:13px;color:#d9dce0}
+.cm-resources>div:nth-child(5)>span::before{content:"";background:url('/assets/game-icons/iron.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(5)>span::after{content:'آهن';font-size:13px;color:#d9dce0}
+.cm-resources>div:nth-child(6)>span::before{content:"";background:url('/assets/game-icons/meat.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(6)>span::after{content:'گوشت';font-size:13px;color:#d9dce0}
+.cm-resources>div:nth-child(7)>span::before{content:"";background:url('/assets/game-icons/fish.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(7)>span::after{content:'ماهی';font-size:13px;color:#d9dce0}
+.cm-resources>div:nth-child(8)>span::before{content:"";background:url('/assets/game-icons/grain.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(8)>span::after{content:'غلات';font-size:13px;color:#d9dce0}
+.cm-resources>div:nth-child(9)>span::before{content:"";background:url('/assets/game-icons/horses.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(9)>span::after{content:'اسب';font-size:13px;color:#d9dce0}
+.cm-resources>div:nth-child(10)>span::before{content:"";background:url('/assets/game-icons/dragon-glass.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(10)>span::after{content:'شیشه اژدها';font-size:13px;color:#d9dce0}
+.cm-resources>div:nth-child(12)>span::before{content:"";background:url('/assets/game-icons/tar.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(12)>span::after{content:'قیر';font-size:13px;color:#d9dce0}
+.cm-resources>div:nth-child(13)>span::before{content:"";background:url('/assets/game-icons/grapes.webp') center/contain no-repeat;width:24px;height:24px}.cm-resources>div:nth-child(13)>span::after{content:'انگور';font-size:13px;color:#d9dce0}
+.cm-army-grid>.cm-army-unit:nth-child(1)>span,.cm-army-grid>.cm-army-unit:nth-child(2)>span,.cm-army-grid>.cm-army-unit:nth-child(3)>span,.cm-army-grid>.cm-army-unit:nth-child(4)>span{font-size:0!important;display:inline-flex!important;align-items:center!important;gap:6px!important;color:transparent!important}
+.cm-army-grid>.cm-army-unit:nth-child(1)>span::before{content:"";background:url('/assets/game-icons/swordsman.webp') center/contain no-repeat;width:30px;height:38px}.cm-army-grid>.cm-army-unit:nth-child(1)>span::after{content:'شمشیرزن';font-size:13px;color:#d9dce0}
+.cm-army-grid>.cm-army-unit:nth-child(2)>span::before{content:"";background:url('/assets/game-icons/archer.webp') center/contain no-repeat;width:30px;height:38px}.cm-army-grid>.cm-army-unit:nth-child(2)>span::after{content:'کماندار';font-size:13px;color:#d9dce0}
+.cm-army-grid>.cm-army-unit:nth-child(3)>span::before{content:"";background:url('/assets/game-icons/spearman.webp') center/contain no-repeat;width:30px;height:38px}.cm-army-grid>.cm-army-unit:nth-child(3)>span::after{content:'نیزه‌دار';font-size:13px;color:#d9dce0}
+.cm-army-grid>.cm-army-unit:nth-child(4)>span::before{content:"";background:url('/assets/game-icons/cavalry.webp') center/contain no-repeat;width:30px;height:38px}.cm-army-grid>.cm-army-unit:nth-child(4)>span::after{content:'سواره‌نظام';font-size:13px;color:#d9dce0}
+.cm-equipment-unit:nth-child(1)>span,.cm-equipment-unit:nth-child(2)>span,.cm-equipment-unit:nth-child(3)>span,.cm-equipment-unit:nth-child(4)>span,.cm-equipment-unit:nth-child(5)>span{font-size:0!important;display:inline-flex!important;align-items:center!important;gap:6px!important;color:transparent!important}
+.cm-equipment-unit:nth-child(1)>span::before{content:"";background:url('/assets/game-icons/ladder.webp') center/contain no-repeat;width:30px;height:38px}.cm-equipment-unit:nth-child(1)>span::after{content:'نردبان';font-size:13px;color:#d9dce0}
+.cm-equipment-unit:nth-child(2)>span::before{content:"";background:url('/assets/game-icons/catapult.webp') center/contain no-repeat;width:30px;height:38px}.cm-equipment-unit:nth-child(2)>span::after{content:'منجنیق';font-size:13px;color:#d9dce0}
+.cm-equipment-unit:nth-child(3)>span::before{content:"";background:url('/assets/game-icons/ram.webp') center/contain no-repeat;width:30px;height:38px}.cm-equipment-unit:nth-child(3)>span::after{content:'دژکوب';font-size:13px;color:#d9dce0}
+.cm-equipment-unit:nth-child(4)>span::before{content:"";background:url('/assets/game-icons/scorpion.webp') center/contain no-repeat;width:30px;height:38px}.cm-equipment-unit:nth-child(4)>span::after{content:'اسکورپین';font-size:13px;color:#d9dce0}
+.cm-equipment-unit:nth-child(5)>span::before{content:"";background:url('/assets/game-icons/siege-tower.webp') center/contain no-repeat;width:30px;height:38px}.cm-equipment-unit:nth-child(5)>span::after{content:'برج محاصره';font-size:13px;color:#d9dce0}
