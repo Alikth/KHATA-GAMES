@@ -145,7 +145,7 @@
         const [col,row]=map[key];
         const icon=document.createElement('i');icon.className='khata-asset-icon';icon.setAttribute('aria-hidden','true');icon.style.backgroundPosition=(-col*32)+'px '+(-row*32)+'px';
         const clone=el.cloneNode(true);clone.querySelectorAll?.('.khata-asset-icon').forEach(x=>x.remove());
-        const text=clone.textContent.replace(/^[^\p{L}\p{N}\s]+/u,'').trim();
+        const text=clone.textContent.replace(/[\u{1F300}-\u{1FAFF}\u2600-\u{27BF}\uFE0F\u200D]/gu,'').replace(/\s{2,}/g,' ').trim();
         el.textContent='';el.append(icon,document.createTextNode(text));el.dataset.khataAssetIcon='1';
       });
     }
