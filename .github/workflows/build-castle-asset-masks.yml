@@ -1,0 +1,38 @@
+name: Build castle asset masks
+
+on:
+  push:
+    branches:
+      - castle-assets-clean-v1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  masks:
+    if: ${{ !contains(github.event.head_commit.message, 'generated castle asset transparency masks') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Install image tools
+        run: python -m pip install --upgrade pip pillow opencv-python-headless numpy
+
+      - name: Generate masks
+        run: python tools/build_castle_asset_masks.py
+
+      - name: Commit masks
+        run: |
+          if git diff --quiet -- public/assets/game-icons/masks; then
+            echo "Masks are already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/assets/game-icons/masks
+          git commit -m "build: add generated castle asset transparency masks"
+          git push origin HEAD:${{ github.ref_name }}
