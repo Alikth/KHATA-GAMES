@@ -1,5 +1,5 @@
 (() => {
-  const CORE = '/js/castle-management-core.js?v=3';
+  const CORE = '/js/castle-management-core.js?v=4';
   const ICONS = {
     coins: ['coins.webp', 'سکه'], wood: ['wood.webp', 'چوب'], stone: ['stone.webp', 'سنگ'], iron: ['iron.webp', 'آهن'],
     meat: ['meat.webp', 'گوشت'], fish: ['fish.webp', 'ماهی'], grain: ['grain.webp', 'غلات'], horses: ['horses.webp', 'اسب'],
@@ -15,9 +15,6 @@
     return null;
   }
 
-  // The supplied WebP assets contain a baked white canvas. Draw each asset into
-  // a real <canvas> and erase only the near-white pixels connected to its edges.
-  // Using canvas (instead of blob/data URLs) also works under the site's CSP.
   function replaceWithTransparentCanvas(img) {
     if (!img || img.dataset.khataProcessed === '1' || !img.naturalWidth) return;
     try {
@@ -55,7 +52,6 @@
         if (y + 1 < h) push(p + w);
       }
       ctx.putImageData(pixels, 0, 0);
-      // Match the original image's rendered size.
       source.style.cssText = img.style.cssText;
       source.width = img.width || 24;
       source.height = img.height || 24;
@@ -96,7 +92,7 @@
     if (document.getElementById('khata-item-icons-style')) return;
     const style = document.createElement('style');
     style.id = 'khata-item-icons-style';
-    style.textContent = '.khata-item-icon{width:24px;height:24px;object-fit:contain;vertical-align:middle;display:inline-block;margin-inline-end:5px;background:transparent;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))}.cm-resources span .khata-item-icon{width:22px;height:22px}.cm-army-unit span .khata-item-icon{width:30px;height:30px}.cm-card-head strong .khata-item-icon{width:30px;height:30px}.cm-confirm-row span:first-child .khata-item-icon{width:22px;height:22px}.cm-resources canvas.khata-item-icon{width:22px;height:22px}.cm-army-unit canvas.khata-item-icon{width:30px;height:30px}.cm-card-head strong canvas.khata-item-icon{width:30px;height:30px}.cm-confirm-row span:first-child canvas.khata-item-icon{width:22px;height:22px}@media(max-width:700px){.cm-army-unit span .khata-item-icon,.cm-army-unit canvas.khata-item-icon{width:27px;height:27px}}';
+    style.textContent = '.khata-item-icon{width:24px;height:24px;object-fit:contain;vertical-align:middle;display:inline-block;margin-inline-end:5px;background:transparent;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));mix-blend-mode:multiply}.cm-resources span::before{mix-blend-mode:multiply!important}.cm-resources span .khata-item-icon{width:22px;height:22px}.cm-army-unit span .khata-item-icon{width:30px;height:30px}.cm-card-head strong .khata-item-icon{width:30px;height:30px}.cm-confirm-row span:first-child .khata-item-icon{width:22px;height:22px}.cm-resources canvas.khata-item-icon{width:22px;height:22px}.cm-army-unit canvas.khata-item-icon{width:30px;height:30px}.cm-card-head strong canvas.khata-item-icon{width:30px;height:30px}.cm-confirm-row span:first-child canvas.khata-item-icon{width:22px;height:22px}@media(max-width:700px){.cm-army-unit span .khata-item-icon,.cm-army-unit canvas.khata-item-icon{width:27px;height:27px}}';
     document.head.appendChild(style);
   }
 
