@@ -27,7 +27,7 @@ jobs:
 
       - name: Commit masks
         run: |
-          if git diff --quiet -- public/assets/game-icons/masks; then
+          if [ -z "$(git status --porcelain -- public/assets/game-icons/masks)" ]; then
             echo "Masks are already up to date."
             exit 0
           fi
