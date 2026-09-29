@@ -89,5 +89,5 @@
 .cm-asset-ram{background-image:url('/assets/game-icons/ram.webp');-webkit-mask-image:url('/assets/game-icons/masks/ram.svg');mask-image:url('/assets/game-icons/masks/ram.svg');}
 .cm-asset-catapult{background-image:url('/assets/game-icons/catapult.webp');-webkit-mask-image:url('/assets/game-icons/masks/catapult.svg');mask-image:url('/assets/game-icons/masks/catapult.svg');}
 .cm-asset-scorpion{background-image:url('/assets/game-icons/scorpion.webp');-webkit-mask-image:url('/assets/game-icons/masks/scorpion.svg');mask-image:url('/assets/game-icons/masks/scorpion.svg');}
-.cm-asset-siege_tower{background-image:url('/assets/game-icons/siege-tower.webp');-webkit-mask-image:url('/assets/game-icons/masks/siege_tower.svg');mask-image:url('/assets/game-icons/masks/siege_tower.svg');}
+.cm-asset-siege_tower{background-image:url('/assets/game-icons/siege-tower.webp');-webkit-mask-image:url('/assets/game-icons/masks/siege-tower.svg');mask-image:url('/assets/game-icons/masks/siege_tower.svg');}
 @media(max-width:700px){.cm-asset-army .cm-asset-icon,.cm-asset-equipment .cm-asset-icon{width:27px;height:27px}.cm-asset-label{gap:5px}}
