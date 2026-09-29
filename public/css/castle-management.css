@@ -59,3 +59,35 @@
 @media(max-width:380px){
   .cm-army-grid{grid-template-columns:1fr!important;}
 }
+
+
+/* Castle game-art: deterministic data-key icons with external SVG transparency masks. */
+.cm-asset-label{display:inline-flex;align-items:center;gap:6px;vertical-align:middle;line-height:1.25;}
+.cm-asset-icon{display:inline-block;flex:0 0 auto;width:22px;height:22px;background-repeat:no-repeat;background-position:center;background-size:contain;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;-webkit-mask-mode:alpha;mask-mode:alpha;}
+.cm-asset-army .cm-asset-icon{width:30px;height:30px;}
+.cm-asset-equipment .cm-asset-icon{width:30px;height:30px;}
+.cm-asset-cost .cm-asset-icon,.cm-asset-confirm .cm-asset-icon{width:22px;height:22px;}
+.cm-asset-confirm-title .cm-asset-icon{width:26px;height:26px;}
+.cm-cost-item{display:inline-flex;align-items:center;gap:4px;}
+.cm-cost-item .cm-asset-label{gap:4px;}
+.cm-asset-coins{background-image:url('/assets/game-icons/coins.webp');-webkit-mask-image:url('/assets/game-icons/masks/coins.svg');mask-image:url('/assets/game-icons/masks/coins.svg');}
+.cm-asset-wood{background-image:url('/assets/game-icons/wood.webp');-webkit-mask-image:url('/assets/game-icons/masks/wood.svg');mask-image:url('/assets/game-icons/masks/wood.svg');}
+.cm-asset-stone{background-image:url('/assets/game-icons/stone.webp');-webkit-mask-image:url('/assets/game-icons/masks/stone.svg');mask-image:url('/assets/game-icons/masks/stone.svg');}
+.cm-asset-iron{background-image:url('/assets/game-icons/iron.webp');-webkit-mask-image:url('/assets/game-icons/masks/iron.svg');mask-image:url('/assets/game-icons/masks/iron.svg');}
+.cm-asset-meat{background-image:url('/assets/game-icons/meat.webp');-webkit-mask-image:url('/assets/game-icons/masks/meat.svg');mask-image:url('/assets/game-icons/masks/meat.svg');}
+.cm-asset-fish{background-image:url('/assets/game-icons/fish.webp');-webkit-mask-image:url('/assets/game-icons/masks/fish.svg');mask-image:url('/assets/game-icons/masks/fish.svg');}
+.cm-asset-grain{background-image:url('/assets/game-icons/grain.webp');-webkit-mask-image:url('/assets/game-icons/masks/grain.svg');mask-image:url('/assets/game-icons/masks/grain.svg');}
+.cm-asset-horses{background-image:url('/assets/game-icons/horses.webp');-webkit-mask-image:url('/assets/game-icons/masks/horses.svg');mask-image:url('/assets/game-icons/masks/horses.svg');}
+.cm-asset-dragon_glass{background-image:url('/assets/game-icons/dragon-glass.webp');-webkit-mask-image:url('/assets/game-icons/masks/dragon_glass.svg');mask-image:url('/assets/game-icons/masks/dragon_glass.svg');}
+.cm-asset-tar{background-image:url('/assets/game-icons/tar.webp');-webkit-mask-image:url('/assets/game-icons/masks/tar.svg');mask-image:url('/assets/game-icons/masks/tar.svg');}
+.cm-asset-grapes{background-image:url('/assets/game-icons/grapes.webp');-webkit-mask-image:url('/assets/game-icons/masks/grapes.svg');mask-image:url('/assets/game-icons/masks/grapes.svg');}
+.cm-asset-swordsman{background-image:url('/assets/game-icons/swordsman.webp');-webkit-mask-image:url('/assets/game-icons/masks/swordsman.svg');mask-image:url('/assets/game-icons/masks/swordsman.svg');}
+.cm-asset-archer{background-image:url('/assets/game-icons/archer.webp');-webkit-mask-image:url('/assets/game-icons/masks/archer.svg');mask-image:url('/assets/game-icons/masks/archer.svg');}
+.cm-asset-spearman{background-image:url('/assets/game-icons/spearman.webp');-webkit-mask-image:url('/assets/game-icons/masks/spearman.svg');mask-image:url('/assets/game-icons/masks/spearman.svg');}
+.cm-asset-cavalry{background-image:url('/assets/game-icons/cavalry.webp');-webkit-mask-image:url('/assets/game-icons/masks/cavalry.svg');mask-image:url('/assets/game-icons/masks/cavalry.svg');}
+.cm-asset-ladder{background-image:url('/assets/game-icons/ladder.webp');-webkit-mask-image:url('/assets/game-icons/masks/ladder.svg');mask-image:url('/assets/game-icons/masks/ladder.svg');}
+.cm-asset-ram{background-image:url('/assets/game-icons/ram.webp');-webkit-mask-image:url('/assets/game-icons/masks/ram.svg');mask-image:url('/assets/game-icons/masks/ram.svg');}
+.cm-asset-catapult{background-image:url('/assets/game-icons/catapult.webp');-webkit-mask-image:url('/assets/game-icons/masks/catapult.svg');mask-image:url('/assets/game-icons/masks/catapult.svg');}
+.cm-asset-scorpion{background-image:url('/assets/game-icons/scorpion.webp');-webkit-mask-image:url('/assets/game-icons/masks/scorpion.svg');mask-image:url('/assets/game-icons/masks/scorpion.svg');}
+.cm-asset-siege_tower{background-image:url('/assets/game-icons/siege-tower.webp');-webkit-mask-image:url('/assets/game-icons/masks/siege_tower.svg');mask-image:url('/assets/game-icons/masks/siege_tower.svg');}
+@media(max-width:700px){.cm-asset-army .cm-asset-icon,.cm-asset-equipment .cm-asset-icon{width:27px;height:27px}.cm-asset-label{gap:5px}}
