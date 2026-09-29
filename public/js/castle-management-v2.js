@@ -11,7 +11,7 @@
   const plainNames={"coins":"سکه","wood":"چوب","stone":"سنگ","iron":"آهن","meat":"گوشت","fish":"ماهی","grain":"غلات","horses":"اسب","dragon_glass":"شیشه اژدها","tar":"قیر","grapes":"انگور","swordsman":"شمشیرزن","archer":"کماندار","spearman":"نیزه‌دار","cavalry":"سواره‌نظام","ladder":"نردبان","ram":"دژکوب","catapult":"منجنیق","scorpion":"اسکورپین","siege_tower":"برج محاصره"};
   const assetLabel=(key,fallback,kind='resource')=>{
     if(!assetFiles[key]) return esc(fallback);
-    const label=plainNames[key]||String(fallback).replace(/[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}\\uFE0F]/gu,'').trim();
+    const label=plainNames[key]||String(fallback).trim();
     return '<span class="cm-asset-label cm-asset-'+kind+'"><span class="cm-asset-icon cm-asset-'+key+'" aria-hidden="true"></span><span>'+esc(label)+'</span></span>';
   };
 
