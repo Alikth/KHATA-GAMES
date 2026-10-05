@@ -34,7 +34,24 @@ async function requireUser(request,env){const s=await getSession(request,env);if
 async function createSession(env,userId,admin=0){const token=randomToken(),id=await sha256Base64Url(token),expires=Date.now()+SESSION_TTL;await env.DB.prepare("INSERT INTO sessions (id,user_id,is_admin,expires_at) VALUES (?,?,?,?)").bind(id,userId,admin,expires).run();return token}
 async function deleteSession(request,env){const token=getCookie(request,SESSION_COOKIE_NAME);if(token){const sid=await sha256Base64Url(token);await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(sid).run()}}
 async function cleanupExpiredSessions(env){await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(Date.now()).run()}
-async function rateLimit(request,env,action,limit,windowMs=15*60*1000){await env.DB.prepare("CREATE TABLE IF NOT EXISTS rate_limits (bucket_key TEXT PRIMARY KEY, window_start INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0)").run();const ip=request.headers.get("CF-Connecting-IP")||"unknown";const key=action+":"+await sha256Base64Url(ip);const now=Date.now(),bucket=now-(now%windowMs);await env.DB.prepare("DELETE FROM rate_limits WHERE window_start < ?").bind(bucket-(windowMs*2)).run();const row=await env.DB.prepare(`INSERT INTO rate_limits (bucket_key, window_start, count) VALUES (?, ?, 1) ON CONFLICT(bucket_key) DO UPDATE SET count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END, window_start = excluded.window_start RETURNING count`).bind(key,bucket).first();return Number(row?.count||1)<=limit}
+let rateLimitSchemaPromise=null;
+async function ensureRateLimitSchema(env){
+  if(rateLimitSchemaPromise)return rateLimitSchemaPromise;
+  rateLimitSchemaPromise=env.DB.prepare("CREATE TABLE IF NOT EXISTS rate_limits (bucket_key TEXT PRIMARY KEY, window_start INTEGER NOT NULL, count INTEGER NOT NULL DEFAULT 0)").run().catch(e=>{rateLimitSchemaPromise=null;throw e});
+  return rateLimitSchemaPromise;
+}
+async function rateLimit(request,env,action,limit,windowMs=15*60*1000){
+  await ensureRateLimitSchema(env);
+  const ip=request.headers.get("CF-Connecting-IP")||"unknown";
+  const key=action+":"+await sha256Base64Url(ip);
+  const now=Date.now(),bucket=now-(now%windowMs);
+  const row=await env.DB.prepare(`INSERT INTO rate_limits (bucket_key, window_start, count) VALUES (?, ?, 1)
+    ON CONFLICT(bucket_key) DO UPDATE SET
+      count = CASE WHEN rate_limits.window_start = excluded.window_start THEN rate_limits.count + 1 ELSE 1 END,
+      window_start = excluded.window_start
+    RETURNING count`).bind(key,bucket).first();
+  return Number(row?.count||1)<=limit;
+}
 function publicUser(u){return u?{id:u.id,username:u.username}:null}
 async function players(env){return(await env.DB.prepare("SELECT id, username, region, house, castle, created_at AS createdAt FROM players ORDER BY created_at").all()).results}
 export{SESSION_TTL,SESSION_COOKIE_NAME,MAX_BODY_BYTES,MAX_PASSWORD_LENGTH,PASSWORD_HASH_VERSION,PASSWORD_HASH_ITERATIONS,SECURITY_HEADERS,json,body,sameOrigin,sha256Base64Url,base64url,randomToken,constantTimeSecretEqual,normalizeUsername,validTelegramUsername,validAccountUsername,cookie,clearCookie,getCookie,newId,hashPassword,bytes,verifyPassword,passwordNeedsUpgrade,getSession,requireUser,createSession,deleteSession,cleanupExpiredSessions,rateLimit,publicUser,players};
