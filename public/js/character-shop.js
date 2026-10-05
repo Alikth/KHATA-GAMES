@@ -225,7 +225,8 @@
       document.querySelectorAll("[data-khcs-region]").forEach(b=>b.classList.toggle("active",b.dataset.khcsRegion===activeRegion));
     }
     const c=e.target.closest("[data-khcs-character]");if(c)window.khataOpenCharacter(c.dataset.khcsCharacter);
-    const s=e.target.closest("[data-khcs-shop]");if(s)openShop(s.dataset.khcsShop);\n    const pm=e.target.closest("[data-khcs-pack-mode]");if(pm)renderPacks(pm.dataset.khcsPackMode);
+    const s=e.target.closest("[data-khcs-shop]");if(s)openShop(s.dataset.khcsShop);
+    const pm=e.target.closest("[data-khcs-pack-mode]");if(pm)renderPacks(pm.dataset.khcsPackMode);
   });
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
 })();
