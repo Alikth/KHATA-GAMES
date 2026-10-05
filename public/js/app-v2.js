@@ -172,7 +172,7 @@ window.addEventListener("DOMContentLoaded", () => {
       if (endpoint === "/api/auth/login") {
         card?.classList.add("login-loading");
         playEpicLoginSound();
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Login response is already complete; do not artificially delay entering the game.
       }
       currentUser = data.user;
       connectRealtime();
