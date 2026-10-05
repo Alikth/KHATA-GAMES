@@ -95,18 +95,25 @@
       .khcs-tab.active{border-color:#777;background:#262626}.khcs-tab.active:before{content:'';position:absolute;right:0;top:0;bottom:0;width:3px;background:#9c0000}
       .khcs-head h3{margin:0;color:#eee;font:600 27px Cinzel,serif}.khcs-head p{margin:7px 0 20px;color:#707070}
       .khcs-empty{text-align:center;padding:90px 20px;color:#666}.khcs-empty-mark{font-size:34px;color:#555}.khcs-empty h3{color:#aaa}.khcs-empty p{color:#666}
-      .khcs-founding-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start}
-      .khcs-package{border:1px solid rgba(255,255,255,.1);background:linear-gradient(180deg,#111,#090909);overflow:hidden}
-      .khcs-package-head{padding:20px;border-bottom:1px solid rgba(255,255,255,.08);text-align:center}
-      .khcs-package-head h4{margin:0;font:700 25px Cinzel,serif;letter-spacing:2px;color:#eee}
-      .khcs-package.basic .khcs-package-head{border-top:3px solid #777}.khcs-package.pro .khcs-package-head{border-top:3px solid #9c0000}.khcs-package.epic .khcs-package-head{border-top:3px solid #7b3fb4}
-      .khcs-package-price{display:block;margin-top:8px;color:#c9c9c9;font-weight:700}
-      .khcs-package-section{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06)}
-      .khcs-package-section:last-child{border-bottom:0}
-      .khcs-package-section h5{margin:0 0 10px;color:#aaa;font:600 11px Cinzel,serif;letter-spacing:1px}
-      .khcs-package-list{display:grid;gap:6px}
-      .khcs-package-row{display:flex;justify-content:space-between;gap:10px;color:#999;font-size:11px}
-      .khcs-package-row b{color:#ddd;font-weight:500}.khcs-package-row span:last-child{color:#bbb;font-weight:600;white-space:nowrap}
+      .khcs-founding-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;align-items:stretch}
+      .khcs-package{position:relative;display:flex;flex-direction:column;min-height:100%;border:1px solid rgba(255,255,255,.12);border-radius:28px;background:radial-gradient(circle at 50% 0,rgba(255,255,255,.09),transparent 34%),linear-gradient(180deg,#171717,#080808 72%);overflow:hidden;box-shadow:0 16px 45px rgba(0,0,0,.38);transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s,border-color .35s}
+      .khcs-package:before{content:"";position:absolute;inset:-2px;border-radius:30px;padding:2px;background:conic-gradient(from 0deg,transparent 0 55%,rgba(255,255,255,.5),transparent 70% 100%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:khcsSpin 6s linear infinite;pointer-events:none;opacity:.5}
+      .khcs-package:hover{transform:translateY(-10px) scale(1.015);box-shadow:0 25px 65px rgba(0,0,0,.55);border-color:rgba(255,255,255,.28)}
+      .khcs-package:after{content:"";position:absolute;top:-80px;left:-35%;width:35%;height:140%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.09),transparent);transform:rotate(18deg);animation:khcsShine 4.8s ease-in-out infinite;pointer-events:none}
+      .khcs-package-head{position:relative;padding:30px 20px 24px;border-bottom:1px solid rgba(255,255,255,.08);text-align:center;z-index:1}
+      .khcs-package-head h4{margin:0;font:800 34px Cinzel,serif;letter-spacing:4px;color:#eee;text-shadow:0 0 22px rgba(255,255,255,.18)}
+      .khcs-package.basic .khcs-package-head{border-top:4px solid #777}.khcs-package.pro .khcs-package-head{border-top:4px solid #9c0000}.khcs-package.epic .khcs-package-head{border-top:4px solid #7b3fb4}
+      .khcs-package-price{display:none}
+      .khcs-package-section{position:relative;padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.06);z-index:1}
+      .khcs-package-section:last-of-type{border-bottom:0}
+      .khcs-package-section h5{margin:0 0 13px;color:#aaa;font:700 14px Cinzel,serif;letter-spacing:1.5px}
+      .khcs-package-list{display:grid;gap:8px}
+      .khcs-package-row{display:flex;justify-content:space-between;gap:14px;color:#999;font-size:13px;line-height:1.55}
+      .khcs-package-row b{color:#ddd;font-weight:600}.khcs-package-row span:last-child{color:#ddd;font-weight:700;white-space:nowrap}
+      .khcs-package-footer{position:relative;margin-top:auto;padding:24px 20px 28px;text-align:center;border-top:1px solid rgba(255,255,255,.09);z-index:1;background:rgba(0,0,0,.18)}
+      .khcs-package-footer small{display:block;color:#777;font:700 11px Cinzel,serif;letter-spacing:2px;margin-bottom:7px}
+      .khcs-package-footer strong{display:block;color:#fff;font:900 25px Cinzel,serif;letter-spacing:1px;text-shadow:0 0 18px rgba(255,255,255,.2)}
+      @keyframes khcsSpin{to{transform:rotate(360deg)}}@keyframes khcsShine{0%,55%{left:-45%;opacity:0}65%{opacity:1}85%,100%{left:125%;opacity:0}}
       @media(max-width:1000px){.khcs-founding-grid{grid-template-columns:1fr 1fr}}
       @media(max-width:680px){.khcs-founding-grid{grid-template-columns:1fr}}
       .khcs-modal{max-width:980px}.khcs-detail{display:grid;grid-template-columns:minmax(260px,380px) 1fr;gap:28px;align-items:center}
@@ -159,7 +166,7 @@
       return;
     }
     const section=(title,rows,three)=>'<section class="khcs-package-section"><h5>'+title+'</h5><div class="khcs-package-list">'+rows.map(r=>'<div class="khcs-package-row"><b>'+esc(r[0])+(three&&r[1]?'〔'+esc(r[1])+'〕':'')+'</b><span>'+esc(three?r[2]:r[1])+'</span></div>').join("")+'</div></section>';
-    root.innerHTML='<div class="khcs-head"><h3>تأسیس</h3><p>سه بسته‌ی آغازین قلمرو، به‌صورت جداگانه و کامل.</p></div><div class="khcs-founding-grid">'+foundingPackages.map(p=>'<article class="khcs-package '+p.className+'"><header class="khcs-package-head"><h4>'+esc(p.name)+'</h4><span class="khcs-package-price">PRICE: '+esc(p.price)+'</span></header>'+section("📦 منابع",p.resources,false)+section("🏗️ ساختمان‌ها",p.buildings,true)+section("🛡️ اردوگاه نظامی",p.military,true)+section("⚔️ نیروهای نظامی",p.units,false)+section("⚓ ناوگان دریایی",p.fleet,false)+'</article>').join("")+'</div>';
+    root.innerHTML='<div class="khcs-head"><h3>تأسیس</h3><p>سه بسته‌ی آغازین قلمرو، به‌صورت جداگانه و کامل.</p></div><div class="khcs-founding-grid">'+foundingPackages.map(p=>'<article class="khcs-package '+p.className+'"><header class="khcs-package-head"><h4>'+esc(p.name)+'</h4><span class="khcs-package-price">PRICE: '+esc(p.price)+'</span></header>'+section("📦 منابع",p.resources,false)+section("🏗️ ساختمان‌ها",p.buildings,true)+section("🛡️ اردوگاه نظامی",p.military,true)+section("⚔️ نیروهای نظامی",p.units,false)+section("⚓ ناوگان دریایی",p.fleet,false)+'<footer class="khcs-package-footer"><small>PRICE</small><strong>'+esc(p.price)+'</strong></footer></article>').join("")+'</div>';
   }
   function init(){
     css();renderRegionTabs();setupModal();setupShop();
