@@ -604,7 +604,7 @@ async function handleApi(request, env, url) {
   if (method === "POST" && path === "/api/auth/login") {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
     if (!(await rateLimit(request, env, "login", 10))) return json({error:"تعداد تلاش‌های ورود زیاد است. ۱۵ دقیقه بعد دوباره تلاش کنید."},429, {"retry-after":"900"});
-    const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||""); if(username.length>24 || password.length>MAX_PASSWORD_LENGTH) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); const u=await env.DB.prepare("SELECT * FROM users WHERE lower(username)=lower(?)").bind(username).first();
+    const b=await body(request), username=String(b.username||"").trim(), password=String(b.password||""); if(username.length>24 || password.length>MAX_PASSWORD_LENGTH) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401); const u=await env.DB.prepare("SELECT id,username,salt,hash FROM users WHERE lower(username)=lower(?)").bind(username).first();
     if(!u || !(await verifyPassword(password,u.salt,u.hash))) return json({error:"نام کاربری یا رمز عبور اشتباه است."},401);
     if(passwordNeedsUpgrade(u.hash)){
       const upgraded=await hashPassword(password);
