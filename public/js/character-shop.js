@@ -99,6 +99,12 @@
       .khcs-package{position:relative;display:flex;flex-direction:column;min-height:100%;border:1px solid rgba(255,255,255,.12);border-radius:28px;background:radial-gradient(circle at 50% 0,rgba(255,255,255,.09),transparent 34%),linear-gradient(180deg,#171717,#080808 72%);overflow:hidden;box-shadow:0 16px 45px rgba(0,0,0,.38);transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s,border-color .35s}
       .khcs-package:before{content:"";position:absolute;inset:-2px;border-radius:30px;padding:2px;background:conic-gradient(from 0deg,transparent 0 55%,rgba(255,255,255,.5),transparent 70% 100%);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:khcsSpin 6s linear infinite;pointer-events:none;opacity:.5}
       .khcs-package:hover{transform:translateY(-10px) scale(1.015);box-shadow:0 25px 65px rgba(0,0,0,.55);border-color:rgba(255,255,255,.28)}
+      .khcs-package.pro{border-color:rgba(156,0,0,.5);box-shadow:0 0 32px rgba(156,0,0,.28),0 16px 45px rgba(0,0,0,.38)}
+      .khcs-package.pro:before{background:conic-gradient(from 0deg,transparent 0 35%,rgba(255,45,45,.95),rgba(156,0,0,.35) 55%,transparent 72% 100%);opacity:.8}
+      .khcs-package.pro:hover{box-shadow:0 0 48px rgba(156,0,0,.5),0 25px 65px rgba(0,0,0,.55)}
+      .khcs-package.epic{border-color:rgba(123,63,180,.55);box-shadow:0 0 36px rgba(123,63,180,.3),0 16px 45px rgba(0,0,0,.38)}
+      .khcs-package.epic:before{background:conic-gradient(from 0deg,transparent 0 35%,rgba(190,105,255,.95),rgba(123,63,180,.35) 55%,transparent 72% 100%);opacity:.82}
+      .khcs-package.epic:hover{box-shadow:0 0 52px rgba(123,63,180,.55),0 25px 65px rgba(0,0,0,.55)}
       .khcs-package:after{content:"";position:absolute;top:-80px;left:-35%;width:35%;height:140%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.09),transparent);transform:rotate(18deg);animation:khcsShine 4.8s ease-in-out infinite;pointer-events:none}
       .khcs-package-head{position:relative;padding:30px 20px 24px;border-bottom:1px solid rgba(255,255,255,.08);text-align:center;z-index:1}
       .khcs-package-head h4{margin:0;font:800 34px Cinzel,serif;letter-spacing:4px;color:#eee;text-shadow:0 0 22px rgba(255,255,255,.18)}
