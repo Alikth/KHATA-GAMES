@@ -37,6 +37,16 @@
     {name:"PRO",className:"pro",price:"849T💎",resources:[["👥 رعیت","500"],["💰 سکه","9000"],["🪵 چوب","1100"],["🪨 سنگ","1000"],["⛓ آهن","950"],["🍇 انگور","100"],["🥩 گوشت","750"],["🐟 ماهی","750"],["🌾 غلات","6000"],["🐎 اسب","70"],["🌑 شیشه اژدها","50"],["🧪 وایلدفایر","1"]],buildings:[["🌾 مزرعه","Lv.3","1500"],["🪵 چوب‌بری","Lv.1","300"],["🪨 معدن سنگ","Lv.1","50"],["⛓ معدن آهن","Lv.1","100"],["🛒 بازارچه","Lv.1","800"],["🥩 کشتارگاه","Lv.1","100"],["🐎 اصطبل","Lv.1","20"],["🏘️ دهکده","Lv.1","50"],["🎮 مرکز تفریحی","Lv.1","500"]],military:[["🗡️ کمپ شمشیرزن","Lv.3","300"],["🏹 کمپ کماندار","Lv.2","200"],["🔱 کمپ نیزه‌دار","Lv.2","200"],["🏇 کمپ سواره‌نظام","Lv.2","200"],["⭐ کمپ ویژه اقلیم","Lv.1","50"],["🏭 ادوات","","2"],["⛵ کشتی‌سازی","","1"]],units:[["🗡 شمشیرزن","850"],["🏹 کماندار","400"],["🔱 نیزه‌دار","300"],["🏇 سواره‌نظام","250"],["⭐ نیروی ویژه اقلیم","100"],["🪜 نردبان","10"],["🔩 دژکوب","5"],["☄️ منجنیق","4"],["🦂 اسکورپ","3"],["🏗️ برج محاصره","3"]],fleet:[["⛵ کشتی ترابری","2"],["⛴️ کشتی جنگی","3"]]},
     {name:"EPIC",className:"epic",price:"1299T💎",resources:[["👥 رعیت","750"],["💰 سکه","12000"],["🪵 چوب","1450"],["🪨 سنگ","1200"],["⛓ آهن","1150"],["🍇 انگور","200"],["🥩 گوشت","1000"],["🐟 ماهی","1000"],["🌾 غلات","8000"],["🐎 اسب","150"],["🌑 شیشه اژدها","80"],["🧪 وایلدفایر","2"]],buildings:[["🌾 مزرعه","Lv.4","2000"],["🪵 چوب‌بری","Lv.2","600"],["🪨 معدن سنگ","Lv.2","100"],["⛓ معدن آهن","Lv.2","200"],["🛒 بازارچه","Lv.2","1600"],["🥩 کشتارگاه","Lv.2","200"],["🐎 اصطبل","Lv.2","40"],["🏘️ دهکده","Lv.3","150"],["🎮 مرکز تفریحی","Lv.2","1000"]],military:[["🗡️ کمپ شمشیرزن","Lv.4","400"],["🏹 کمپ کماندار","Lv.3","300"],["🔱 کمپ نیزه‌دار","Lv.3","300"],["🏇 کمپ سواره‌نظام","Lv.3","300"],["⭐ کمپ ویژه اقلیم","Lv.2","100"],["🏭 ادوات","","3"],["⛵ کشتی‌سازی","","3"]],units:[["🗡 شمشیرزن","1200"],["🏹 کماندار","850"],["🔱 نیزه‌دار","650"],["🏇 سواره‌نظام","500"],["⭐ نیروی ویژه اقلیم","200"],["🪜 نردبان","20"],["🔩 دژکوب","10"],["☄️ منجنیق","8"],["🦂 اسکورپ","4"],["🏗️ برج محاصره","4"]],fleet:[["⛵ کشتی ترابری","6"],["⛴️ کشتی جنگی","8"]]}
   ];
+  const shopPacks={
+    resources:[
+      {name:"BASIC",className:"basic",price:"389T",renew:"هر هفته",lord:"لرد تک قلعه ای (۳عدد)",multi:"لرد چند قلعه ای (۲ عدد برای یک قلعه ۱ عدد برای هر قلعه )",rows:[["👤 رعیت","500"],["💰 سکه","4500"],["🪵 چوب","850"],["🪨 سنگ","600"],["⛓️ آهن","500"],["🍇 انگور","200"],["🥩 گوشت","500"],["🐟 ماهی","700"],["🌾 غلات","1500"],["🐎 اسب","100"],["🛢 قیر","5"],["🐉 دراگون گلس","100"]]},
+      {name:"EPIC",className:"epic",price:"755T",renew:"هر هفته یکی",lord:"لرد تک قلعه ای (2عدد)",multi:"لرد چند قلعه ای (1 عدد برای هر قلعه)",rows:[["👤 رعیت","1100"],["💰 سکه","8500"],["🪵 چوب","1600"],["🪨 سنگ","1100"],["⛓️ آهن","1000"],["🍇 انگور","400"],["🥩 گوشت","900"],["🐟 ماهی","1300"],["🌾 غلات","3000"],["🐎 اسب","200"],["🛢 قیر","10"],["🐉 دراگون گلس","105"]]}
+    ],
+    army:[
+      {name:"BASIC",className:"basic",price:"350T",renew:"هر هفته 3 عدد",units:[["🗡️ شمشیر زن","600"],["🏹 کماندار","600"],["🔱 نیزه دار","600"],["🏇 سواره نظام","400"],["🌍 ویژه اقلیم","300"]],siege:[["🪜 نردبان","8"],["🔩 دژکوب","3"],["☄️ منجنیق","3"],["🦂 اسکورپ","1"],["🗼 برج محاصره","0"]]},
+      {name:"EPIC",className:"epic",price:"800T",renew:"هفته ای یکی",units:[["🗡️ شمشیر زن","1300"],["🏹 کماندار","1300"],["🔱 نیزه دار","1200"],["🏇 سواره نظام","800"],["🌍 مخصوص هر اقلیم","620"]],siege:[["🪜 نردبان","17"],["🔩 دژکوب","6"],["☄️ منجنیق","6"],["🦂 اسکورپ","2"],["🗼 برج محاصره","2"]]}
+    ]
+  };
   window.khataLordByCastle={Winterfell:"sam-stark","The Dreadfort":"roderick-bolton",Karhold:"edrik-karstark","The Twins":"elyas-tully",Seagard:"harwyn-mallister","The Eyrie":"elyon-arryn",Gulltown:"marq-grafton",Redfort:"alric-redfort",Pyke:"euron-greyjoy","Ten Towers":"maron-harlaw",Hammerhorn:"gorold-goodbrother","Casterly Rock":"damon-lannister",Hornvale:"tytos-brax",Ashemark:"addam-marbrand",Dragonstone:"vaeron-targaryen","Sharp Point":"lucan-bar-emmon","Storm's End":"stannis-baratheon",Fellwood:"ronnel-fell",Blackhaven:"beric-dondarrion",Highgarden:"mace-tyrell","Horn Hill":"randyll-tarly",Oldtown:"leyton-hightower",Sunspear:"doran-martell",Kingsgrave:"nymeria-manwoody",Yronwood:"anders-yronwood","Castle Black":"jon-snow",Eastwatch:"eddison-tollett","Shadow Tower":"alliser-thorne"};
 
   const esc=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
@@ -94,6 +104,16 @@
       .khcs-tab span{display:block;color:#ddd}.khcs-tab small{display:block;margin-top:4px;color:#666;font:9px Cinzel,serif;letter-spacing:1.5px}
       .khcs-tab.active{border-color:#777;background:#262626}.khcs-tab.active:before{content:'';position:absolute;right:0;top:0;bottom:0;width:3px;background:#9c0000}
       .khcs-head h3{margin:0;color:#eee;font:600 27px Cinzel,serif}.khcs-head p{margin:7px 0 20px;color:#707070}
+      .khcs-pack-switch{position:sticky;top:12px;z-index:20;display:flex;justify-content:flex-start;gap:8px;margin:0 0 22px;padding:6px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(10,10,10,.9);backdrop-filter:blur(12px);box-shadow:0 12px 30px rgba(0,0,0,.3)}
+      .khcs-pack-switch button{border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#101010;color:#777;padding:11px 22px;font:700 13px Cinzel,serif;cursor:pointer;transition:all .25s ease}.khcs-pack-switch button:hover{color:#ddd;border-color:rgba(255,255,255,.22)}
+      .khcs-pack-switch button.active{color:#fff;background:#252525;border-color:#aaa;box-shadow:0 0 18px rgba(255,255,255,.08)}
+      .khcs-packs-content{animation:khcsPackIn .35s ease both}.khcs-pack-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}.khcs-pack-card{position:relative;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,.12);border-radius:28px;background:radial-gradient(circle at 50% 0,rgba(255,255,255,.08),transparent 35%),linear-gradient(180deg,#171717,#080808);overflow:hidden;box-shadow:0 16px 45px rgba(0,0,0,.38);transition:transform .3s ease,box-shadow .3s ease}.khcs-pack-card:hover{transform:translateY(-7px);box-shadow:0 24px 55px rgba(0,0,0,.55)}
+      .khcs-pack-card.pro{border-color:rgba(156,0,0,.45)}.khcs-pack-card.epic{border-color:rgba(123,63,180,.55);box-shadow:0 0 30px rgba(123,63,180,.18),0 16px 45px rgba(0,0,0,.38)}.khcs-pack-card.basic{border-color:rgba(255,255,255,.16)}
+      .khcs-pack-card-head{padding:28px 20px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08)}.khcs-pack-card-head h4{margin:0;font:800 32px Cinzel,serif;letter-spacing:4px;color:#eee}.khcs-pack-card-head small{display:block;margin-top:8px;color:#777;font-size:12px}.khcs-pack-card-section{padding:20px;border-bottom:1px solid rgba(255,255,255,.06)}.khcs-pack-card-section h5{margin:0 0 14px;color:#aaa;font:700 14px Cinzel,serif;letter-spacing:1.3px}.khcs-pack-card-list{display:grid;gap:9px}.khcs-pack-card-row{display:flex;justify-content:space-between;gap:14px;color:#aaa;font-size:14px}.khcs-pack-card-row b{color:#ddd}.khcs-pack-card-row span{color:#fff;font-weight:800}.khcs-pack-card-footer{margin-top:auto;padding:20px;text-align:center;border-top:1px solid rgba(255,255,255,.08)}.khcs-pack-card-footer strong{display:block;color:#fff;font:900 24px Cinzel,serif;text-shadow:0 0 18px rgba(255,255,255,.18)}.khcs-pack-card-footer small{display:block;margin-top:7px;color:#777;font-size:12px}
+      .khcs-pack-card-note{padding:0 20px 18px;color:#999;font-size:12px;line-height:1.9;text-align:center}.khcs-pack-card-note b{color:#ddd;display:block}.khcs-pack-card-note span{display:block}
+      @keyframes khcsPackIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+      @media(max-width:760px){.khcs-pack-grid{grid-template-columns:1fr}.khcs-pack-switch{top:6px}.khcs-pack-switch button{flex:1;padding:10px 12px}}
+
       .khcs-empty{text-align:center;padding:90px 20px;color:#666}.khcs-empty-mark{font-size:34px;color:#555}.khcs-empty h3{color:#aaa}.khcs-empty p{color:#666}
       .khcs-founding-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;align-items:stretch}
       .khcs-package{position:relative;display:flex;flex-direction:column;min-height:100%;border:1px solid rgba(255,255,255,.12);border-radius:28px;background:radial-gradient(circle at 50% 0,rgba(255,255,255,.09),transparent 34%),linear-gradient(180deg,#171717,#080808 72%);overflow:hidden;box-shadow:0 16px 45px rgba(0,0,0,.38);transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s,border-color .35s}
@@ -164,9 +184,20 @@
     side.innerHTML=Object.entries(categories).map(([k,v],i)=>'<button class="khcs-tab '+(i===0?"active":"")+'" type="button" data-khcs-shop="'+k+'"><span>'+v+'</span><small>'+k.toUpperCase()+'</small></button>').join("");
     openShop("founding");
   }
+  function renderPacks(mode){
+    const root=document.getElementById("khcs-shop-main");if(!root)return;
+    const packList=shopPacks[mode]||shopPacks.resources;
+    const isArmy=mode==="army";
+    const section=(title,rows)=>'<section class="khcs-pack-card-section"><h5>'+title+'</h5><div class="khcs-pack-card-list">'+rows.map(r=>'<div class="khcs-pack-card-row"><b>'+esc(r[0])+'</b><span>'+esc(r[1])+'</span></div>').join("")+'</div></section>';
+    root.innerHTML='<div class="khcs-head"><h3>پک‌ها</h3><p>'+ (isArmy?"پک‌های ارتش":"پک‌های منابع") +'</p></div><div class="khcs-pack-switch"><button type="button" class="'+(!isArmy?"active":"")+'" data-khcs-pack-mode="resources">💎 منابع</button><button type="button" class="'+(isArmy?"active":"")+'" data-khcs-pack-mode="army">⚔️ ارتش</button></div><div class="khcs-packs-content"><div class="khcs-pack-grid">'+packList.map(p=>'<article class="khcs-pack-card '+p.className+'"><header class="khcs-pack-card-head"><h4>'+esc(p.name)+'</h4><small>KILL THE KING</small></header>'+section(isArmy?"🩸 واحد های جنگی 🩸":"💎 منابع",p.rows||p.units)+(isArmy?section("🪜 ادوات 🪜",p.siege):'<div class="khcs-pack-card-note"><b>'+esc(p.lord)+'</b><span>'+esc(p.multi)+'</span></div>')+'<footer class="khcs-pack-card-footer"><strong>👑 PRICE: '+esc(p.price)+'</strong><small>🔄 RENEW : '+esc(p.renew)+'</small></footer></article>').join("")+'</div></div>';
+  }
   function openShop(k){
     const root=document.getElementById("khcs-shop-main");if(!root)return;
     document.querySelectorAll("[data-khcs-shop]").forEach(b=>b.classList.toggle("active",b.dataset.khcsShop===k));
+    if(k==="packs"){
+      renderPacks("resources");
+      return;
+    }
     if(k!=="founding"){
       root.innerHTML='<div class="khcs-head"><h3>'+esc(categories[k])+'</h3><p>محتوای این دسته هنوز اضافه نشده است.</p></div>'+empty(categories[k],"بعداً آیتم‌های این دسته اضافه می‌شوند.");
       return;
@@ -194,7 +225,7 @@
       document.querySelectorAll("[data-khcs-region]").forEach(b=>b.classList.toggle("active",b.dataset.khcsRegion===activeRegion));
     }
     const c=e.target.closest("[data-khcs-character]");if(c)window.khataOpenCharacter(c.dataset.khcsCharacter);
-    const s=e.target.closest("[data-khcs-shop]");if(s)openShop(s.dataset.khcsShop);
+    const s=e.target.closest("[data-khcs-shop]");if(s)openShop(s.dataset.khcsShop);\n    const pm=e.target.closest("[data-khcs-pack-mode]");if(pm)renderPacks(pm.dataset.khcsPackMode);
   });
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
 })();
