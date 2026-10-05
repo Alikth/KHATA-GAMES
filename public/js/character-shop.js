@@ -32,6 +32,11 @@
   ];
   const regions=["The North","Riverlands","Vale","Iron Islands","Westerlands","Crownlands","Stormlands","Reach","Dorne","The Wall"];
   const categories={founding:"تأسیس",packs:"پک‌ها",items:"آیتم‌ها",special:"ویژه"};
+  const foundingPackages=[
+    {name:"BASIC",className:"basic",price:"399T💎",resources:[["👥 رعیت","600"],["💰 سکه","5000"],["🪵 چوب","500"],["🪨 سنگ","500"],["⛓ آهن","500"],["🍇 انگور","50"],["🥩 گوشت","500"],["🐟 ماهی","500"],["🌾 غلات","4000"],["🐎 اسب","0"],["🌑 شیشه اژدها","0"],["🧪 وایلدفایر","0"]],buildings:[["🌾 مزرعه","Lv.1","500"],["🪵 چوب‌بری","Lv.0","0"],["🪨 معدن سنگ","Lv.0","0"],["⛓ معدن آهن","Lv.0","0"],["🛒 بازارچه","Lv.0","0"],["🥩 کشتارگاه","Lv.0","0"],["🐎 اصطبل","Lv.0","0"],["🏘️ دهکده","Lv.1","0"],["🎮 مرکز تفریحی","Lv.0","0"]],military:[["🗡️ کمپ شمشیرزن","Lv.1","100"],["🏹 کمپ کماندار","Lv.0","0"],["🔱 کمپ نیزه‌دار","Lv.0","0"],["🏇 کمپ سواره‌نظام","Lv.0","0"],["⭐ کمپ ویژه اقلیم","Lv.0","0"],["🏭 ادوات","","0"],["⛵ کشتی‌سازی","","0"]],units:[["🗡 شمشیرزن","500"],["🏹 کماندار","200"],["🔱 نیزه‌دار","100"],["🏇 سواره‌نظام","100"],["⭐ نیروی ویژه اقلیم","50"],["🪜 نردبان","5"],["🔩 دژکوب","3"],["☄️ منجنیق","2"],["🦂 اسکورپ","1"],["🏗️ برج محاصره","1"]],fleet:[["⛵ کشتی ترابری","1"],["⛴️ کشتی جنگی","1"]]},
+    {name:"PRO",className:"pro",price:"849T💎",resources:[["👥 رعیت","500"],["💰 سکه","9000"],["🪵 چوب","1100"],["🪨 سنگ","1000"],["⛓ آهن","950"],["🍇 انگور","100"],["🥩 گوشت","750"],["🐟 ماهی","750"],["🌾 غلات","6000"],["🐎 اسب","70"],["🌑 شیشه اژدها","50"],["🧪 وایلدفایر","1"]],buildings:[["🌾 مزرعه","Lv.3","1500"],["🪵 چوب‌بری","Lv.1","300"],["🪨 معدن سنگ","Lv.1","50"],["⛓ معدن آهن","Lv.1","100"],["🛒 بازارچه","Lv.1","800"],["🥩 کشتارگاه","Lv.1","100"],["🐎 اصطبل","Lv.1","20"],["🏘️ دهکده","Lv.1","50"],["🎮 مرکز تفریحی","Lv.1","500"]],military:[["🗡️ کمپ شمشیرزن","Lv.3","300"],["🏹 کمپ کماندار","Lv.2","200"],["🔱 کمپ نیزه‌دار","Lv.2","200"],["🏇 کمپ سواره‌نظام","Lv.2","200"],["⭐ کمپ ویژه اقلیم","Lv.1","50"],["🏭 ادوات","","2"],["⛵ کشتی‌سازی","","1"]],units:[["🗡 شمشیرزن","850"],["🏹 کماندار","400"],["🔱 نیزه‌دار","300"],["🏇 سواره‌نظام","250"],["⭐ نیروی ویژه اقلیم","100"],["🪜 نردبان","10"],["🔩 دژکوب","5"],["☄️ منجنیق","4"],["🦂 اسکورپ","3"],["🏗️ برج محاصره","3"]],fleet:[["⛵ کشتی ترابری","2"],["⛴️ کشتی جنگی","3"]]},
+    {name:"EPIC",className:"epic",price:"1299T💎",resources:[["👥 رعیت","750"],["💰 سکه","12000"],["🪵 چوب","1450"],["🪨 سنگ","1200"],["⛓ آهن","1150"],["🍇 انگور","200"],["🥩 گوشت","1000"],["🐟 ماهی","1000"],["🌾 غلات","8000"],["🐎 اسب","150"],["🌑 شیشه اژدها","80"],["🧪 وایلدفایر","2"]],buildings:[["🌾 مزرعه","Lv.4","2000"],["🪵 چوب‌بری","Lv.2","600"],["🪨 معدن سنگ","Lv.2","100"],["⛓ معدن آهن","Lv.2","200"],["🛒 بازارچه","Lv.2","1600"],["🥩 کشتارگاه","Lv.2","200"],["🐎 اصطبل","Lv.2","40"],["🏘️ دهکده","Lv.3","150"],["🎮 مرکز تفریحی","Lv.2","1000"]],military:[["🗡️ کمپ شمشیرزن","Lv.4","400"],["🏹 کمپ کماندار","Lv.3","300"],["🔱 کمپ نیزه‌دار","Lv.3","300"],["🏇 کمپ سواره‌نظام","Lv.3","300"],["⭐ کمپ ویژه اقلیم","Lv.2","100"],["🏭 ادوات","","3"],["⛵ کشتی‌سازی","","3"]],units:[["🗡 شمشیرزن","1200"],["🏹 کماندار","850"],["🔱 نیزه‌دار","650"],["🏇 سواره‌نظام","500"],["⭐ نیروی ویژه اقلیم","200"],["🪜 نردبان","20"],["🔩 دژکوب","10"],["☄️ منجنیق","8"],["🦂 اسکورپ","4"],["🏗️ برج محاصره","4"]],fleet:[["⛵ کشتی ترابری","6"],["⛴️ کشتی جنگی","8"]]}
+  ];
   window.khataLordByCastle={Winterfell:"sam-stark","The Dreadfort":"roderick-bolton",Karhold:"edrik-karstark","The Twins":"elyas-tully",Seagard:"harwyn-mallister","The Eyrie":"elyon-arryn",Gulltown:"marq-grafton",Redfort:"alric-redfort",Pyke:"euron-greyjoy","Ten Towers":"maron-harlaw",Hammerhorn:"gorold-goodbrother","Casterly Rock":"damon-lannister",Hornvale:"tytos-brax",Ashemark:"addam-marbrand",Dragonstone:"vaeron-targaryen","Sharp Point":"lucan-bar-emmon","Storm's End":"stannis-baratheon",Fellwood:"ronnel-fell",Blackhaven:"beric-dondarrion",Highgarden:"mace-tyrell","Horn Hill":"randyll-tarly",Oldtown:"leyton-hightower",Sunspear:"doran-martell",Kingsgrave:"nymeria-manwoody",Yronwood:"anders-yronwood","Castle Black":"jon-snow",Eastwatch:"eddison-tollett","Shadow Tower":"alliser-thorne"};
 
   const esc=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
@@ -90,6 +95,20 @@
       .khcs-tab.active{border-color:#777;background:#262626}.khcs-tab.active:before{content:'';position:absolute;right:0;top:0;bottom:0;width:3px;background:#9c0000}
       .khcs-head h3{margin:0;color:#eee;font:600 27px Cinzel,serif}.khcs-head p{margin:7px 0 20px;color:#707070}
       .khcs-empty{text-align:center;padding:90px 20px;color:#666}.khcs-empty-mark{font-size:34px;color:#555}.khcs-empty h3{color:#aaa}.khcs-empty p{color:#666}
+      .khcs-founding-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start}
+      .khcs-package{border:1px solid rgba(255,255,255,.1);background:linear-gradient(180deg,#111,#090909);overflow:hidden}
+      .khcs-package-head{padding:20px;border-bottom:1px solid rgba(255,255,255,.08);text-align:center}
+      .khcs-package-head h4{margin:0;font:700 25px Cinzel,serif;letter-spacing:2px;color:#eee}
+      .khcs-package.basic .khcs-package-head{border-top:3px solid #777}.khcs-package.pro .khcs-package-head{border-top:3px solid #9c0000}.khcs-package.epic .khcs-package-head{border-top:3px solid #7b3fb4}
+      .khcs-package-price{display:block;margin-top:8px;color:#c9c9c9;font-weight:700}
+      .khcs-package-section{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06)}
+      .khcs-package-section:last-child{border-bottom:0}
+      .khcs-package-section h5{margin:0 0 10px;color:#aaa;font:600 11px Cinzel,serif;letter-spacing:1px}
+      .khcs-package-list{display:grid;gap:6px}
+      .khcs-package-row{display:flex;justify-content:space-between;gap:10px;color:#999;font-size:11px}
+      .khcs-package-row b{color:#ddd;font-weight:500}.khcs-package-row span:last-child{color:#bbb;font-weight:600;white-space:nowrap}
+      @media(max-width:1000px){.khcs-founding-grid{grid-template-columns:1fr 1fr}}
+      @media(max-width:680px){.khcs-founding-grid{grid-template-columns:1fr}}
       .khcs-modal{max-width:980px}.khcs-detail{display:grid;grid-template-columns:minmax(260px,380px) 1fr;gap:28px;align-items:center}
       .khcs-detail img{width:100%;aspect-ratio:1/1;max-height:650px;object-fit:contain;background:#111}.khcs-detail h2{margin:0;font:600 31px Cinzel,serif;color:#eee}.khcs-detail p{margin-top:15px;color:#999;line-height:2}
       .lord-link{display:inline-block;margin-top:10px;padding:7px 11px;border:1px solid rgba(255,255,255,.15);color:#aaa;font-size:11px;cursor:pointer}
@@ -135,7 +154,12 @@
   function openShop(k){
     const root=document.getElementById("khcs-shop-main");if(!root)return;
     document.querySelectorAll("[data-khcs-shop]").forEach(b=>b.classList.toggle("active",b.dataset.khcsShop===k));
-    root.innerHTML='<div class="khcs-head"><h3>'+esc(categories[k])+'</h3><p>محتوای این دسته هنوز اضافه نشده است.</p></div>'+empty(categories[k],"بعداً آیتم‌های این دسته اضافه می‌شوند.");
+    if(k!=="founding"){
+      root.innerHTML='<div class="khcs-head"><h3>'+esc(categories[k])+'</h3><p>محتوای این دسته هنوز اضافه نشده است.</p></div>'+empty(categories[k],"بعداً آیتم‌های این دسته اضافه می‌شوند.");
+      return;
+    }
+    const section=(title,rows,three)=>'<section class="khcs-package-section"><h5>'+title+'</h5><div class="khcs-package-list">'+rows.map(r=>'<div class="khcs-package-row"><b>'+esc(r[0])+(three&&r[1]?'〔'+esc(r[1])+'〕':'')+'</b><span>'+esc(three?r[2]:r[1])+'</span></div>').join("")+'</div></section>';
+    root.innerHTML='<div class="khcs-head"><h3>تأسیس</h3><p>سه بسته‌ی آغازین قلمرو، به‌صورت جداگانه و کامل.</p></div><div class="khcs-founding-grid">'+foundingPackages.map(p=>'<article class="khcs-package '+p.className+'"><header class="khcs-package-head"><h4>'+esc(p.name)+'</h4><span class="khcs-package-price">PRICE: '+esc(p.price)+'</span></header>'+section("📦 منابع",p.resources,false)+section("🏗️ ساختمان‌ها",p.buildings,true)+section("🛡️ اردوگاه نظامی",p.military,true)+section("⚔️ نیروهای نظامی",p.units,false)+section("⚓ ناوگان دریایی",p.fleet,false)+'</article>').join("")+'</div>';
   }
   function init(){
     css();renderRegionTabs();setupModal();setupShop();
