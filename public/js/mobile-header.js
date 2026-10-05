@@ -17,24 +17,5 @@
   document.addEventListener('click',function(e){const target=e.target.closest('.nav-btn,.primary,.danger');if(!target||reduced)return;const app=document.getElementById('gameApp');if(app){app.classList.remove('mobile-fx-shake');void app.offsetWidth;app.classList.add('mobile-fx-shake');}});
   mobile.addEventListener?.('change',function(){if(!mobile.matches)layer.remove();});
 
-  (function installAssetIcons(){
-    if(window.__khataAssetIconsInstalled)return;window.__khataAssetIconsInstalled=true;
-    const map={archer:[0,0],catapult:[1,0],cavalry:[2,0],coins:[3,0],dragon_glass:[4,0],fish:[5,0],grain:[6,0],grapes:[0,1],horses:[1,1],iron:[2,1],ladder:[3,1],lord:[4,1],meat:[5,1],ram:[6,1],scorpion:[0,2],siege_tower:[1,2],spearman:[2,2],stone:[3,2],swordsman:[4,2],tar:[5,2],wood:[6,2]};
-    const labels=[
-      ['سواره‌نظام','cavalry'],['سواره نظام','cavalry'],['cavalry','cavalry'],['mounted cavalry','cavalry'],
-      ['کماندار','archer'],['archer','archer'],['شمشیرزن','swordsman'],['شمشیر زن','swordsman'],['swordsman','swordsman'],
-      ['نیزه‌دار','spearman'],['نیزه دار','spearman'],['spearman','spearman'],['axeman','swordsman'],['تبرزن','swordsman'],
-      ['نردبان','ladder'],['ladder','ladder'],['منجنیق','catapult'],['catapult','catapult'],['دژکوب','ram'],['ram','ram'],
-      ['اسکورپین','scorpion'],['اسکورپ','scorpion'],['scorpion','scorpion'],['برج محاصره','siege_tower'],['siege tower','siege_tower'],
-      ['سکه','coins'],['coin','coins'],['coins','coins'],['چوب','wood'],['wood','wood'],['سنگ','stone'],['stone','stone'],['آهن','iron'],['iron','iron'],
-      ['گوشت','meat'],['meat','meat'],['ماهی','fish'],['fish','fish'],['غلات','grain'],['گندم','grain'],['grain','grain'],['اسب','horses'],['horse','horses'],['horses','horses'],
-      ['شیشه اژدها','dragon_glass'],['dragon glass','dragon_glass'],['قیر','tar'],['tar','tar'],['انگور','grapes'],['grape','grapes'],['grapes','grapes'],['لرد','lord'],['lord','lord']
-    ];
-    let spriteUrl=null;
-    function iconKey(text){const t=String(text||'').toLowerCase();for(const [label,key] of labels)if(t.includes(label.toLowerCase()))return key;return null;}
-    function installSpriteStyle(){if(document.getElementById('khata-asset-icon-style'))return;const st=document.createElement('style');st.id='khata-asset-icon-style';st.textContent='.khata-asset-icon{display:inline-block;width:28px;height:28px;flex:0 0 28px;background-image:url("'+spriteUrl+'");background-size:224px 96px;background-repeat:no-repeat;vertical-align:-8px;margin-inline-end:5px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.38))}.cm-resources .khata-asset-icon{width:30px;height:30px;flex-basis:30px;vertical-align:-9px}.cm-army-unit .khata-asset-icon,.cm-card-head .khata-asset-icon{width:34px;height:34px;flex-basis:34px;vertical-align:-11px;border-radius:6px}.cm-card-meta .khata-asset-icon{width:20px;height:20px;flex-basis:20px;vertical-align:-5px;margin-inline-end:3px}';document.head.appendChild(st);}
-    function apply(root=document){if(!spriteUrl)return;installSpriteStyle();const nodes=root.querySelectorAll?.('.cm-resources span,.cm-army-unit span,.cm-card-head strong,.cm-card-meta span,.cm-workshop span')||[];nodes.forEach(el=>{if(el.dataset.khataAssetIcon)return;const key=iconKey(el.textContent);if(!key)return;const [col,row]=map[key];const icon=document.createElement('i');icon.className='khata-asset-icon';icon.setAttribute('aria-hidden','true');icon.style.backgroundPosition=(-col*32)+'px '+(-row*32)+'px';const clone=el.cloneNode(true);clone.querySelectorAll?.('.khata-asset-icon').forEach(x=>x.remove());const text=clone.textContent.replace(/[\u{1F300}-\u{1FAFF}\u2600-\u{27BF}\uFE0F\u200D]/gu,'').replace(/\s{2,}/g,' ').trim();el.textContent='';el.append(icon,document.createTextNode(text));el.dataset.khataAssetIcon='1';});}
-    async function boot(){try{const res=await fetch('/assets/icons-sprite.b64?v=2',{cache:'force-cache'});if(!res.ok)return;const b64=await res.text();const raw=atob(b64.trim()),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);spriteUrl=URL.createObjectURL(new Blob([bytes],{type:'image/webp'}));apply();new MutationObserver(()=>apply()).observe(document.body,{subtree:true,childList:true});}catch(e){console.debug('asset icons unavailable',e);}}
-    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
-  })();
+
 })();
