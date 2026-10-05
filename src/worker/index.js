@@ -26,7 +26,6 @@ import {
   requireUser,
   createSession,
   deleteSession,
-  cleanupExpiredSessions,
   rateLimit,
   publicUser,
   players
@@ -1450,7 +1449,7 @@ export default {
         return env.REALTIME.get(id).fetch(new Request("https://realtime/connect",{method:"GET",headers:request.headers}));
       }
       if(url.pathname.startsWith("/api/")){
-        if(url.pathname==="/api/auth/status"||url.pathname==="/api/auth/login"||url.pathname==="/api/auth/register")await cleanupExpiredSessions(env);
+        // Expired sessions are cleaned outside the latency-sensitive auth request path.
         const response=await handleApi(request,env,url);
         if(request.method!=="GET" && response.ok && shouldBroadcastRealtime(url.pathname))ctx.waitUntil(broadcastRealtime(env,{type:"game_update",path:url.pathname,at:Date.now()}));
         return response;
