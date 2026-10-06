@@ -86,6 +86,8 @@
                 <button class="admin-menu-item" type="button" data-admin-target="add-castle"><span>افزودن قلعه</span><i>←</i></button>
                 <button class="admin-menu-item" type="button" data-admin-target="scenarios"><span>سناریوها</span><i>←</i></button>
                 <button class="admin-menu-item" type="button" data-admin-target="roles"><span>رول‌ها</span><i>←</i></button>
+                <button class="admin-menu-item" type="button" data-admin-target="timing"><span>زمان‌بندی</span><i>←</i></button>
+                <button class="admin-menu-item" type="button" data-admin-target="purchases"><span>خرید و بسته‌ها</span><i>←</i></button>
               </aside>
               <div class="admin-panels">
                 <div class="admin-panel-view active" data-admin-panel="control">
@@ -143,6 +145,8 @@
                   <section class="admin-section"><div class="admin-section-head"><div><span>SCENARIOS</span><h2>سناریوها</h2></div><button class="ghost" id="adminRefreshScenarios">↻ بروزرسانی</button></div><div id="adminScenarioList" class="admin-war-list"></div></section>
                 </div>
 
+                <div class="admin-panel-view" data-admin-panel="timing"><section class="admin-section"><div class="admin-section-head"><div><span>TIMING CONTROL</span><h2>کنترل زمان‌ها</h2></div></div><div class="admin-grid"><div class="admin-box"><h3>مهلت دستور لشکرکشی</h3><input id="adminWarWindowMinutes" type="number" min="1" max="10080" value="90"><small>دقیقه</small></div><div class="admin-box"><h3>مهلت سناریو</h3><input id="adminScenarioWindowHours" type="number" min="1" max="168" value="24"><small>ساعت</small></div><div class="admin-box"><h3>فاصله رول</h3><input id="adminRoleCooldownHours" type="number" min="1" max="720" value="48"><small>ساعت</small></div></div><button class="primary" id="adminSaveSettings">ذخیره تنظیمات</button></section></div>
+                <div class="admin-panel-view" data-admin-panel="purchases"><section class="admin-section"><div class="admin-section-head"><div><span>APPLY PURCHASE</span><h2>اعمال خرید روی قلعه</h2></div></div><div class="admin-box"><select id="adminPurchaseCastle"></select><select id="adminPurchaseKind"><option value="founding">تأسیس</option><option value="resources">پک منابع</option><option value="army">پک ارتش</option></select><select id="adminPurchasePackage"><option>BASIC</option><option>EPIC</option></select><button class="primary" id="adminApplyPurchase">اعمال بسته</button></div></section></div>
                 <div class="admin-panel-view" data-admin-panel="roles">
                   <section class="admin-section"><div class="admin-section-head"><div><span>ROLES</span><h2>رول‌ها</h2></div><button class="ghost" id="adminRefreshRoles">↻ بروزرسانی</button></div><div id="adminRoleList" class="admin-war-list"></div></section>
                 </div>
@@ -160,11 +164,14 @@
   <div id="submissionModal" class="modal hidden"><div class="modal-card submission-modal-card"><button class="close" id="submissionClose">×</button><p id="submissionKicker" class="eyebrow">SUBMISSION</p><h2 id="submissionTitle">ارسال متن</h2><p id="submissionContext" class="silver"></p><textarea id="submissionText" class="submission-textarea" maxlength="8000" placeholder="متن را اینجا وارد یا paste کن..."></textarea><div id="submissionMessage"></div><button id="submissionSend" class="primary wide" type="button">ارسال</button></div></div>
   <div id="registerModal" class="modal hidden"><div class="modal-card"><button class="close" id="closeModal">×</button><p class="eyebrow">HOUSE CLAIM</p><h2 id="selectedCastle"></h2><p id="selectedHouse" class="silver"></p><form id="registerForm"><label>Telegram Username</label><div class="telegram-input"><span>@</span><input id="username" maxlength="32" placeholder="YourUsername" autocomplete="off"></div><small>فقط Username تلگرام؛ آیدی عددی پذیرفته نمی‌شود.</small><button class="primary" type="submit">⚔ CLAIM CASTLE</button></form><div id="formMessage"></div></div></div>
   <footer>KHATA GAMES · THE REALM AWAITS</footer>
-  <script src="/js/app-v2.js?v=18"></script>
+  <script src="/js/app-v2.js?v=19"></script>
   <script src="/js/mobile-header.js?v=3"></script>
-  <script src="/js/character-shop.js?v=13"></script>
+  <script src="/js/character-shop.js?v=14"></script>
   <script src="/js/castle-management-v2.js?v=18"></script>
   <script src="/js/war-expedition.js?v=6"></script>
   <script src="/js/trade.js?v=7"></script>
+  <script src="/js/player-social.js?v=1"></script>
+  <script src="/js/castle-notifications.js?v=1"></script>
+  <script src="/js/admin-purchases.js?v=1"></script>
 </body>
 </html>

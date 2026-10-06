@@ -88,6 +88,10 @@ function shouldBroadcastRealtime(path){
     path==="/api/admin/controls" ||
     path==="/api/admin/game-runtime" ||
     path==="/api/admin/castle-assets" ||
+    path==="/api/notifications" ||
+    /^\/api\/notifications\/[^/]+\/(read|unread)$/.test(path) ||
+    /^\/api\/players\/[^/]+\/profile$/.test(path) ||
+    path==="/api/admin/settings" || path==="/api/admin/purchases" || path==="/api/admin/trades/rollback" ||
     path.startsWith("/api/admin/war-expeditions/") ||
     /^\/api\/admin\/players(?:\/[^/]+)?$/.test(path) ||
     /^\/api\/admin\/castles(?:\/[^/]+)?$/.test(path);
@@ -115,17 +119,10 @@ function warElapsedSeconds(row,nowMs=Date.now(),running=true){let n=Number(row.e
 function legacyWarArrivalDate(createdAt,arrivalTime){const d=new Date(createdAt),m=/^(\d{2}):(\d{2})$/.exec(String(arrivalTime||""));if(!m||Number.isNaN(d.getTime()))return null;d.setUTCHours(Number(m[1]),Number(m[2]),0,0);if(d.getTime()<=new Date(createdAt).getTime())d.setUTCDate(d.getUTCDate()+1);return d;}
 function warIsActive(row,runtime={running:true}){if(Number(row.cancelled)||row.command)return false;const duration=Number(row.duration_minutes||0)*60;if(duration>0)return warElapsedSeconds(row,Date.now(),runtime.running)<duration;const arrival=legacyWarArrivalDate(row.created_at||row.createdAt,row.arrival_time||row.arrivalTime);return !!arrival&&arrival.getTime()>Date.now();}
 const WAR_COMMAND_WINDOW_MS=90*60*1000;
-function warArrivalMs(row){const duration=Number(row.duration_minutes??row.durationMinutes??0)*60;if(duration>0){const started=Date.parse(row.run_started_at??row.runStartedAt??'');if(Number.isFinite(started))return started+duration*1000;const elapsed=Number(row.elapsed_seconds??row.elapsedSeconds??0);if(elapsed>=duration){const created=Date.parse(row.created_at??row.createdAt??'');if(Number.isFinite(created))return created+duration*1000;}return null;}const d=legacyWarArrivalDate(row.created_at??row.createdAt,row.arrival_time??row.arrivalTime);return d?d.getTime():null;}
-function warCommandExpiresAtMs(row){const arrival=warArrivalMs(row);return arrival==null?null:arrival+WAR_COMMAND_WINDOW_MS;}
-function warCommandMeta(row,now=Date.now()){const expires=warCommandExpiresAtMs(row);return {commandExpiresAt:expires?new Date(expires).toISOString():null,commandExpired:!!(expires&&now>=expires)};}
-function scenarioDeadlineAt(commandAt){
-  const ms=Date.parse(commandAt||"");
-  if(!Number.isFinite(ms))return null;
-  const parts=Object.fromEntries(new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Tehran",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date(ms)).map(x=>[x.type,x.value]));
-  const year=Number(parts.year),month=Number(parts.month),day=Number(parts.day);
-  if(!year||!month||!day)return null;
-  return new Date(Date.UTC(year,month-1,day+1,11,30,0)).toISOString();
-}
+function warArrivalMs(row,windowMinutes=90){const duration=Number(row.duration_minutes??row.durationMinutes??0)*60;if(duration>0){const started=Date.parse(row.run_started_at??row.runStartedAt??'');if(Number.isFinite(started))return started+duration*1000;const elapsed=Number(row.elapsed_seconds??row.elapsedSeconds??0);if(elapsed>=duration){const created=Date.parse(row.created_at??row.createdAt??'');if(Number.isFinite(created))return created+duration*1000;}return null;}const d=legacyWarArrivalDate(row.created_at??row.createdAt,row.arrival_time??row.arrivalTime);return d?d.getTime():null;}
+function warCommandExpiresAtMs(row,windowMinutes=90){const arrival=warArrivalMs(row,windowMinutes);return arrival==null?null:arrival+Number(windowMinutes||90)*60000;}
+function warCommandMeta(row,now=Date.now(),windowMinutes=90){const expires=warCommandExpiresAtMs(row,windowMinutes);return {commandExpiresAt:expires?new Date(expires).toISOString():null,commandExpired:!!(expires&&now>=expires)};}
+function scenarioDeadlineAt(commandAt,windowHours=24){const ms=Date.parse(commandAt||"");return Number.isFinite(ms)?new Date(ms+Math.max(1,Number(windowHours)||24)*3600000).toISOString():null;}
 let warRuntimeSchemaPromise=null;
 async function ensureWarRuntime(env){
   if(warRuntimeSchemaPromise)return warRuntimeSchemaPromise;
@@ -217,6 +214,7 @@ async function ensureWarLogSchema(env){
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN defender_username TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN defender_lord_name TEXT").run();}catch{}
   try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN scenario_deadline_at TEXT").run();}catch{}
+  try{await env.DB.prepare("ALTER TABLE war_logs ADD COLUMN command_window_minutes INTEGER NOT NULL DEFAULT 90").run();}catch{}
   if(durationAdded)await env.DB.prepare("UPDATE war_logs SET duration_minutes=0 WHERE run_started_at IS NULL AND elapsed_seconds=0 AND command IS NULL").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_war_logs_attacker_state ON war_logs(attacker_account_id,cancelled,command,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_war_logs_destination_state ON war_logs(destination_castle,cancelled,command,created_at)").run();
@@ -271,16 +269,22 @@ async function ensureNarrativeSchema(env){
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_scenario_created ON scenario_submissions(created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_scenario_submitter ON scenario_submissions(submitter_account_id,created_at)").run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_role_account_created ON role_submissions(account_id,created_at)").run();
+  for(const q of ["ALTER TABLE scenario_submissions ADD COLUMN checked INTEGER NOT NULL DEFAULT 0","ALTER TABLE scenario_submissions ADD COLUMN checked_at TEXT","ALTER TABLE scenario_submissions ADD COLUMN result TEXT","ALTER TABLE role_submissions ADD COLUMN checked INTEGER NOT NULL DEFAULT 0","ALTER TABLE role_submissions ADD COLUMN checked_at TEXT","ALTER TABLE role_submissions ADD COLUMN result TEXT"]){try{await env.DB.prepare(q).run()}catch{}}
 
   })().catch(e=>{narrativeSchemaPromise=null;throw e});
   return narrativeSchemaPromise;
 }
+let notificationSchemaPromise=null,gameSettingsSchemaPromise=null;
+async function ensureNotificationSchema(env){if(notificationSchemaPromise)return notificationSchemaPromise;notificationSchemaPromise=(async()=>{await env.DB.prepare('CREATE TABLE IF NOT EXISTS notifications (id TEXT PRIMARY KEY,account_id TEXT NOT NULL,castle TEXT,type TEXT NOT NULL,title TEXT NOT NULL,body TEXT NOT NULL,related_id TEXT,read_at TEXT,created_at TEXT NOT NULL)').run();await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_notifications_account_created ON notifications(account_id,created_at)').run();})().catch(e=>{notificationSchemaPromise=null;throw e});return notificationSchemaPromise;}
+async function notifyMany(env,items){if(!items?.length)return;await ensureNotificationSchema(env);const now=new Date().toISOString();await env.DB.batch(items.filter(x=>x?.accountId).map(x=>env.DB.prepare('INSERT INTO notifications(id,account_id,castle,type,title,body,related_id,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(newId(),x.accountId,x.castle||null,x.type||"info",x.title||"اعلان",x.body||"",x.relatedId||null,now)));}
+async function ensureGameSettings(env){if(gameSettingsSchemaPromise)return gameSettingsSchemaPromise;gameSettingsSchemaPromise=(async()=>{await env.DB.prepare('CREATE TABLE IF NOT EXISTS game_settings (setting_key TEXT PRIMARY KEY,value TEXT NOT NULL)').run();await env.DB.prepare("INSERT OR IGNORE INTO game_settings(setting_key,value) VALUES ('war_command_window_minutes','90'),('scenario_window_hours','24'),('role_cooldown_hours','48')").run();})().catch(e=>{gameSettingsSchemaPromise=null;throw e});return gameSettingsSchemaPromise;}
+async function getGameSettingNumber(env,key,fallback){await ensureGameSettings(env);const r=await env.DB.prepare("SELECT value FROM game_settings WHERE setting_key=?").bind(key).first();const n=Number(r?.value);return Number.isFinite(n)&&n>0?n:fallback;}
 let gameControlsSchemaPromise=null;
 async function ensureGameControls(env){
   if(gameControlsSchemaPromise)return gameControlsSchemaPromise;
   gameControlsSchemaPromise=(async()=>{
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS game_controls (control_key TEXT PRIMARY KEY, locked INTEGER NOT NULL DEFAULT 0)`).run();
-  await env.DB.prepare("INSERT OR IGNORE INTO game_controls(control_key,locked) VALUES ('war',0),('trade',0),('claim',0)").run();
+  await env.DB.prepare("INSERT OR IGNORE INTO game_controls(control_key,locked) VALUES ('war',0),('trade',0),('claim',0)").run();await ensureGameSettings(env);
 
   })().catch(e=>{gameControlsSchemaPromise=null;throw e});
   return gameControlsSchemaPromise;
@@ -617,6 +621,9 @@ async function handleApi(request, env, url) {
     const [houseList,playerList]=await Promise.all([dynamicHouses(env),players(env)]);
     return json({houses:houseList,players:playerList});
   }
+  if(method==="GET"&&path.match(/^\/api\/players\/[^/]+\/profile$/)){const id=decodeURIComponent(path.split("/")[3]),p=await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE id=?").bind(id).first();if(!p)return json({error:"پروفایل پلیر پیدا نشد."},404);return json({profile:{id:p.id,username:p.username,telegramUrl:p.username?("https://t.me/"+String(p.username).replace(/^@/,"")):null,region:p.region,house:p.house,castle:p.castle,character:WAR_LORDS[p.castle]||"",createdAt:p.createdAt,naval:await isNavalCastle(env,p.castle)}});}
+  if(method==="GET"&&path==="/api/notifications"){const s=await requireUser(request,env);if(!s)return json({error:"ابتدا وارد حساب شوید."},401);await ensureNotificationSchema(env);const castle=String(url.searchParams.get("castle")||"");const rows=(await env.DB.prepare("SELECT id,castle,type,title,body,related_id AS relatedId,read_at AS readAt,created_at AS createdAt FROM notifications WHERE account_id=? AND (?='' OR castle=?) ORDER BY created_at DESC LIMIT 100").bind(s.user_id,castle,castle).all()).results;return json({items:rows});}
+  if(method==="POST"&&path.match(/^\/api\/notifications\/[^/]+\/(read|unread)$/)){const s=await requireUser(request,env);if(!s)return json({error:"ابتدا وارد حساب شوید."},401);await ensureNotificationSchema(env);const id=decodeURIComponent(path.split("/")[3]);await env.DB.prepare("UPDATE notifications SET read_at=? WHERE id=? AND account_id=?").bind(new Date().toISOString(),id,s.user_id).run();return json({ok:true});}
   if (method === "GET" && path === "/api/houses") return json(await dynamicHouses(env));
   if (method === "GET" && path === "/api/players") return json(await players(env));
   const session=await getSession(request,env);
@@ -898,8 +905,8 @@ async function handleApi(request, env, url) {
       }
     }
     const statements=[];for(const d of deductions)statements.push(env.DB.prepare(`UPDATE ${d.table} SET count=count-? WHERE castle=? AND ${d.keyField}=? AND count>=?`).bind(d.n,state.castle,d.key,d.n));
-    const id=newId(),createdAt=new Date().toISOString(),lordName=WAR_LORDS[source]||"";
-    statements.push(env.DB.prepare("INSERT INTO war_logs(id,week_key,created_at,attacker_account_id,attacker_username,lord_name,type,source_castle,destination_castle,arrival_time,is_fake,assets_json,duration_minutes,elapsed_seconds,run_started_at,lord_present) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,week,createdAt,accountId,user.username,lordName,type,source,destination,arrivalTime,isFake?1:0,JSON.stringify(isFake?{}:sanitizedAssets),durationMinutes,0,createdAt,lordPresent?1:0));
+    const id=newId(),createdAt=new Date().toISOString(),lordName=WAR_LORDS[source]||"",commandWindowMinutes=Math.floor(await getGameSettingNumber(env,"war_command_window_minutes",90));
+    statements.push(env.DB.prepare("INSERT INTO war_logs(id,week_key,created_at,attacker_account_id,attacker_username,lord_name,type,source_castle,destination_castle,arrival_time,is_fake,assets_json,duration_minutes,elapsed_seconds,run_started_at,lord_present,command_window_minutes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,week,createdAt,accountId,user.username,lordName,type,source,destination,arrivalTime,isFake?1:0,JSON.stringify(isFake?{}:sanitizedAssets),durationMinutes,0,createdAt,lordPresent?1:0,commandWindowMinutes));
     let result;
     try {
       result=await env.DB.batch(statements);
@@ -920,8 +927,7 @@ async function handleApi(request, env, url) {
     const rt=await warRuntime(env);
     if(Number(war.cancelled)||warIsActive(war,rt))return json({error:"این لشکرکشی هنوز به مقصد نرسیده است."},409);
     if(war.command)return json({error:"برای این لشکرکشی قبلاً دستور ثبت شده است."},409);
-    const commandExpiresAt=warCommandExpiresAtMs(war);
-    if(commandExpiresAt&&Date.now()>=commandExpiresAt)return json({error:"مهلت ۹۰ دقیقه‌ای ارسال دستور این لشکرکشی تمام شده است."},410);
+    const commandWindowMinutes=Number(war.command_window_minutes||await getGameSettingNumber(env,"war_command_window_minutes",90));const commandExpiresAt=warCommandExpiresAtMs(war,commandWindowMinutes);if(commandExpiresAt&&Date.now()>=commandExpiresAt)return json({error:"مهلت "+commandWindowMinutes+" دقیقه‌ای ارسال دستور این لشکرکشی تمام شده است."},410);
     let defenderAssets={};
     if(command==="attack"||command==="siege"){
       const rows=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(war.destination_castle).all()).results;
@@ -932,10 +938,7 @@ async function handleApi(request, env, url) {
     const defenderAccountId=defender?.accountId||null;
     const defenderUsername=defender?.username||"";
     const defenderLordName=WAR_LORDS[war.destination_castle]||"";
-    const scenarioDeadline=command==="attack"?scenarioDeadlineAt(commandAt):null;
-    const result=await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=?,defender_account_id=?,defender_username=?,defender_lord_name=?,scenario_deadline_at=? WHERE id=? AND attacker_account_id=? AND command IS NULL").bind(command,commandAt,JSON.stringify(defenderAssets),defenderAccountId,defenderUsername,defenderLordName,scenarioDeadline,id,session.user_id).run();
-    if(!result.meta?.changes)return json({error:"این لشکرکشی قبلاً دستور گرفته است."},409);
-    return json({ok:true,command});
+    const scenarioDeadline=command==="attack"?scenarioDeadlineAt(commandAt,await getGameSettingNumber(env,"scenario_window_hours",24)):null;const result=await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=?,defender_account_id=?,defender_username=?,defender_lord_name=?,scenario_deadline_at=? WHERE id=? AND attacker_account_id=? AND command IS NULL").bind(command,commandAt,JSON.stringify(defenderAssets),defenderAccountId,defenderUsername,defenderLordName,scenarioDeadline,id,session.user_id).run();if(!result.meta?.changes)return json({error:"این لشکرکشی قبلاً دستور گرفته است."},409);await notifyMany(env,[{accountId:session.user_id,castle:war.source_castle,type:"war_command",title:"دستور لشکرکشی ثبت شد",body:"دستور "+command+" برای "+war.destination_castle+" ثبت شد.",relatedId:id},...(defenderAccountId?[{accountId:defenderAccountId,castle:war.destination_castle,type:"war_command",title:"به قلعه‌ات دستور جنگی صادر شد",body:war.attacker_username+" علیه قلعه تو دستور "+command+" ثبت کرد.",relatedId:id}]:[])]);return json({ok:true,command});
   }
   if (method==="GET" && path==="/api/admin/game-runtime") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401); const rt=await warRuntime(env); return json({running:rt.running});
@@ -990,6 +993,10 @@ async function handleApi(request, env, url) {
     if(!qs.length)return json({error:"حداقل یک مقدار وارد کن."},400);qs.push(env.DB.prepare("UPDATE war_logs SET casualties_json=? WHERE id=? AND (casualties_json IS NULL OR casualties_json='{}')").bind(JSON.stringify(saved),id));const result=await env.DB.batch(qs);if(!result[qs.length-1]?.meta?.changes)return json({error:"تلفات همزمان ثبت شده است."},409);return json({ok:true});
   }
 
+  if(method==="GET"&&path==="/api/admin/settings"){if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);await ensureGameSettings(env);const rows=(await env.DB.prepare("SELECT setting_key AS key,value FROM game_settings").all()).results;return json({settings:Object.fromEntries(rows.map(x=>[x.key,Number(x.value)]))});}
+  if(method==="POST"&&path==="/api/admin/settings"){if(!sameOrigin(request)||!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},403);await ensureGameSettings(env);const b=await body(request);for(const [k,max] of Object.entries({war_command_window_minutes:10080,scenario_window_hours:168,role_cooldown_hours:720})){if(b[k]!==undefined){const n=Math.floor(Number(b[k]));if(!Number.isFinite(n)||n<1||n>max)return json({error:"مقدار نامعتبر است."},400);await env.DB.prepare("INSERT INTO game_settings(setting_key,value) VALUES(?,?) ON CONFLICT(setting_key) DO UPDATE SET value=excluded.value").bind(k,String(n)).run();}}return json({ok:true});}
+  if(method==="POST"&&path.match(/^\/api\/admin\/war-expeditions\/[^/]+\/timing$/)){if(!sameOrigin(request)||!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},403);const id=decodeURIComponent(path.split("/")[4]),b=await body(request),row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();if(!row)return json({error:"لشکرکشی پیدا نشد."},404);const ca=Math.floor(Number(b.commandMinutesAdd||0)),sa=Math.floor(Number(b.scenarioMinutesAdd||0)),qs=[];if(ca)qs.push(env.DB.prepare("UPDATE war_logs SET command_window_minutes=? WHERE id=?").bind(Math.min(10080,Math.max(1,Number(row.command_window_minutes||90)+ca)),id));if(sa){const base=Date.parse(row.scenario_deadline_at||row.command_at||new Date().toISOString());qs.push(env.DB.prepare("UPDATE war_logs SET scenario_deadline_at=? WHERE id=?").bind(new Date((Number.isFinite(base)?base:Date.now())+sa*60000).toISOString(),id));}if(qs.length)await env.DB.batch(qs);return json({ok:true});}
+  if(method==="POST"&&path==="/api/admin/purchases"){if(!sameOrigin(request)||!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},403);await ensureEconomySchema(env);const b=await body(request),castle=String(b.castle||""),kind=String(b.kind||""),pack=String(b.packageName||"").toUpperCase(),packs={resources:{BASIC:{peasants:500,coins:4500,wood:850,stone:600,iron:500,grapes:200,meat:500,fish:700,grain:1500,horses:100,tar:5,dragon_glass:100},EPIC:{peasants:1100,coins:8500,wood:1600,stone:1100,iron:1000,grapes:400,meat:900,fish:1300,grain:3000,horses:200,tar:10,dragon_glass:105}},army:{BASIC:{swordsman:600,archer:600,spearman:600,cavalry:400},EPIC:{swordsman:1300,archer:1300,spearman:1200,cavalry:800}}};const p=packs[kind]?.[pack];if(!p)return json({error:"بسته معتبر نیست."},400);const qs=[];if(kind==="army"){for(const [k,v] of Object.entries(p))qs.push(env.DB.prepare("INSERT INTO castle_army(castle,unit_key,count) VALUES(?,?,?) ON CONFLICT(castle,unit_key) DO UPDATE SET count=count+excluded.count").bind(castle,k,v));}else{for(const [k,v] of Object.entries(p))qs.push(env.DB.prepare("UPDATE castle_state SET "+k+"="+k+"+? WHERE castle=?").bind(v,castle));}await env.DB.batch(qs);return json({ok:true});}
   if (method==="GET" && path==="/api/admin/controls") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureGameControls(env);
@@ -1240,7 +1247,7 @@ async function handleApi(request, env, url) {
     if(textValue.length>8000)return json({error:"متن رول حداکثر ۸۰۰۰ کاراکتر است."},400);
     const state=await requireCastleOwner(request,env,castle); if(!state)return json({error:"این قلعه متعلق به حساب شما نیست."},403);
     const usernameRow=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(session.user_id).first();
-    const now=Date.now(),createdAt=new Date(now).toISOString(),next=new Date(now+48*60*60*1000).toISOString();
+    const now=Date.now(),createdAt=new Date(now).toISOString(),cooldownHours=await getGameSettingNumber(env,"role_cooldown_hours",48),next=new Date(now+cooldownHours*60*60*1000).toISOString();
     const reserve=env.DB.prepare(`INSERT INTO role_cooldowns(account_id,next_available_at) VALUES(?,?)
       ON CONFLICT(account_id) DO UPDATE SET next_available_at=excluded.next_available_at
       WHERE role_cooldowns.next_available_at<=?`).bind(session.user_id,next,createdAt);
@@ -1255,16 +1262,17 @@ async function handleApi(request, env, url) {
   if (method==="GET" && path==="/api/admin/scenarios") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureNarrativeSchema(env);
-    const rows=(await env.DB.prepare("SELECT id,war_id AS warId,submitter_username AS username,lord_name AS lordName,castle,side,text,created_at AS createdAt FROM scenario_submissions ORDER BY created_at DESC").all()).results;
+    const rows=(await env.DB.prepare("SELECT id,war_id AS warId,submitter_account_id AS accountId,submitter_username AS username,lord_name AS lordName,castle,side,text,checked,checked_at AS checkedAt,result,created_at AS createdAt FROM scenario_submissions ORDER BY created_at DESC").all()).results;
     return json({items:rows});
   }
   if (method==="GET" && path==="/api/admin/roles") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureNarrativeSchema(env);
-    const rows=(await env.DB.prepare("SELECT id,username,lord_name AS lordName,castle,text,created_at AS createdAt FROM role_submissions ORDER BY created_at DESC").all()).results;
+    const rows=(await env.DB.prepare("SELECT id,account_id AS accountId,username,lord_name AS lordName,castle,text,checked,checked_at AS checkedAt,result,created_at AS createdAt FROM role_submissions ORDER BY created_at DESC").all()).results;
     return json({items:rows});
   }
 
+  if(method==="POST"&&path.match(/^\/api\/admin\/(scenarios|roles)\/[^/]+\/review$/)){if(!sameOrigin(request)||!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},403);await ensureNarrativeSchema(env);const a=path.split("/"),kind=a[3],id=decodeURIComponent(a[4]),b=await body(request),result=String(b.result||"").trim().slice(0,8000),row=await env.DB.prepare(kind==="scenarios"?"SELECT submitter_account_id AS accountId,castle,war_id AS relatedId FROM scenario_submissions WHERE id=?":"SELECT account_id AS accountId,castle,id AS relatedId FROM role_submissions WHERE id=?").bind(id).first();if(!row)return json({error:"ارسال پیدا نشد."},404);await env.DB.prepare("UPDATE "+(kind==="scenarios"?"scenario_submissions":"role_submissions")+" SET checked=1,checked_at=?,result=? WHERE id=?").bind(new Date().toISOString(),result||null,id).run();await notifyMany(env,[{accountId:row.accountId,castle:row.castle,type:"review",title:kind==="scenarios"?"سناریو بررسی شد":"رول بررسی شد",body:result?("نتیجه بررسی: "+result):"ارسال تو توسط ادمین چک شد.",relatedId:row.relatedId}]);return json({ok:true});}
   if (method==="GET" && path==="/api/admin/war-expeditions") {
     await ensureWarLogSchema(env);if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);const rt=await warRuntime(env);
     const rows=(await env.DB.prepare("SELECT id,attacker_account_id AS attackerAccountId,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,defender_assets_json AS defenderAssetsJson,cancelled,cancelled_at AS cancelledAt,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,lord_present AS lordPresent,command,command_at AS commandAt,outcome,casualties_json AS casualtiesJson,defender_account_id AS defenderAccountId,defender_username AS defenderUsername,defender_lord_name AS defenderLordName,scenario_deadline_at AS scenarioDeadlineAt FROM war_logs ORDER BY created_at DESC").all()).results;
