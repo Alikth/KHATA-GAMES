@@ -523,7 +523,7 @@ async function runWeeklyUpdate(env, force=false) {
       statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='transport'").bind(Number(s.port_level),s.castle));
       statements.push(env.DB.prepare("UPDATE castle_fleet SET count=count+? WHERE castle=? AND ship_key='warship'").bind(Number(s.port_level),s.castle));
     }
-    await env.DB.batch(statements);
+    if(statements.length) await env.DB.batch(statements);
     for(const [resource,gain] of Object.entries(changes).filter(([k])=>["grain","fish","meat"].includes(k))){
       if(Number(gain)>0)await settleFoodCredit(env,s.castle,resource,Math.floor(gain));
     }
