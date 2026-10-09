@@ -250,3 +250,43 @@ body.nav-slide-demo .page.nav-slide-old{z-index:2}
 .notification-item.unread{border-inline-start:3px solid #d5a54e;background:rgba(171,124,49,.08)}.notification-item.read{opacity:.78}
 .notice-message-head strong{color:#f3dfb8}.notice-message-head small{font-size:.72rem;color:#9da7b3}.notification-item .ghost{margin-top:8px}
 @media(max-width:520px){.player-profile-hero{align-items:flex-start;padding:14px;gap:12px}.player-profile-crest{width:58px;height:58px;flex-basis:58px;border-radius:16px}.castle-notifications-modal{width:calc(100vw - 12px)!important;max-height:92dvh!important;padding:14px!important;border-radius:17px!important}.notice-expeditions,.notice-messages{padding:11px}.notice-expedition-actions .notice-action{flex:1 1 30%;padding:8px 6px;font-size:.8rem}}
+
+
+/* KHATA fantasy navigation — preserves existing data-page behavior */
+.nav.khata-menu-buttons{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;
+  width:100%;padding:12px;box-sizing:border-box;margin:0 auto;
+  font-family:Georgia,"Times New Roman",serif;background:transparent;border:0;
+}
+.khata-menu-buttons .khata-btn{
+  --metal:#65717a;position:relative;isolation:isolate;display:flex;align-items:center;justify-content:space-between;
+  gap:8px;min-width:0;min-height:100px;padding:12px;box-sizing:border-box;overflow:hidden;
+  color:#d7d9d9;text-decoration:none;background:linear-gradient(110deg,rgba(24,29,32,.98),rgba(5,9,12,.97) 65%,rgba(34,36,35,.96));
+  border:1px solid var(--metal);border-radius:0;clip-path:polygon(0 12px,12px 0,calc(100% - 12px) 0,100% 12px,100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0 calc(100% - 12px));
+  transition:color .25s ease,filter .25s ease,transform .25s ease,background .25s ease,box-shadow .25s ease;
+}
+.khata-menu-buttons .khata-btn::before{content:"";position:absolute;inset:5px;z-index:-1;border:1px solid rgba(185,192,192,.2);clip-path:polygon(0 8px,8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px));pointer-events:none}
+.khata-menu-buttons .khata-btn::after{content:"";position:absolute;inset:0;z-index:-2;opacity:.18;background:repeating-linear-gradient(135deg,transparent 0 12px,rgba(255,255,255,.06) 13px,transparent 14px 25px);pointer-events:none}
+.khata-menu-buttons .khata-btn-banner{display:flex;flex:0 0 52px;width:52px;min-height:72px;align-items:center;justify-content:center;align-self:stretch;margin:-12px 0;font-size:29px;color:#e4d6b5;border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 0 14px rgba(0,0,0,.8);clip-path:polygon(0 0,100% 0,100% 88%,50% 100%,0 88%)}
+.khata-menu-buttons .banner-gold{background:linear-gradient(145deg,#762e1b,#24110d 80%);color:#f0c46b}
+.khata-menu-buttons .banner-blue{background:linear-gradient(145deg,#273f65,#0c1729 80%);color:#c4d6ed}
+.khata-menu-buttons .banner-sand{background:linear-gradient(145deg,#6c5a3f,#211b14 80%);color:#e4d1a6}
+.khata-menu-buttons .banner-green{background:linear-gradient(145deg,#345444,#101e19 80%);color:#d2dfc7}
+.khata-menu-buttons .banner-red{background:linear-gradient(145deg,#6b2527,#200d12 80%);color:#e5b7a4}
+.khata-menu-buttons .banner-purple{background:linear-gradient(145deg,#503168,#180e22 80%);color:#e0c8f2}
+.khata-menu-buttons .khata-btn-label{flex:1;min-width:0;text-align:center;font-size:clamp(12px,1.2vw,17px);line-height:1.5;font-weight:600;text-shadow:0 2px 4px #000;overflow-wrap:anywhere}
+.khata-menu-buttons .khata-btn-icon{flex:0 0 auto;font-size:21px;opacity:.8;color:#c3c8c7}
+.khata-menu-buttons .khata-btn:hover{color:#fff2cf;--metal:#bba36e;transform:translateY(-3px);filter:brightness(1.2);background:linear-gradient(110deg,rgba(65,47,27,.95),rgba(12,13,14,.98) 75%);box-shadow:0 0 18px rgba(190,145,64,.15)}
+.khata-menu-buttons .khata-btn.active{--metal:#e0a52f;color:#ffe3a0;background:linear-gradient(110deg,rgba(91,49,17,.92),rgba(18,13,9,.98) 80%);box-shadow:inset 0 0 18px rgba(224,165,47,.15),0 0 12px rgba(224,165,47,.16)}
+.khata-menu-buttons .khata-btn.active::before{border-color:rgba(239,192,91,.65)}
+.khata-menu-buttons .khata-btn.active .khata-btn-icon{color:#e9bc61}
+.khata-menu-buttons .khata-btn:active{transform:translateY(0) scale(.985)}
+.khata-menu-buttons .khata-btn:focus-visible{outline:2px solid #e9bc61;outline-offset:3px}
+@media(max-width:600px){
+ .nav.khata-menu-buttons{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:8px}
+ .khata-menu-buttons .khata-btn{min-height:72px;padding:9px;gap:6px}
+ .khata-menu-buttons .khata-btn-banner{flex-basis:36px;width:36px;min-height:54px;font-size:22px;margin:-9px 0}
+ .khata-menu-buttons .khata-btn-label{font-size:12px}
+ .khata-menu-buttons .khata-btn-icon{font-size:16px}
+}
+@media(prefers-reduced-motion:reduce){.khata-menu-buttons .khata-btn{transition:none}}

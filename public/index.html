@@ -8,12 +8,12 @@
   <style id="khata-critical-gate">.hidden{display:none!important}#gameLobby.hidden,#gameApp.hidden,#adminPanel.hidden{display:none!important}</style>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=17">
+  <link rel="stylesheet" href="/css/style.css?v=18">
   <link rel="stylesheet" href="/css/mobile-polish.css?v=1">
   <link rel="stylesheet" href="/css/castle-management.css?v=6">
   <link rel="stylesheet" href="/css/war-expedition.css?v=2">
   <link rel="stylesheet" href="/css/trade.css?v=1">
-  <link rel="stylesheet" href="/css/admin.css?v=7">
+  <link rel="stylesheet" href="/css/admin.css?v=8">
 </head>
 <body>
   <div class="ambient"></div>
@@ -59,7 +59,15 @@
       <div class="hero-copy"><p class="eyebrow">THE REALM AWAITS</p><h1>KILL <span>THE KING</span></h1><p class="subtitle">THE WAR OF WESTEROS</p></div>
     </header>
 
-    <nav class="nav"><button class="nav-btn active" data-page="register">⚔ ثبت‌نام</button><button class="nav-btn" data-page="warList">⚔️ War List</button><button class="nav-btn" data-page="season">⚔️ لاگ وار</button><button class="nav-btn" data-page="players">🗺️ خاندان‌ها</button><button class="nav-btn" data-page="myCastles">🏰 قلعه‌های من</button><button class="nav-btn" data-page="characters">⚔ Characters</button><button class="nav-btn" data-page="shop">🛒 Shop</button></nav>
+    <nav class="nav khata-menu-buttons" aria-label="منوی اصلی">
+  <button class="nav-btn khata-btn active" type="button" data-page="register" aria-current="page"><span class="khata-btn-banner banner-gold" aria-hidden="true">♜</span><span class="khata-btn-label" dir="rtl">انتخاب قلعه</span><span class="khata-btn-icon" aria-hidden="true">♜</span></button>
+  <button class="nav-btn khata-btn" type="button" data-page="warList"><span class="khata-btn-banner banner-blue" aria-hidden="true">⚔</span><span class="khata-btn-label">War List</span><span class="khata-btn-icon" aria-hidden="true">⚔</span></button>
+  <button class="nav-btn khata-btn" type="button" data-page="season"><span class="khata-btn-banner banner-sand" aria-hidden="true">✥</span><span class="khata-btn-label" dir="rtl">لاگ وار</span><span class="khata-btn-icon" aria-hidden="true">⚔</span></button>
+  <button class="nav-btn khata-btn" type="button" data-page="players"><span class="khata-btn-banner banner-green" aria-hidden="true">🐉</span><span class="khata-btn-label" dir="rtl">خاندان‌ها</span><span class="khata-btn-icon" aria-hidden="true">♜</span></button>
+  <button class="nav-btn khata-btn" type="button" data-page="myCastles"><span class="khata-btn-banner banner-purple" aria-hidden="true">♛</span><span class="khata-btn-label" dir="rtl">قلعه‌های من</span><span class="khata-btn-icon" aria-hidden="true">♜</span></button>
+  <button class="nav-btn khata-btn" type="button" data-page="characters"><span class="khata-btn-banner banner-red" aria-hidden="true">☠</span><span class="khata-btn-label">Characters</span><span class="khata-btn-icon" aria-hidden="true">⚔</span></button>
+  <button class="nav-btn khata-btn" type="button" data-page="shop"><span class="khata-btn-banner banner-green" aria-hidden="true">🐉</span><span class="khata-btn-label">Shop</span><span class="khata-btn-icon" aria-hidden="true">♜</span></button>
+</nav>
 
     <main>
       <section id="register" class="page active"><div class="page-title"><span>⚔</span><div><h2>CLAIM YOUR CASTLE</h2><p>قلعه خود را انتخاب کن، لرد.</p></div></div><div id="regions" class="regions"></div><div id="castles" class="castles hidden"></div></section>

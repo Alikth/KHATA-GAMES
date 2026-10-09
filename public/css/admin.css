@@ -370,3 +370,37 @@ body.admin-mode{background:#070809}.admin-mode .hero,.admin-mode .nav{display:no
 
 /* War List + combat snapshot */
 .we-war-list{display:grid;gap:14px}.we-war-card{background:rgba(12,14,17,.9);border:1px solid rgba(199,164,86,.22);border-radius:16px;padding:16px;box-shadow:0 18px 45px rgba(0,0,0,.24)}.we-war-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.we-war-kicker{font-size:10px;color:#8d949a;letter-spacing:1.5px}.we-war-card h3{margin:5px 0 0;color:#f0eadb}.we-war-card-head>strong{font-size:11px;color:#c7a456;text-align:left}.we-war-sides{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:13px}.we-war-side{background:#0d0f12;border:1px solid rgba(255,255,255,.06);border-radius:11px;padding:12px;display:flex;flex-direction:column;gap:5px}.we-war-side>span{font-size:10px;color:#8f969c}.we-war-side>b{font-size:14px;color:#f3f0e7}.we-war-side small,.we-war-meta{color:#9a9fa5;font-size:10px}.we-war-deadline{display:flex;justify-content:space-between;gap:10px;margin-top:11px;padding:11px;border-radius:10px;background:rgba(199,164,86,.08);border:1px solid rgba(199,164,86,.18);color:#e4dac1;font-size:11px}.we-war-scenarios{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.we-scenario-state{padding:6px 9px;border-radius:999px;background:#11161a;border:1px solid rgba(255,255,255,.06);font-size:10px;color:#b8bec3}.we-war-meta{display:block;margin-top:9px}.admin-war-combat-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.admin-war-combat-stats>div{background:#0d0f12;border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:10px}.admin-war-combat-stats>div>strong{display:block;margin-bottom:7px;color:#d8caa9}@media(max-width:900px){.we-war-sides,.admin-war-combat-stats{grid-template-columns:1fr}.we-war-deadline,.we-war-card-head{flex-direction:column}}
+
+
+/* Royal admin control room polish */
+.admin-mode .admin-dashboard{max-width:1500px;padding:clamp(16px,3vw,38px)}
+.admin-mode .admin-dashboard-head{align-items:center;gap:16px;padding:20px 22px;border:1px solid rgba(199,164,86,.22);background:linear-gradient(115deg,rgba(34,26,15,.72),rgba(12,14,17,.96) 58%);clip-path:polygon(0 12px,12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%)}
+.admin-mode .admin-dashboard-head h1{color:#f2dfb0;letter-spacing:2px;text-shadow:0 4px 20px rgba(199,164,86,.13)}
+.admin-mode .admin-control-room{display:grid;grid-template-columns:minmax(190px,245px) minmax(0,1fr);gap:18px;align-items:start;margin-top:20px}
+.admin-mode .admin-sidebar{position:sticky;top:14px;display:grid;gap:7px;padding:13px;background:linear-gradient(160deg,#141518,#090a0c);border:1px solid rgba(199,164,86,.25);border-radius:3px;box-shadow:0 16px 44px rgba(0,0,0,.28)}
+.admin-mode .admin-sidebar-title{display:grid;gap:5px;padding:9px 10px 15px;margin-bottom:4px;border-bottom:1px solid rgba(199,164,86,.2)}
+.admin-mode .admin-sidebar-title span{font-size:10px;letter-spacing:2px;color:#c7a456}
+.admin-mode .admin-sidebar-title b{font-size:19px;color:#f0e4c8}
+.admin-mode .admin-menu-item{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:right;padding:12px;border:1px solid transparent;border-radius:2px;color:#b8b8b8;background:transparent;transition:background .2s,border-color .2s,color .2s}
+.admin-mode .admin-menu-item:hover,.admin-mode .admin-menu-item.active{color:#f5d88d;border-color:rgba(199,164,86,.32);background:linear-gradient(100deg,rgba(130,91,30,.19),rgba(24,21,16,.7))}
+.admin-mode .admin-menu-item i{font-style:normal;color:#c7a456}
+.admin-mode .admin-panels{min-width:0}
+.admin-mode .admin-section,.admin-mode .admin-box,.admin-mode .admin-stats>div{border-radius:4px;box-shadow:0 12px 35px rgba(0,0,0,.14)}
+.admin-mode .admin-section{border-color:rgba(199,164,86,.15);background:linear-gradient(145deg,rgba(18,20,23,.98),rgba(10,11,13,.98))}
+.admin-mode .admin-control-card{border-radius:3px;border-color:rgba(199,164,86,.15);background:linear-gradient(130deg,#151619,#0b0c0e)}
+.admin-mode .admin-war-card,.admin-mode .admin-trade-card{border-radius:3px;border-color:rgba(199,164,86,.16)}
+.admin-mode .admin-login-box{border-radius:4px;border-color:rgba(199,164,86,.35);background:linear-gradient(145deg,#171512,#0c0d10)}
+.admin-mode .admin-login-box input{min-height:46px}
+.admin-mode .admin-menu-item:focus-visible,.admin-mode button:focus-visible{outline:2px solid #e9bc61;outline-offset:2px}
+@media(max-width:850px){
+ .admin-mode .admin-control-room{grid-template-columns:1fr}
+ .admin-mode .admin-sidebar{position:static;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .admin-mode .admin-sidebar-title{grid-column:1/-1}
+ .admin-mode .admin-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .admin-mode .admin-control-grid{grid-template-columns:1fr}
+}
+@media(max-width:480px){
+ .admin-mode .admin-sidebar{grid-template-columns:1fr}
+ .admin-mode .admin-stats{grid-template-columns:1fr 1fr}
+ .admin-mode .admin-dashboard-head{align-items:flex-start;flex-direction:column}
+}
