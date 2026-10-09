@@ -873,7 +873,7 @@ async function handleApi(request, env, url) {
     const assets=JSON.parse(row.assets_json||"{}"),updates=[];
     if(!Number(row.is_fake))for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=? AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND cancelled=0 AND command IS NULL)`).bind(Math.floor(Number(raw)||0),row.source_castle,key,id));}
     updates.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by=?,run_started_at=NULL WHERE id=? AND cancelled=0").bind(new Date().toISOString(),session.user_id,id));
-    const result=await env.DB.batch(updates); if(!result[updates.length-1]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ دوباره تلاش کن."},409); return json({ok:true});
+    const result=await env.DB.batch(updates); if(!result[updates.length-1]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ دوباره تلاش کن."},409);await notifyMany(env,[{accountId:session.user_id,castle:row.source_castle,type:"war_cancelled",title:"لشکرکشی لغو شد",body:"لشکرکشی از "+row.source_castle+" به "+row.destination_castle+" لغو شد و نیروها به مبدا برگشتند.",relatedId:id}]); return json({ok:true});
   }
   if (method==="POST" && path==="/api/war-expeditions") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
@@ -914,7 +914,7 @@ async function handleApi(request, env, url) {
       if(isFake && String(e?.message||e).toLowerCase().includes("unique"))return json({error:"لشکرکشی فیک این هفته قبلاً استفاده شده است."},409);
       throw e;
     }
-    for(let i=0;i<deductions.length;i++)if(!result[i]?.meta?.changes)return json({error:"تغییر همزمان دارایی انجام نشد؛ دوباره تلاش کن."},409);return json({ok:true,id});
+    for(let i=0;i<deductions.length;i++)if(!result[i]?.meta?.changes)return json({error:"تغییر همزمان دارایی انجام نشد؛ دوباره تلاش کن."},409);if(destRow.ownerAccountId&&destRow.ownerAccountId!==accountId)await notifyMany(env,[{accountId:destRow.ownerAccountId,castle:destination,type:"war_incoming",title:"لشکرکشی به قلعه تو",body:user.username+" از قلعه "+source+" به سمت قلعه تو لشکرکشی کرده است.",relatedId:id}]);return json({ok:true,id});
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/command$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403); await ensureWarLogSchema(env);
