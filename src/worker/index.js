@@ -949,7 +949,7 @@ async function handleApi(request, env, url) {
   }
 if (method==="GET" && path==="/api/my-war-expeditions/active") {
     await ensureWarLogSchema(env); await returnExpiredUncommandedWarExpeditions(env); const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
-    const rt=await warRuntime(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent,arrival_choice AS arrivalChoice,transfer_status AS transferStatus FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(session.user_id).all()).results;
+    const rt=await warRuntime(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent,arrival_choice AS arrivalChoice,transfer_status AS transferStatus FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND (command IS NULL OR (command='deploy' AND arrival_choice IS NULL)) ORDER BY created_at DESC").bind(session.user_id).all()).results;
     return json({expeditions:rows.map(x=>{const active=warIsActive(x,rt);return {...x,active,arrived:!active,...warCommandMeta(x)};})});
   }
   if (method==="GET" && path==="/api/my-war-expeditions/commands") {
@@ -1025,7 +1025,7 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     if(!["deploy","alliance","transfer","accept-transfer","reject-transfer"].includes(choice))return json({error:"گزینه معتبر نیست."},400);
     const war=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
     if(!war||Number(war.cancelled))return json({error:"لشکرکشی پیدا نشد یا لغو شده است."},404);
-    const rt=await warRuntime(env);if(warIsActive(war,rt)||war.command)return json({error:"این گزینه فقط پس از رسیدن ارتش و پیش از صدور دستور جنگی ممکن است."},409);
+    const rt=await warRuntime(env);if(warIsActive(war,rt)||(war.command&&war.command!=="deploy"))return json({error:"این گزینه فقط پس از رسیدن ارتش و انتخاب استقرار ممکن است."},409);if(!["accept-transfer","reject-transfer"].includes(choice)&&war.command!=="deploy")return json({error:"ابتدا در گزینه‌های اولیه، «استقرار» را انتخاب کن."},409);
     const source=await env.DB.prepare("SELECT owner_account_id AS ownerAccountId FROM castle_state WHERE castle=?").bind(war.source_castle).first();
     const dest=await env.DB.prepare("SELECT owner_account_id AS ownerAccountId FROM castle_state WHERE castle=?").bind(war.destination_castle).first();
     if(choice==="accept-transfer"||choice==="reject-transfer"){
