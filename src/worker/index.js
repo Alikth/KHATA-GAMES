@@ -1077,7 +1077,7 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     if(!war)return json({error:"لشکرکشی پیدا نشد یا متعلق به این حساب نیست."},404);
     const rt=await warRuntime(env);
     if(Number(war.cancelled)||warIsActive(war,rt))return json({error:"این لشکرکشی هنوز به مقصد نرسیده است."},409);
-    if(war.command)return json({error:"برای این لشکرکشی قبلاً دستور ثبت شده است."},409);
+    if(war.arrival_choice)return json({error:"برای این ارتش وضعیت رسیدن ثبت شده و دیگر نمی‌توان دستور جنگی جداگانه صادر کرد."},409);if(war.command)return json({error:"برای این لشکرکشی قبلاً دستور ثبت شده است."},409);
     const commandWindowMinutes=Number(war.command_window_minutes||await getGameSettingNumber(env,"war_command_window_minutes",90));const commandExpiresAt=warCommandExpiresAtMs(war,commandWindowMinutes);if(commandExpiresAt&&Date.now()>=commandExpiresAt)return json({error:"مهلت "+commandWindowMinutes+" دقیقه‌ای ارسال دستور این لشکرکشی تمام شده است."},410);
     let defenderAssets={};
     if(command==="attack"||command==="siege"){
