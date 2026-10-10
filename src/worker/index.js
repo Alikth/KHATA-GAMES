@@ -1073,17 +1073,9 @@ async function handleApi(request, env, url) {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     await ensureEconomySchema(env);
     const week=gameWeekKey();
-    // Claim this week's global run so repeat clicks cannot duplicate production.
-    const claim=await env.DB.prepare("INSERT OR IGNORE INTO game_week_runs(week_key,processed_at) VALUES (?,?)")
-      .bind(week,new Date().toISOString()).run();
-    if(!claim.meta?.changes)return json({ok:true,week,alreadyApplied:true});
-    try{
-      const result=await runWeeklyUpdate(env,true);
-      return json({ok:true,week,alreadyApplied:false,processed:result.processed});
-    }catch(error){
-      await env.DB.prepare("DELETE FROM game_week_runs WHERE week_key=?").bind(week).run();
-      throw error;
-    }
+    // Admin-triggered updates are intentionally forceful and may run repeatedly.
+    const result=await runWeeklyUpdate(env,true);
+    return json({ok:true,week,forced:true,processed:result.processed});
   }
   if (method==="GET" && path==="/api/admin/trades") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
