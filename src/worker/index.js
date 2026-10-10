@@ -1022,7 +1022,7 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     await ensureWarLogSchema(env);
     const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]),b=await body(request),choice=String(b.choice||"");
-    if(!["deploy","alliance","transfer","accept-transfer","reject-transfer"].includes(choice))return json({error:"گزینه معتبر نیست."},400);
+    if(!["deploy","garrison","alliance","transfer","accept-transfer","reject-transfer"].includes(choice))return json({error:"گزینه معتبر نیست."},400);
     const war=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
     if(!war||Number(war.cancelled))return json({error:"لشکرکشی پیدا نشد یا لغو شده است."},404);
     const rt=await warRuntime(env);if(warIsActive(war,rt)||(war.command&&war.command!=="deploy"))return json({error:"این گزینه فقط پس از رسیدن ارتش و انتخاب استقرار ممکن است."},409);if(!["accept-transfer","reject-transfer"].includes(choice)&&war.command!=="deploy")return json({error:"ابتدا در گزینه‌های اولیه، «استقرار» را انتخاب کن."},409);
@@ -1045,10 +1045,10 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     }
     if(!source?.ownerAccountId||source.ownerAccountId!==session.user_id||war.attacker_account_id!==session.user_id)return json({error:"فقط مالک ارتش اعزام‌شده می‌تواند گزینه رسیدن را انتخاب کند."},403);
     if(war.arrival_choice)return json({error:"برای این ارتش قبلاً گزینه رسیدن ثبت شده است."},409);
-    if(choice==="deploy"||choice==="alliance"){
+    if(choice==="garrison"||choice==="alliance"){
       const now=new Date().toISOString(),assets=JSON.stringify(JSON.parse(war.assets_json||"{}"));
-      const qs=[env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) VALUES(?,?,?,?,?,?,?)").bind(id,session.user_id,war.source_castle,war.destination_castle,assets,choice,now),
-        env.DB.prepare("UPDATE war_logs SET arrival_choice=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command IS NULL").bind(choice,id)];
+      const qs=[env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) VALUES(?,?,?,?,?,?,?)").bind(id,session.user_id,war.source_castle,war.destination_castle,assets,choice==="garrison"?"deploy":choice,now),
+        env.DB.prepare("UPDATE war_logs SET arrival_choice=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy'").bind(choice==="garrison"?"garrison":choice,id)];
       if(choice==="alliance"){
         if(!dest?.ownerAccountId||dest.ownerAccountId===session.user_id)return json({error:"اتحاد نظامی به مالک دیگری در قلعه مقصد نیاز دارد."},400);
         const a=[war.source_castle,session.user_id],bb=[war.destination_castle,dest.ownerAccountId];
@@ -1061,7 +1061,7 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
       if(!dest?.ownerAccountId||dest.ownerAccountId===session.user_id)return json({error:"انتقال مالکیت فقط به قلعه‌ای با مالک دیگر امکان‌پذیر است."},400);
       const now=new Date().toISOString(),assets=JSON.stringify(JSON.parse(war.assets_json||"{}"));
       const qs=[env.DB.prepare("INSERT INTO troop_transfer_requests(war_id,sender_account_id,receiver_account_id,source_castle,destination_castle,assets_json,status,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,session.user_id,dest.ownerAccountId,war.source_castle,war.destination_castle,assets,"pending",now),
-        env.DB.prepare("UPDATE war_logs SET arrival_choice='transfer',transfer_status='pending' WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command IS NULL").bind(id)];
+        env.DB.prepare("UPDATE war_logs SET arrival_choice='transfer',transfer_status='pending' WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy'").bind(id)];
       const result=await env.DB.batch(qs);if(!result[1]?.meta?.changes)return json({error:"گزینه رسیدن همزمان ثبت شده است."},409);
       await notifyMany(env,[{accountId:dest.ownerAccountId,castle:war.destination_castle,type:"troop_transfer",title:"درخواست انتقال نیرو",body:war.attacker_username+" درخواست انتقال نیرو از "+war.source_castle+" به "+war.destination_castle+" داده است.",relatedId:id}]);
       return json({ok:true,choice,status:"pending"});
