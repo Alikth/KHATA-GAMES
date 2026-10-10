@@ -1554,5 +1554,9 @@ export default {
       for (const [key, value] of Object.entries(SECURITY_HEADERS)) headers.set(key, value);
       return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
     } catch(e) { console.error(e); return json({error:e?.status ? e.message : "خطای داخلی سرور رخ داد."},e?.status || 500); }
+  },
+  async scheduled(controller, env, ctx) {
+    try { await returnExpiredUncommandedWarExpeditions(env); }
+    catch(e) { console.error("scheduled war-expedition expiry failed", e); }
   }
 };
