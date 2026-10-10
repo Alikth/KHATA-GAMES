@@ -26,3 +26,11 @@
 @keyframes khataLoading{to{background-position:220% 0}}
 @keyframes khataErrorIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.we-btn,.we-btn.positive,.we-btn.positive:disabled,.we-error,.we-arrival-preview,.we-log-banner{animation:none!important;transition:none!important}.we-log-banner:hover{transform:none;box-shadow:none}}
+
+/* Large, readable sword-themed game announcement */
+.we-announcement-banner{position:relative;overflow:hidden;box-sizing:border-box;width:100%;margin:18px 0;padding:clamp(24px,4vw,46px);text-align:center;border:1px solid rgba(218,179,91,.72);border-radius:20px;background:radial-gradient(ellipse at top,rgba(122,28,35,.48),transparent 65%),linear-gradient(135deg,#211014 0%,#111318 55%,#241417 100%);box-shadow:0 18px 48px rgba(0,0,0,.48),inset 0 0 30px rgba(218,179,91,.06);color:#fff8e9;}
+.we-announcement-banner:before,.we-announcement-banner:after{content:"⚔";position:absolute;top:50%;transform:translateY(-50%);font-size:clamp(34px,6vw,76px);color:rgba(218,179,91,.32);text-shadow:0 0 22px rgba(191,57,57,.28);pointer-events:none}
+.we-announcement-banner:before{left:clamp(10px,3vw,32px)}.we-announcement-banner:after{right:clamp(10px,3vw,32px)}
+.we-announcement-banner strong{display:block;margin:0 auto 18px;max-width:78%;font-size:clamp(21px,3vw,34px);line-height:1.8;color:#f2d28a;text-shadow:0 2px 14px rgba(0,0,0,.65)}
+.we-announcement-banner .we-announcement-text{max-width:850px;margin:0 auto;font-size:clamp(17px,2.1vw,23px);line-height:2.1;white-space:pre-wrap;overflow-wrap:anywhere;color:#fffaf0}
+.we-announcement-banner small{display:block;margin-top:20px;color:#d0bfa1;font-size:14px}
