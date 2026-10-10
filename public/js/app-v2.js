@@ -118,30 +118,47 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   async function boot() {
-    try {
-      const auth = await api("/api/auth/status");
-      if (adminRequested) {
-        // Admin login is independent from the normal player login.
-        // Open the control-room login directly at ?admin=1.
-        showAdminOnly();
-        await checkAdminSession();
+    let lastError = null;
+    // Retry the whole read-only startup sequence, not just individual fetches.
+    // This covers failures while loading the world or dashboard after auth succeeds.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const auth = await api("/api/auth/status");
+        if (adminRequested) {
+          showAdminOnly();
+          await checkAdminSession();
+          return;
+        }
+        if (!auth.authenticated) {
+          showAuth();
+          return;
+        }
+        currentUser = auth.user;
+        connectRealtime();
+        await enterAuthenticated();
         return;
+      } catch (err) {
+        lastError = err;
+        console.error("KHATA startup attempt failed", attempt + 1, err);
+        closeRealtime();
+        if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
       }
-      if (!auth.authenticated) {
-        showAuth();
-        return;
-      }
-      currentUser = auth.user;
-      connectRealtime();
-      await enterAuthenticated();
-    } catch (err) {
-      console.error(err);
-      if (adminRequested) {
-        showAdminOnly();
-        setMessage("adminMessage", "error", "ارتباط با سرور برقرار نشد: " + err.message);
-      } else {
-        showAuth();
-        setMessage("authMessage", "error", "ارتباط با سرور برقرار نشد. اتصال اینترنت و اجرای سرور را بررسی کنید.");
+    }
+    if (adminRequested) {
+      showAdminOnly();
+      setMessage("adminMessage", "error", "ارتباط با سرور برقرار نشد: " + (lastError?.message || "خطای ناشناخته"));
+    } else {
+      showAuth();
+      setMessage("authMessage", "error", "بارگذاری بازی ناموفق بود. اتصال اینترنت را بررسی کن؛ لازم نیست صفحه را رفرش کنی، یک بار دیگر تلاش کن.");
+      const root = $("authMessage");
+      if (root && !root.querySelector("[data-startup-retry]")) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.startupRetry = "1";
+        button.className = "primary";
+        button.textContent = "تلاش دوباره";
+        button.addEventListener("click", () => { root.innerHTML = ""; boot(); });
+        root.appendChild(button);
       }
     }
   }
