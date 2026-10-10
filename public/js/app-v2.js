@@ -8,7 +8,9 @@ window.addEventListener("DOMContentLoaded", () => {
   const stripAt = value => String(value || "").replace(/^@+/, "");
 
   const apiCache=new Map();
-  const API_CACHE_TTL={"/api/houses":30000,"/api/players":5000,"/api/world-state":5000};
+  // Cache only read-only reference/world snapshots briefly. Mutations and realtime updates invalidate this cache.
+  // Slightly longer windows reduce duplicate page-navigation/startup reads without touching game actions.
+  const API_CACHE_TTL={"/api/houses":300000,"/api/players":10000,"/api/world-state":10000};
   let lastLocalMutationAt=0;
   function invalidateApiCache(paths=null){
     if(!paths){apiCache.clear();return;}
