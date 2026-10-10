@@ -16,6 +16,27 @@
   <link rel="stylesheet" href="/css/admin.css?v=8">
 
   <style id="khata-auth-fantasy">
+/* Auth backdrop and layout: keep the app's original auth flow intact. */
+#authScreen.auth-screen {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 100svh;
+  box-sizing: border-box;
+  background: linear-gradient(180deg, rgba(3,4,5,.56), rgba(3,4,5,.82)), url('/assets/war-background.png') center/cover no-repeat;
+  padding: 28px 18px;
+}
+#authScreen.auth-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 35%, rgba(190,142,53,.13), transparent 55%), linear-gradient(90deg, rgba(0,0,0,.35), transparent 50%, rgba(0,0,0,.35));
+}
+#authScreen #loginForm.hidden,
+#authScreen #signupForm.hidden { display: none !important; }
+
 /* KHATA GAMES — Gothic Fantasy Auth Card */
 #authScreen .auth-card {
   position: relative;
@@ -182,6 +203,12 @@
   outline-offset: 3px;
 }
 @media (max-width: 480px) {
+  #authScreen.auth-screen {
+    min-height: 100svh;
+    padding: 18px 12px;
+    background: linear-gradient(180deg, rgba(3,4,5,.56), rgba(3,4,5,.84)), url('/assets/mobile-login-bg.jpg') center top/cover no-repeat;
+  }
+
   #authScreen .auth-card {
     width: min(92vw, 440px);
     box-sizing: border-box;
