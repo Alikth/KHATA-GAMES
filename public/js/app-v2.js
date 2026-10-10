@@ -640,7 +640,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   async function runAdminWeeklyUpdate(){
     if(!adminConfirm('آپدیت هفتگی انجام شود؟ بازدهی تولیدی‌ها و کمپ‌ها و تولید بندر برای همه قلعه‌ها اعمال می‌شود و این عملیات برای هفته جاری ثبت خواهد شد.'))return;
-    try{await api('/api/admin/weekly-update',{method:'POST',body:JSON.stringify({})});showToast('آپدیت هفتگی انجام شد.');await refreshAdmin();}catch(e){showToast(e.message,true);}
+    try{const result=await api('/api/admin/weekly-update',{method:'POST',body:JSON.stringify({})});showToast(result?.alreadyApplied?'آپدیت این هفته قبلاً اعمال شده است.':'آپدیت هفتگی انجام شد ('+(result?.processed??'')+' قلعه).');await refreshAdmin();}catch(e){showToast(e.message,true);}
   }
   async function assignAdminCastle(){
     const player=$("adminAssignPlayer").value,region=$("adminAssignRegion").value,castle=$("adminAssignCastle").value;
