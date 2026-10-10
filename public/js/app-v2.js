@@ -25,7 +25,22 @@ window.addEventListener("DOMContentLoaded", () => {
       if(cached&&cached.expiresAt>Date.now())return cached.data;
       if(cached)apiCache.delete(cacheKey);
     }
-    const res = await fetch(url, { cache: "default", ...options, headers });
+    // Retry transient GET failures automatically so players don't need to refresh the page.
+    // Never retry mutations (POST/PUT/DELETE), because they may have already changed game state.
+    let res = null;
+    let lastFetchError = null;
+    const maxAttempts = method === "GET" ? 3 : 1;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        res = await fetch(url, { cache: "default", ...options, headers });
+        if (res.ok || res.status < 500 || attempt === maxAttempts - 1) break;
+      } catch (error) {
+        lastFetchError = error;
+        if (attempt === maxAttempts - 1) throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 350 * (attempt + 1)));
+    }
+    if (!res) throw lastFetchError || new Error("ارتباط با سرور برقرار نشد.");
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const error = new Error(data.error || "خطایی رخ داد.");
