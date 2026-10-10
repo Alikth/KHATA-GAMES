@@ -712,7 +712,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function setAdminGameRuntime(action){try{let payload={action};if(action==='start')payload={...payload,announcementTitle:document.getElementById('adminAnnouncementTitle')?.value?.trim()||"",announcementTime:document.getElementById('adminAnnouncementTime')?.value||"",seasonWeather:document.getElementById('adminSeasonWeather')?.value?.trim()||"",scenarioDeadline:document.getElementById('adminScenarioDeadline')?.value?.trim()||""};await api('/api/admin/game-runtime',{method:'POST',body:JSON.stringify(payload)});await refreshAdmin();showToast(action==='start'?'بازی شروع شد و اطلاعیه ثبت شد.':'بازی متوقف شد و اطلاعیه ثبت شد.');}catch(e){showToast(e.message,true);}}
+  async function setAdminGameRuntime(action){try{let payload={action};if(action==='start')payload={...payload,announcementTitle:document.getElementById('adminAnnouncementTitle')?.value?.trim()||''};await api('/api/admin/game-runtime',{method:'POST',body:JSON.stringify(payload)});await refreshAdmin();showToast(action==='start'?'بازی شروع شد و اطلاعیه ثبت شد.':'بازی متوقف شد و اطلاعیه ثبت شد.');}catch(e){showToast(e.message,true);}}
   async function saveAdminCasualties(id){
     const payload={attacker:{army:{},equipment:{}},defender:{army:{}}};
     document.querySelectorAll('[data-cas-side]').forEach(el=>{const n=String(el.value||'').trim();if(n==='')return;const side=el.dataset.casSide,kind=el.dataset.casKind,key=el.dataset.casKey;payload[side][kind]??={};payload[side][kind][key]=Math.floor(Number(n));});
