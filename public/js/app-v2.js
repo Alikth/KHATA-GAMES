@@ -525,7 +525,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 
     if (page === "players") { players = await api("/api/players"); renderPlayers(); renderMap(); }
-    if (page === "myCastles") { players = await api("/api/players"); await renderMyCastles(); }
+    if (page === "myCastles") { await renderMyCastles(); }
     if (page === "warList") { window.khataLoadWarList?.(); }
     if (page === "season") { window.khataLoadWarLog?.(); }
 
