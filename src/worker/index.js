@@ -942,9 +942,20 @@ async function handleApi(request, env, url) {
       ORDER BY w.command_at DESC`).all()).results;
     return json({wars:rows.map(x=>({...x,scenarioDeadlineAt:x.scenarioDeadlineAt||scenarioDeadlineAt(x.commandAt||x.createdAt)})),gameAnnouncements:await gameAnnouncements(env),gameRuntime:await warRuntime(env)});
   }
-  if (method==="GET" && path==="/api/my-war-expeditions/active") {
+    if(method==="GET"&&path==="/api/my-troop-transfers"){
+    await ensureWarLogSchema(env);const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const rows=(await env.DB.prepare("SELECT war_id AS warId,sender_account_id AS senderAccountId,receiver_account_id AS receiverAccountId,source_castle AS sourceCastle,destination_castle AS destinationCastle,status,created_at AS createdAt FROM troop_transfer_requests WHERE receiver_account_id=? AND status='pending' ORDER BY created_at DESC").bind(session.user_id).all()).results;
+    return json({requests:rows});
+  }
+  if(method==="POST"&&path==="/api/my-troop-transfers/respond"){
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);await ensureWarLogSchema(env);const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const b=await body(request),id=String(b.warId||""),accept=!!b.accept;const choice=accept?"accept-transfer":"reject-transfer";
+    const result=await fetch(new URL("/api/war-expeditions/"+encodeURIComponent(id)+"/arrival-choice",url),{method:"POST",headers:{"content-type":"application/json",cookie:request.headers.get("cookie")||"",origin:url.origin},body:JSON.stringify({choice})});
+    return new Response(await result.text(),{status:result.status,headers:{"content-type":"application/json"}});
+  }
+if (method==="GET" && path==="/api/my-war-expeditions/active") {
     await ensureWarLogSchema(env); await returnExpiredUncommandedWarExpeditions(env); const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
-    const rt=await warRuntime(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(session.user_id).all()).results;
+    const rt=await warRuntime(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent,arrival_choice AS arrivalChoice,transfer_status AS transferStatus FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND command IS NULL ORDER BY created_at DESC").bind(session.user_id).all()).results;
     return json({expeditions:rows.map(x=>{const active=warIsActive(x,rt);return {...x,active,arrived:!active,...warCommandMeta(x)};})});
   }
   if (method==="GET" && path==="/api/my-war-expeditions/commands") {
