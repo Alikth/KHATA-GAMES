@@ -32,7 +32,20 @@ window.addEventListener("DOMContentLoaded", () => {
     const maxAttempts = method === "GET" ? 3 : 1;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        res = await fetch(url, { cache: "default", ...options, headers });
+        // A stalled request must not freeze startup forever. Bound each GET attempt,
+        // while respecting a caller-provided AbortSignal when one exists.
+        const requestOptions = { cache: "default", ...options, headers };
+        let timeoutId = null;
+        if (method === "GET" && !options.signal) {
+          const controller = new AbortController();
+          timeoutId = setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), 12000);
+          requestOptions.signal = controller.signal;
+        }
+        try {
+          res = await fetch(url, requestOptions);
+        } finally {
+          if (timeoutId !== null) clearTimeout(timeoutId);
+        }
         if (res.ok || res.status < 500 || attempt === maxAttempts - 1) break;
       } catch (error) {
         lastFetchError = error;
