@@ -1051,7 +1051,7 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
         env.DB.prepare("UPDATE war_logs SET arrival_choice=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command IS NULL").bind(choice,id)];
       if(choice==="alliance"){
         if(!dest?.ownerAccountId||dest.ownerAccountId===session.user_id)return json({error:"اتحاد نظامی به مالک دیگری در قلعه مقصد نیاز دارد."},400);
-        const a=[war.source_castle,session.user_id],bb=[war.destination_castle,dest.ownerAccountId].sort((x,y)=>x[0].localeCompare(y[0]));
+        const a=[war.source_castle,session.user_id],bb=[war.destination_castle,dest.ownerAccountId];
         qs.push(env.DB.prepare("INSERT OR IGNORE INTO military_alliances(id,castle_a,owner_a,castle_b,owner_b,created_at) VALUES(?,?,?,?,?,?)").bind(newId(),a[0],a[1],bb[0],bb[1],now));
       }
       const result=await env.DB.batch(qs);if(!result[1]?.meta?.changes)return json({error:"گزینه رسیدن همزمان ثبت شده است."},409);
