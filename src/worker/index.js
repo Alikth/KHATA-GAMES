@@ -124,29 +124,26 @@ function warCommandExpiresAtMs(row,windowMinutes=90){const arrival=warArrivalMs(
 function warCommandMeta(row,now=Date.now(),windowMinutes=90){const expires=warCommandExpiresAtMs(row,windowMinutes);return {commandExpiresAt:expires?new Date(expires).toISOString():null,commandExpired:!!(expires&&now>=expires)};}
 async function returnExpiredUncommandedWarExpeditions(env){
   await ensureWarLogSchema(env);
-  const rows=(await env.DB.prepare("SELECT * FROM war_logs WHERE cancelled=0 AND command IS NULL").all()).results;
+  const rows=(await env.DB.prepare("SELECT * FROM war_logs WHERE cancelled=0 AND command IS NULL AND assets_settled_at IS NULL").all()).results;
   const now=Date.now();
   for(const row of rows){
     const windowMinutes=Math.max(1,Number(row.command_window_minutes)||await getGameSettingNumber(env,"war_command_window_minutes",90));
     const expires=warCommandExpiresAtMs(row,windowMinutes);
     if(!expires||now<expires)continue;
     let assets={};try{assets=JSON.parse(row.assets_json||"{}");}catch{}
-    const updates=[];
+    const token=newId(),cancelledAt=new Date(now).toISOString(),updates=[
+      env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by='timeout',run_started_at=NULL,assets_settled_at=? WHERE id=? AND cancelled=0 AND command IS NULL AND assets_settled_at IS NULL").bind(cancelledAt,token,row.id)
+    ];
     if(!Number(row.is_fake)){
-      for(const kind of ["army","equipment","fleet"]){
-        for(const [key,raw] of Object.entries(assets[kind]||{})){
-          const amount=Math.max(0,Math.floor(Number(raw)||0));if(!amount)continue;
-          const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";
-          const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";
-          updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=? AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND cancelled=0 AND command IS NULL)`).bind(amount,row.source_castle,key,row.id));
-        }
+      for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){
+        const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;
+        const stmt=assetCreditStatement(env,{target:row.asset_origin==="garrison"?"garrison":"castle",castle:row.source_castle,ownerId:row.attacker_account_id,kind,key,amount:n,warId:row.id,token});
+        if(stmt)updates.push(stmt);
       }
     }
-    const cancelledAt=new Date(now).toISOString();
-    updates.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by='timeout',run_started_at=NULL WHERE id=? AND cancelled=0 AND command IS NULL").bind(cancelledAt,row.id));
     const result=await env.DB.batch(updates);
-    if(result[updates.length-1]?.meta?.changes){
-      try{await notifyMany(env,[{accountId:row.attacker_account_id,castle:row.source_castle,type:"war_cancelled",title:"لشکرکشی به‌طور خودکار لغو شد",body:"برای این لشکرکشی در مهلت مقرر دستوری ثبت نشد؛ نیروها و تجهیزات به قلعه مبدأ برگشتند.",relatedId:row.id}]);}catch(e){console.error("war timeout notification failed",e);}
+    if(result[0]?.meta?.changes){
+      try{await notifyMany(env,[{accountId:row.attacker_account_id,castle:row.source_castle,type:"war_cancelled",title:"لشکرکشی به‌طور خودکار لغو شد",body:"برای این لشکرکشی در مهلت مقرر دستوری ثبت نشد؛ نیروها و ادوات به محل مبدأ برگشتند.",relatedId:row.id}]);}catch(e){console.error("war timeout notification failed",e);}
     }
   }
 }
@@ -160,6 +157,15 @@ async function resumeWars(env){await ensureWarLogSchema(env);const rt=await warR
 async function castleUnderSiege(env,castle){await ensureWarLogSchema(env);return !!(await env.DB.prepare("SELECT id FROM war_logs WHERE cancelled=0 AND command='siege' AND outcome IS NULL AND destination_castle=? LIMIT 1").bind(castle).first());}
 async function castleUnderActiveAttack(env,castle){await ensureWarLogSchema(env);return !!(await env.DB.prepare("SELECT id FROM war_logs WHERE cancelled=0 AND command IN ('attack','siege') AND outcome IS NULL AND destination_castle=? LIMIT 1").bind(castle).first());}
 async function castleTradeBlocked(env,castle){return castleUnderActiveAttack(env,castle);}
+function assetCreditStatement(env,{target,castle,ownerId,kind,key,amount,warId,token}){
+  const n=Math.max(0,Math.floor(Number(amount)||0));if(!n)return null;
+  const guard="EXISTS (SELECT 1 FROM war_logs WHERE id=? AND assets_settled_at=?)";
+  if(target==="garrison")return env.DB.prepare(`INSERT INTO castle_garrison_assets(castle,owner_account_id,kind,asset_key,count) SELECT ?,?,?,?,? WHERE ${guard} ON CONFLICT(castle,owner_account_id,kind,asset_key) DO UPDATE SET count=count+excluded.count`).bind(castle,ownerId,kind,key,n,warId,token);
+  const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":kind==="fleet"?"castle_fleet":null;
+  const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";
+  if(!table)return null;
+  return env.DB.prepare(`INSERT INTO ${table}(castle,${field},count) SELECT ?,?,? WHERE ${guard} ON CONFLICT(castle,${field}) DO UPDATE SET count=count+excluded.count`).bind(castle,key,n,warId,token);
+}
 
 
 const ECONOMY_SCHEMA = [
