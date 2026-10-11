@@ -1068,9 +1068,15 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
           if(table)qs.push(env.DB.prepare(`INSERT INTO ${table}(castle,${field},count) VALUES(?,?,?) ON CONFLICT(castle,${field}) DO UPDATE SET count=count+excluded.count`).bind(war.destination_castle,key,amount));
         }
       }
+      let allianceId=null;
       if(choice==="alliance"){
         const a=[war.source_castle,session.user_id],bb=[war.destination_castle,dest.ownerAccountId];
-        const allianceId=newId(); qs.push(env.DB.prepare("INSERT OR IGNORE INTO military_alliances(id,castle_a,owner_a,castle_b,owner_b,created_at,status) VALUES(?,?,?,?,?,?,?)").bind(allianceId,a[0],a[1],bb[0],bb[1],now,"pending")); qs.push(env.DB.prepare("INSERT INTO notifications(id,account_id,castle,type,title,body,related_id,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(newId(),dest.ownerAccountId,war.destination_castle,"alliance_request","درخواست اتحاد نظامی",war.source_castle+" درخواست اتحاد نظامی با قلعه شما را دارد.",allianceId,now));
+        const existing=await env.DB.prepare("SELECT id,status FROM military_alliances WHERE castle_a=? AND castle_b=?").bind(a[0],bb[0]).first();
+        if(existing&&existing.status==="accepted")return json({error:"این دو قلعه از قبل متحد هستند."},409);
+        if(existing&&existing.status==="pending")return json({error:"درخواست اتحاد قبلاً ارسال شده و منتظر پاسخ است."},409);
+        allianceId=newId();
+        qs.push(env.DB.prepare("INSERT INTO military_alliances(id,castle_a,owner_a,castle_b,owner_b,created_at,status) VALUES(?,?,?,?,?,?,?)").bind(allianceId,a[0],a[1],bb[0],bb[1],now,"pending"));
+        qs.push(env.DB.prepare("INSERT INTO notifications(id,account_id,castle,type,title,body,related_id,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(newId(),dest.ownerAccountId,war.destination_castle,"alliance_request","درخواست اتحاد نظامی",war.source_castle+" درخواست اتحاد نظامی با قلعه شما را دارد.",allianceId,now));
       }
       const result=await env.DB.batch(qs);if(!result[1]?.meta?.changes)return json({error:"گزینه رسیدن همزمان ثبت شده است."},409);
       return json({ok:true,choice});
