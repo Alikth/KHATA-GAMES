@@ -1058,8 +1058,8 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     if(choice==="garrison"||choice==="alliance"){
       const now=new Date().toISOString();let assets={};try{assets=JSON.parse(war.assets_json||"{}")}catch{}
       if(choice==="alliance"&&!dest?.ownerAccountId)return json({error:"قلعه مقصد مالک ندارد و امکان ارسال درخواست اتحاد نیست."},400);
-      const qs=[env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) VALUES(?,?,?,?,?,?,?)").bind(id,session.user_id,war.source_castle,war.destination_castle,JSON.stringify(assets),choice==="garrison"?"deploy":"alliance",now),
-        env.DB.prepare("UPDATE war_logs SET arrival_choice=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy'").bind(choice==="garrison"?"garrison":"alliance",id)];
+      const qs=[env.DB.prepare("UPDATE war_logs SET arrival_choice=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy'").bind(choice==="garrison"?"garrison":"alliance",id),
+        env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) VALUES(?,?,?,?,?,?,?)").bind(id,session.user_id,war.source_castle,war.destination_castle,JSON.stringify(assets),choice==="garrison"?"deploy":"alliance",now)];
       if(choice==="garrison"){
         for(const [kind,group] of Object.entries(assets))for(const [key,raw] of Object.entries(group||{})){
           const amount=Math.max(0,Math.floor(Number(raw)||0));if(!amount)continue;
@@ -1075,10 +1075,10 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
         if(existing&&existing.status==="accepted")return json({error:"این دو قلعه از قبل متحد هستند."},409);
         if(existing&&existing.status==="pending")return json({error:"درخواست اتحاد قبلاً ارسال شده و منتظر پاسخ است."},409);
         allianceId=newId();
-        qs.push(env.DB.prepare("INSERT INTO military_alliances(id,castle_a,owner_a,castle_b,owner_b,created_at,status) VALUES(?,?,?,?,?,?,?)").bind(allianceId,a[0],a[1],bb[0],bb[1],now,"pending"));
+        qs.push(env.DB.prepare("INSERT INTO military_alliances(id,castle_a,owner_a,castle_b,owner_b,created_at,status) VALUES(?,?,?,?,?,?,?) ON CONFLICT(castle_a,castle_b) DO UPDATE SET id=excluded.id,owner_a=excluded.owner_a,owner_b=excluded.owner_b,created_at=excluded.created_at,status=excluded.status").bind(allianceId,a[0],a[1],bb[0],bb[1],now,"pending"));
         qs.push(env.DB.prepare("INSERT INTO notifications(id,account_id,castle,type,title,body,related_id,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(newId(),dest.ownerAccountId,war.destination_castle,"alliance_request","درخواست اتحاد نظامی",war.source_castle+" درخواست اتحاد نظامی با قلعه شما را دارد.",allianceId,now));
       }
-      const result=await env.DB.batch(qs);if(!result[1]?.meta?.changes)return json({error:"گزینه رسیدن همزمان ثبت شده است."},409);
+      const result=await env.DB.batch(qs);if(!result[0]?.meta?.changes)return json({error:"گزینه رسیدن همزمان ثبت شده است."},409);
       return json({ok:true,choice});
     }
     if(choice==="transfer"){
