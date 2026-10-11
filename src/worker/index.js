@@ -979,19 +979,24 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     return json({commands:rows.filter(x=>!warIsActive(x,rt)).map(x=>({...x,arrived:true,...warCommandMeta(x,Date.now(),Number(x.commandWindowMinutes||90))}))});
   }
   if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/cancel$/)) {
-    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403); await ensureWarLogSchema(env);
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);await ensureWarLogSchema(env);
     if(!(await rateLimit(request,env,"war-cancel",30)))return json({error:"تعداد درخواست‌های لغو لشکرکشی زیاد است. کمی بعد دوباره تلاش کن."},429,{"retry-after":"900"});
-    const session=await requireUser(request,env); if(!session)return json({error:"دسترسی لازم است."},401);
-    const id=decodeURIComponent(path.split("/")[3]), row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=?").bind(id,session.user_id).first();
-    if(!row)return json({error:"لشکرکشی پیدا نشد."},404); const rt=await warRuntime(env);
+    const session=await requireUser(request,env);if(!session)return json({error:"دسترسی لازم است."},401);
+    const id=decodeURIComponent(path.split("/")[3]),row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=?").bind(id,session.user_id).first();
+    if(!row)return json({error:"لشکرکشی پیدا نشد."},404);const rt=await warRuntime(env);
     if(Number(row.cancelled))return json({error:"این لشکرکشی قبلاً لغو شده است."},409);
-    if(!warIsActive(row,rt))return json({error:"این لشکرکشی دیگر قابل لغو نیست."},409);
-    const assets=JSON.parse(row.assets_json||"{}"),updates=[];
-    if(!Number(row.is_fake))for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=? AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND cancelled=0 AND command IS NULL)`).bind(Math.floor(Number(raw)||0),row.source_castle,key,id));}
-    updates.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by=?,run_started_at=NULL WHERE id=? AND cancelled=0 AND command IS NULL").bind(new Date().toISOString(),session.user_id,id));
-    const result=await env.DB.batch(updates); if(!result[updates.length-1]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ دوباره تلاش کن."},409);await notifyMany(env,[{accountId:session.user_id,castle:row.source_castle,type:"war_cancelled",title:"لشکرکشی لغو شد",body:"لشکرکشی از "+row.source_castle+" به "+row.destination_castle+" لغو شد و نیروها به مبدا برگشتند.",relatedId:id}]); return json({ok:true});
+    if(!warIsActive(row,rt)||row.command||row.arrival_choice)return json({error:"این لشکرکشی دیگر قابل لغو نیست."},409);
+    const token=newId(),assets=JSON.parse(row.assets_json||"{}"),updates=[
+      env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by=?,run_started_at=NULL,assets_settled_at=? WHERE id=? AND cancelled=0 AND command IS NULL AND arrival_choice IS NULL AND assets_settled_at IS NULL").bind(new Date().toISOString(),session.user_id,token,id)
+    ];
+    if(!Number(row.is_fake))for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){
+      const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;
+      const stmt=assetCreditStatement(env,{target:row.asset_origin==="garrison"?"garrison":"castle",castle:row.source_castle,ownerId:row.attacker_account_id,kind,key,amount:n,warId:id,token});if(stmt)updates.push(stmt);
+    }
+    const result=await env.DB.batch(updates);if(!result[0]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ وضعیت یا موجودی تغییر کرده است."},409);
+    await notifyMany(env,[{accountId:session.user_id,castle:row.source_castle,type:"war_cancelled",title:"لشکرکشی لغو شد",body:"لشکرکشی از "+row.source_castle+" به "+row.destination_castle+" لغو شد و نیروها به محل مبدأ برگشتند.",relatedId:id}]);return json({ok:true});
   }
-  if (method==="GET" && path==="/api/my-castle/garrisons") {
+    if (method==="GET" && path==="/api/my-castle/garrisons") {
     await ensureWarLogSchema(env);
     const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const rows=(await env.DB.prepare("SELECT castle,kind,asset_key AS assetKey,count FROM castle_garrison_assets WHERE owner_account_id=? AND count>0 ORDER BY castle,kind,asset_key").bind(session.user_id).all()).results;
@@ -1518,29 +1523,21 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
   if (method==="POST" && path.match(/^\/api\/admin\/war-expeditions\/[^/]+\/cancel$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
-    await ensureWarLogSchema(env);
-    const id=decodeURIComponent(path.split("/")[4]);
-    const row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
+    await ensureWarLogSchema(env);const id=decodeURIComponent(path.split("/")[4]),row=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
     if(!row)return json({error:"لشکرکشی پیدا نشد."},404);
     if(Number(row.cancelled))return json({error:"این لشکرکشی قبلاً لغو شده است."},409);
-    const rt=await warRuntime(env);
-    if(!warIsActive(row,rt))return json({error:"زمان رسیدن این لشکرکشی گذشته است."},409);
-    const assets=JSON.parse(row.assets_json||"{}"); const updates=[];
-    if(!Number(row.is_fake)){
-      for(const kind of ["army","equipment","fleet"]){
-        for(const [key,raw] of Object.entries(assets[kind]||{})){
-          const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":"castle_fleet";
-          const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";
-          updates.push(env.DB.prepare(`UPDATE ${table} SET count=count+? WHERE castle=? AND ${field}=? AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND cancelled=0 AND command IS NULL)`).bind(Math.floor(Number(raw)||0),row.source_castle,key,id));
-        }
-      }
+    const rt=await warRuntime(env);if(!warIsActive(row,rt)||row.command||row.arrival_choice)return json({error:"این لشکرکشی دیگر قابل لغو نیست."},409);
+    const token=newId(),assets=JSON.parse(row.assets_json||"{}"),updates=[
+      env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by='admin',run_started_at=NULL,assets_settled_at=? WHERE id=? AND cancelled=0 AND command IS NULL AND arrival_choice IS NULL AND assets_settled_at IS NULL").bind(new Date().toISOString(),token,id)
+    ];
+    if(!Number(row.is_fake))for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){
+      const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;
+      const stmt=assetCreditStatement(env,{target:row.asset_origin==="garrison"?"garrison":"castle",castle:row.source_castle,ownerId:row.attacker_account_id,kind,key,amount:n,warId:id,token});if(stmt)updates.push(stmt);
     }
-    updates.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by=?,run_started_at=NULL WHERE id=? AND cancelled=0 AND command IS NULL").bind(new Date().toISOString(),"admin",id));
-    const result=await env.DB.batch(updates);
-    if(!result[updates.length-1]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ دوباره تلاش کن."},409);
+    const result=await env.DB.batch(updates);if(!result[0]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ وضعیت تغییر کرده است."},409);
     return json({ok:true});
   }
-  if (method==="GET" && path==="/api/trades/notifications") {
+    if (method==="GET" && path==="/api/trades/notifications") {
     await ensureTradeSchema(env);
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const rows=await tradeRowsForAccount(env,session.user_id);
