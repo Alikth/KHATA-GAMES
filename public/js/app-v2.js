@@ -402,29 +402,52 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   async function renderMyCastles() {
-    const root = $("myCastlesList"); if (!root || !currentUser) return;
+    const root = $("myCastlesList");
+    if (!root) return;
+    if (!currentUser) {
+      root.innerHTML = '<div class="my-castles-empty"><div class="empty-castle-icon">🔐</div><h3>ورود به حساب لازم است</h3><p>برای دیدن قلعه‌های خودت، وارد حساب کاربری شو.</p></div>';
+      return;
+    }
+    root.innerHTML = '<div class="my-castles-empty"><div class="empty-castle-icon">🏰</div><h3>در حال بررسی قلعه‌ها...</h3><p>اطلاعات مالکیت حساب در حال دریافت است.</p></div>';
     let mine = [];
     let mineError = null;
     let tradeNotice = {byCastle:{}};
     let scenarioNotice = {items:[]};
     let roleStatus = {available:true,remainingSeconds:0};
     let notificationNotice = {byCastle:{}};
-    try{
-      const dashboard=await api("/api/my-dashboard");
-      mine=dashboard.castles||[];
-      tradeNotice=dashboard.tradeNotice||tradeNotice;
-      scenarioNotice=dashboard.scenarioNotice||scenarioNotice;
-      roleStatus=dashboard.roleStatus||roleStatus;
-      notificationNotice=dashboard.notificationNotice||notificationNotice;
-      claimLocked=!!dashboard.claimLocked;
-    }catch(e){mineError=e;}
+    try {
+      const dashboard = await api("/api/my-dashboard");
+      mine = Array.isArray(dashboard.castles) ? dashboard.castles : [];
+      tradeNotice = dashboard.tradeNotice || tradeNotice;
+      scenarioNotice = dashboard.scenarioNotice || scenarioNotice;
+      roleStatus = dashboard.roleStatus || roleStatus;
+      notificationNotice = dashboard.notificationNotice || notificationNotice;
+      claimLocked = !!dashboard.claimLocked;
+    } catch (e) {
+      mineError = e;
+    }
 
-    if (mineError) {
-      root.innerHTML = '<div class="my-castles-empty"><div class="empty-castle-icon">⚠️</div><h3>خطا در دریافت قلعه‌ها</h3><p>'+escapeHTML(mineError.message||"دریافت قلعه‌ها انجام نشد.")+'</p></div>';
+    // Use the dedicated endpoint as a second read path. This also makes partial
+    // dashboard failures visible/recoverable without changing or reassigning ownership.
+    if (!mine.length) {
+      try {
+        const direct = await api("/api/my-castles");
+        if (Array.isArray(direct) && direct.length) {
+          mine = direct;
+          mineError = null;
+        }
+      } catch (e) {
+        if (mineError) mineError = new Error((mineError.message || "داشبورد") + "؛ " + (e.message || "فهرست قلعه‌ها"));
+        else mineError = e;
+      }
+    }
+
+    if (mineError && !mine.length) {
+      root.innerHTML = '<div class="my-castles-empty"><div class="empty-castle-icon">⚠️</div><h3>خطا در دریافت قلعه‌ها</h3><p>'+escapeHTML(mineError.message||"دریافت قلعه‌ها انجام نشد.")+'</p><button class="primary" type="button" data-action="refresh-my-castles">تلاش دوباره</button></div>';
       return;
     }
     if (!mine.length) {
-      root.innerHTML = `<div class="my-castles-empty"><div class="empty-castle-icon">🏰</div><h3>NO CASTLES YET</h3><p>هنوز هیچ قلعه‌ای با این حساب ثبت نشده است.</p><button class="primary" type="button" data-action="go-register">انتخاب قلعه</button></div>`;
+      root.innerHTML = `<div class="my-castles-empty"><div class="empty-castle-icon">🏰</div><h3>NO CASTLES YET</h3><p>سرور برای حساب فعلی هیچ قلعه‌ای برنگرداند. اگر قلعه روی نقشه به نام توست، مالکیت را دوباره ثبت نکن؛ این مورد نیاز به بررسی اتصال حساب دارد.</p><button class="primary" type="button" data-action="refresh-my-castles">بررسی دوباره</button></div>`;
       return;
     }
     root.innerHTML = mine.map(p => {
