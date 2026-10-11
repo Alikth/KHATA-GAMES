@@ -1111,15 +1111,13 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     if(choice==="accept-alliance"||choice==="reject-alliance"){
       const pending=await env.DB.prepare("SELECT * FROM military_alliances WHERE id=? AND owner_b=? AND status='pending'").bind(id,session.user_id).first();
       if(!pending)return json({error:"درخواست اتحاد پیدا نشد یا قبلاً بررسی شده است."},404);
-      const status=choice==="accept-alliance"?"accepted":"rejected",token=newId(),now=new Date().toISOString();
-      const claim=await env.DB.prepare("UPDATE military_alliances SET status=?,responded_at=? WHERE id=? AND owner_b=? AND status='pending'").bind(status,token,id,session.user_id).run();
-      if(!claim.meta?.changes)return json({error:"درخواست قبلاً بررسی شده است."},409);
+      const status=choice==="accept-alliance"?"accepted":"rejected",token=newId(),respondedAt=new Date().toISOString();
+      const qs=[env.DB.prepare("UPDATE military_alliances SET status=?,responded_at=? WHERE id=? AND owner_b=? AND status='pending'").bind(status,token,id,session.user_id)];
       if(pending.war_id){
         const wg=await env.DB.prepare("SELECT * FROM war_garrisons WHERE war_id=? AND mode='alliance'").bind(pending.war_id).first();
         const war=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(pending.war_id).first();
         if(wg&&war){
           let assets={};try{assets=JSON.parse(wg.assets_json||"{}")}catch{}
-          const qs=[];
           if(status==="accepted"){
             for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){
               const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;
@@ -1130,17 +1128,16 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
           }else{
             for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){
               const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;
-              const stmt=assetCreditStatement(env,{target:war.asset_origin==="garrison"?"garrison":"castle",castle:war.source_castle,ownerId:war.attacker_account_id,kind,key,amount:n,warId:pending.war_id,token:war.assets_settled_at});
-              // The settlement marker for an alliance is the marker stored when the request was made.
+              const stmt=assetCreditByAllianceStatement(env,{target:war.asset_origin==="garrison"?"garrison":"castle",castle:war.source_castle,ownerId:war.attacker_account_id,kind,key,amount:n,allianceId:id,token});
               if(stmt)qs.push(stmt);
             }
             qs.push(env.DB.prepare("UPDATE war_garrisons SET mode='returned' WHERE war_id=? AND mode='alliance' AND EXISTS (SELECT 1 FROM military_alliances WHERE id=? AND status='rejected' AND responded_at=?)").bind(pending.war_id,id,token));
             qs.push(env.DB.prepare("UPDATE war_logs SET transfer_status='alliance_rejected' WHERE id=? AND arrival_choice='alliance'").bind(pending.war_id));
           }
-          if(qs.length)await env.DB.batch(qs);
         }
       }
-      await notifyMany(env,[{accountId:pending.owner_a,castle:pending.castle_a,type:"alliance_response",title:status==="accepted"?"اتحاد نظامی تأیید شد":"درخواست اتحاد رد شد",body:status==="accepted"?"لرد مقصد درخواست اتحاد را پذیرفت.":"لرد مقصد درخواست اتحاد را رد کرد.",relatedId:id}]);
+      const result=await env.DB.batch(qs);if(!result[0]?.meta?.changes)return json({error:"درخواست قبلاً بررسی شده است."},409);
+      await notifyMany(env,[{accountId:pending.owner_a,castle:pending.castle_a,type:"alliance_response",title:status==="accepted"?"اتحاد نظامی تأیید شد":"درخواست اتحاد رد شد",body:status==="accepted"?"لرد مقصد درخواست اتحاد را پذیرفت. نیروهای اعزامی در قلعه مقصد مستقر شدند.":"لرد مقصد درخواست اتحاد را رد کرد و نیروهای اعزامی به مبدأ برگشتند.",relatedId:id}]);
       return json({ok:true,status});
     }
 
@@ -1156,13 +1153,11 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
       if(!dest?.ownerAccountId||dest.ownerAccountId!==session.user_id)return json({error:"فقط مالک قلعه مقصد می‌تواند درباره انتقال تصمیم بگیرد."},403);
       const req=await env.DB.prepare("SELECT * FROM troop_transfer_requests WHERE war_id=? AND receiver_account_id=? AND status='pending'").bind(id,session.user_id).first();
       if(!req)return json({error:"درخواست انتقال معتبری وجود ندارد یا قبلاً بررسی شده است."},404);
-      if(war.arrival_choice!=="transfer"||war.transfer_status!=="pending")return json({error:"وضعیت انتقال دیگر در انتظار پاسخ نیست."},409);
+      if(war.arrival_choice!=="transfer"||war.transfer_status!=="pending"||war.assets_settled_at)return json({error:"وضعیت انتقال دیگر در انتظار پاسخ نیست."},409);
       const status=choice==="accept-transfer"?"accepted":"rejected",token=newId(),now=new Date().toISOString();
-      const claim=await env.DB.prepare("UPDATE war_logs SET transfer_status=?,assets_settled_at=? WHERE id=? AND arrival_choice='transfer' AND transfer_status='pending' AND cancelled=0 AND assets_settled_at IS NULL AND EXISTS (SELECT 1 FROM troop_transfer_requests WHERE war_id=? AND receiver_account_id=? AND status='pending')").bind(status,token,id,id,session.user_id).run();
-      if(!claim.meta?.changes)return json({error:"درخواست انتقال هم‌زمان تغییر کرده است."},409);
-      const upd=await env.DB.prepare("UPDATE troop_transfer_requests SET status=?,accepted_at=? WHERE war_id=? AND receiver_account_id=? AND status='pending' AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND transfer_status=? AND assets_settled_at=?)").bind(status,now,id,session.user_id,id,status,token).run();
-      if(!upd.meta?.changes)return json({error:"وضعیت درخواست انتقال هم‌زمان تغییر کرده است."},409);
-      const assets=JSON.parse(req.assets_json||"{}"),qs=[];
+      const qs=[env.DB.prepare("UPDATE war_logs SET transfer_status=?,assets_settled_at=? WHERE id=? AND arrival_choice='transfer' AND transfer_status='pending' AND cancelled=0 AND assets_settled_at IS NULL AND EXISTS (SELECT 1 FROM troop_transfer_requests WHERE war_id=? AND receiver_account_id=? AND status='pending')").bind(status,token,id,id,session.user_id),
+        env.DB.prepare("UPDATE troop_transfer_requests SET status=?,accepted_at=? WHERE war_id=? AND receiver_account_id=? AND status='pending' AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND transfer_status=? AND assets_settled_at=?)").bind(status,now,id,session.user_id,id,status,token)];
+      const assets=JSON.parse(req.assets_json||"{}");
       for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){
         const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;
         const target=status==="accepted"?"castle":(war.asset_origin==="garrison"?"garrison":"castle");
@@ -1170,13 +1165,14 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
         const stmt=assetCreditStatement(env,{target,castle,ownerId:status==="accepted"?req.receiver_account_id:war.attacker_account_id,kind,key,amount:n,warId:id,token});
         if(stmt)qs.push(stmt);
       }
-      if(qs.length)await env.DB.batch(qs);
+      const results=await env.DB.batch(qs);
+      if(!results[0]?.meta?.changes||!results[1]?.meta?.changes)return json({error:"درخواست انتقال هم‌زمان تغییر کرده است؛ دارایی دوباره اعمال نشد."},409);
       await notifyMany(env,[{accountId:req.sender_account_id,castle:req.source_castle,type:"troop_transfer_response",title:status==="accepted"?"انتقال نیرو تأیید شد":"انتقال نیرو رد شد",body:status==="accepted"?"نیروها به موجودی قلعه مقصد اضافه شدند و انتقال تکمیل شد.":"درخواست انتقال رد شد و نیروها به محل مبدأ برگشتند.",relatedId:id}]);
       return json({ok:true,status});
     }
 
     if(war.attacker_account_id!==session.user_id)return json({error:"فقط مالک لشکر اعزام‌شده می‌تواند گزینه رسیدن را انتخاب کند."},403);
-    if(war.arrival_choice)return json({error:"برای این ارتش قبلاً گزینه رسیدن ثبت شده است."},409);
+    if(war.arrival_choice||war.assets_settled_at)return json({error:"برای این ارتش قبلاً گزینه رسیدن ثبت شده است."},409);
     if(!["garrison","alliance","transfer"].includes(choice))return json({error:"گزینه رسیدن معتبر نیست."},400);
     if(choice==="alliance"&&!dest?.ownerAccountId)return json({error:"قلعه مقصد مالک ندارد و امکان ارسال درخواست اتحاد نیست."},400);
     if(choice==="transfer"&&!dest?.ownerAccountId)return json({error:"قلعه مقصد مالک ندارد؛ درخواست انتقال قابل ارسال نیست."},400);
@@ -1187,40 +1183,39 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
       if(existing&&existing.status==="accepted")return json({error:"این دو قلعه از قبل متحد هستند."},409);
       if(existing&&existing.status==="pending")return json({error:"درخواست اتحاد قبلاً ارسال شده و منتظر پاسخ است."},409);
       const sameOwner=dest.ownerAccountId===session.user_id,allianceId=newId(),status=sameOwner?"accepted":"pending",respondedAt=sameOwner?now:null;
-      const claim=await env.DB.prepare("UPDATE war_logs SET arrival_choice='alliance',transfer_status=?,assets_settled_at=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy' AND assets_settled_at IS NULL").bind(sameOwner?"alliance_accepted":"alliance_pending",token,id).run();
-      if(!claim.meta?.changes)return json({error:"گزینه رسیدن هم‌زمان ثبت شده است."},409);
-      const aw=existing
+      const qs=[env.DB.prepare("UPDATE war_logs SET arrival_choice='alliance',transfer_status=?,assets_settled_at=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy' AND assets_settled_at IS NULL").bind(sameOwner?"alliance_accepted":"alliance_pending",token,id)];
+      const allianceStatement=existing
         ? env.DB.prepare("UPDATE military_alliances SET id=?,castle_a=?,owner_a=?,castle_b=?,owner_b=?,created_at=?,status=?,responded_at=?,war_id=? WHERE id=? AND status='rejected' AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='alliance' AND assets_settled_at=?)").bind(allianceId,war.source_castle,session.user_id,war.destination_castle,dest.ownerAccountId,now,status,respondedAt,id,existing.id,id,token)
         : env.DB.prepare("INSERT INTO military_alliances(id,castle_a,owner_a,castle_b,owner_b,created_at,status,responded_at,war_id) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='alliance' AND assets_settled_at=?)").bind(allianceId,war.source_castle,session.user_id,war.destination_castle,dest.ownerAccountId,now,status,respondedAt,id,id,token);
-      const qs=[aw,env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='alliance' AND assets_settled_at=?) ON CONFLICT(war_id) DO UPDATE SET assets_json=excluded.assets_json,mode=excluded.mode").bind(id,session.user_id,war.source_castle,war.destination_castle,JSON.stringify(assets),sameOwner?"garrison":"alliance",now,id,token)];
+      qs.push(allianceStatement);
+      qs.push(env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='alliance' AND assets_settled_at=?) ON CONFLICT(war_id) DO UPDATE SET assets_json=excluded.assets_json,mode=excluded.mode").bind(id,session.user_id,war.source_castle,war.destination_castle,JSON.stringify(assets),sameOwner?"garrison":"alliance",now,id,token));
       if(sameOwner){
-        for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;const stmt=env.DB.prepare("INSERT INTO castle_garrison_assets(castle,owner_account_id,kind,asset_key,count) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='alliance' AND assets_settled_at=?) ON CONFLICT(castle,owner_account_id,kind,asset_key) DO UPDATE SET count=count+excluded.count").bind(war.destination_castle,session.user_id,kind,key,n,id,token);qs.push(stmt);}
+        for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;qs.push(env.DB.prepare("INSERT INTO castle_garrison_assets(castle,owner_account_id,kind,asset_key,count) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='alliance' AND assets_settled_at=?) ON CONFLICT(castle,owner_account_id,kind,asset_key) DO UPDATE SET count=count+excluded.count").bind(war.destination_castle,session.user_id,kind,key,n,id,token));}
       }else{
         qs.push(env.DB.prepare("INSERT INTO notifications(id,account_id,castle,type,title,body,related_id,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM military_alliances WHERE id=? AND status='pending' AND war_id=?)").bind(newId(),dest.ownerAccountId,war.destination_castle,"alliance_request","درخواست اتحاد نظامی",war.source_castle+" درخواست اتحاد نظامی با قلعه شما را دارد.",allianceId,now,allianceId,id));
       }
-      await env.DB.batch(qs);
+      const results=await env.DB.batch(qs);
+      if(!results[0]?.meta?.changes)return json({error:"گزینه رسیدن هم‌زمان ثبت شده است."},409);
+      if(!results[1]?.meta?.changes)return json({error:"رکورد اتحاد ثبت نشد؛ دوباره وضعیت را بررسی کن."},409);
       return json({ok:true,choice,status});
     }
 
     if(choice==="garrison"){
       const sameOwner=dest?.ownerAccountId===session.user_id;
-      const claim=await env.DB.prepare("UPDATE war_logs SET arrival_choice='garrison',assets_settled_at=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy' AND assets_settled_at IS NULL").bind(token,id).run();
-      if(!claim.meta?.changes)return json({error:"گزینه رسیدن هم‌زمان ثبت شده است."},409);
-      const qs=[env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) VALUES(?,?,?,?,?,?,?)").bind(id,session.user_id,war.source_castle,war.destination_castle,JSON.stringify(assets),"garrison",now)];
+      const qs=[env.DB.prepare("UPDATE war_logs SET arrival_choice='garrison',assets_settled_at=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy' AND assets_settled_at IS NULL").bind(token,id),
+        env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='garrison' AND assets_settled_at=?) ON CONFLICT(war_id) DO UPDATE SET assets_json=excluded.assets_json,mode='garrison'").bind(id,session.user_id,war.source_castle,war.destination_castle,JSON.stringify(assets),"garrison",now,id,token)];
       for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){
         const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;
-        if(sameOwner){const stmt=assetCreditStatement(env,{target:"castle",castle:war.destination_castle,ownerId:session.user_id,kind,key,amount:n,warId:id,token});if(stmt)qs.push(stmt);}
-        else {const stmt=assetCreditStatement(env,{target:"garrison",castle:war.destination_castle,ownerId:session.user_id,kind,key,amount:n,warId:id,token});if(stmt)qs.push(stmt);}
+        const stmt=assetCreditStatement(env,{target:sameOwner?"castle":"garrison",castle:war.destination_castle,ownerId:session.user_id,kind,key,amount:n,warId:id,token});if(stmt)qs.push(stmt);
       }
-      await env.DB.batch(qs);
+      const result=await env.DB.batch(qs);if(!result[0]?.meta?.changes)return json({error:"گزینه رسیدن هم‌زمان ثبت شده است."},409);
       return json({ok:true,choice,status:sameOwner?"returned_to_assets":"stationed"});
     }
 
     if(choice==="transfer"){
-      const claim=await env.DB.prepare("UPDATE war_logs SET arrival_choice='transfer',transfer_status='pending' WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy' AND assets_settled_at IS NULL").bind(id).run();
-      if(!claim.meta?.changes)return json({error:"گزینه رسیدن هم‌زمان ثبت شده است."},409);
-      const req=await env.DB.prepare("INSERT INTO troop_transfer_requests(war_id,sender_account_id,receiver_account_id,source_castle,destination_castle,assets_json,status,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='transfer' AND transfer_status='pending')").bind(id,session.user_id,dest.ownerAccountId,war.source_castle,war.destination_castle,JSON.stringify(assets),"pending",now,id).run();
-      if(!req.meta?.changes)return json({error:"درخواست انتقال ثبت نشد؛ دوباره وضعیت را بررسی کن."},409);
+      const qs=[env.DB.prepare("UPDATE war_logs SET arrival_choice='transfer',transfer_status='pending' WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy' AND assets_settled_at IS NULL").bind(id),
+        env.DB.prepare("INSERT INTO troop_transfer_requests(war_id,sender_account_id,receiver_account_id,source_castle,destination_castle,assets_json,status,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='transfer' AND transfer_status='pending')").bind(id,session.user_id,dest.ownerAccountId,war.source_castle,war.destination_castle,JSON.stringify(assets),"pending",now,id)];
+      const result=await env.DB.batch(qs);if(!result[0]?.meta?.changes||!result[1]?.meta?.changes)return json({error:"گزینه رسیدن هم‌زمان ثبت نشد؛ دوباره وضعیت را بررسی کن."},409);
       await notifyMany(env,[{accountId:dest.ownerAccountId,castle:war.destination_castle,type:"troop_transfer",title:"درخواست انتقال نیرو",body:war.attacker_username+" درخواست انتقال نیرو از "+war.source_castle+" به "+war.destination_castle+" داده است.",relatedId:id}]);
       return json({ok:true,choice,status:"pending"});
     }
