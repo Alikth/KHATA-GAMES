@@ -1190,7 +1190,7 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
       qs.push(allianceStatement);
       qs.push(env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='alliance' AND assets_settled_at=?) ON CONFLICT(war_id) DO UPDATE SET assets_json=excluded.assets_json,mode=excluded.mode").bind(id,session.user_id,war.source_castle,war.destination_castle,JSON.stringify(assets),sameOwner?"garrison":"alliance",now,id,token));
       if(sameOwner){
-        for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;qs.push(env.DB.prepare("INSERT INTO castle_garrison_assets(castle,owner_account_id,kind,asset_key,count) SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND arrival_choice='alliance' AND assets_settled_at=?) ON CONFLICT(castle,owner_account_id,kind,asset_key) DO UPDATE SET count=count+excluded.count").bind(war.destination_castle,session.user_id,kind,key,n,id,token));}
+        for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){const n=Math.max(0,Math.floor(Number(raw)||0));if(!n)continue;const stmt=assetCreditStatement(env,{target:"castle",castle:war.destination_castle,ownerId:session.user_id,kind,key,amount:n,warId:id,token});if(stmt)qs.push(stmt);}
       }else{
         qs.push(env.DB.prepare("INSERT INTO notifications(id,account_id,castle,type,title,body,related_id,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM military_alliances WHERE id=? AND status='pending' AND war_id=?)").bind(newId(),dest.ownerAccountId,war.destination_castle,"alliance_request","درخواست اتحاد نظامی",war.source_castle+" درخواست اتحاد نظامی با قلعه شما را دارد.",allianceId,now,allianceId,id));
       }
@@ -1232,6 +1232,10 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     if(Number(war.cancelled)||warIsActive(war,rt))return json({error:"این لشکرکشی هنوز به مقصد نرسیده است."},409);
     if(war.arrival_choice)return json({error:"برای این ارتش وضعیت رسیدن ثبت شده و دیگر نمی‌توان دستور جنگی جداگانه صادر کرد."},409);if(war.command)return json({error:"برای این لشکرکشی قبلاً دستور ثبت شده است."},409);
     const commandWindowMinutes=Number(war.command_window_minutes||await getGameSettingNumber(env,"war_command_window_minutes",90));const commandExpiresAt=warCommandExpiresAtMs(war,commandWindowMinutes);if(commandExpiresAt&&Date.now()>=commandExpiresAt)return json({error:"مهلت "+commandWindowMinutes+" دقیقه‌ای ارسال دستور این لشکرکشی تمام شده است."},410);
+    if(command==="attack"||command==="siege"){
+      const allied=await env.DB.prepare("SELECT id FROM military_alliances WHERE status='accepted' AND ((castle_a=? AND castle_b=?) OR (castle_a=? AND castle_b=?)) LIMIT 1").bind(war.source_castle,war.destination_castle,war.destination_castle,war.source_castle).first();
+      if(allied)return json({error:"این قلعه‌ها متحد هستند؛ برای بازگرداندن یا جابه‌جایی نیرو از دستور استقرار استفاده کن."},409);
+    }
     let defenderAssets={};
     if(command==="attack"||command==="siege"){
       const rows=(await env.DB.prepare("SELECT unit_key,count FROM castle_army WHERE castle=?").bind(war.destination_castle).all()).results;
