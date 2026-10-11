@@ -1104,6 +1104,7 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/arrival-choice$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     await ensureWarLogSchema(env);
+    await ensureNotificationSchema(env);
     const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]),b=await body(request),choice=String(b.choice||"");
     if(!["deploy","garrison","alliance","transfer","accept-transfer","reject-transfer","accept-alliance","reject-alliance"].includes(choice))return json({error:"گزینه معتبر نیست."},400);
