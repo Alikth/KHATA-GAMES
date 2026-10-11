@@ -452,10 +452,26 @@ function gameDayKey(date=new Date()) { return new Date(date).toISOString().slice
 function addCostCheck(state,cost){ return Object.entries(cost).every(([k,v])=>Number(state[k]||0)>=Number(v)); }
 function costText(cost){ return Object.entries(cost).map(([k,v])=>`${RESOURCE_LABELS[k]||k} ${v}`).join(" + "); }
 
+// Upgrade legacy D1 databases whose players table predates account-linked claims.
+let playerAccountSchemaPromise=null;
+async function ensurePlayerAccountSchema(env) {
+  if(playerAccountSchemaPromise)return playerAccountSchemaPromise;
+  playerAccountSchemaPromise=(async()=>{
+    await env.DB.prepare("CREATE TABLE IF NOT EXISTS players (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, region TEXT NOT NULL, house TEXT NOT NULL, castle TEXT NOT NULL UNIQUE, account_id TEXT, created_at TEXT NOT NULL)").run();
+    const columns=(await env.DB.prepare("PRAGMA table_info(players)").all()).results||[];
+    if(!columns.some(column=>column.name==="account_id")){
+      await env.DB.prepare("ALTER TABLE players ADD COLUMN account_id TEXT").run();
+    }
+    await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_players_account ON players(account_id)").run();
+  })().catch(error=>{playerAccountSchemaPromise=null;throw error;});
+  return playerAccountSchemaPromise;
+}
+
 let economySchemaPromise=null;
 async function ensureEconomySchema(env) {
   if(economySchemaPromise)return economySchemaPromise;
   economySchemaPromise=(async()=>{
+  await ensurePlayerAccountSchema(env);
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS economy_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)").run();
   // CREATE TABLE IF NOT EXISTS is cheap enough for the economy entry point and
   // guarantees that the two runtime support tables exist after an old deploy.
@@ -820,6 +836,7 @@ async function handleApi(request, env, url) {
   const userSession=await requireUser(request,env);
   if (method === "GET" && path === "/api/my-dashboard") {
     if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401);
+    await ensurePlayerAccountSchema(env);
     try{
     await ensureEconomySchema(env);
     await Promise.all([ensureWarLogSchema(env),ensureTradeSchema(env),ensureNarrativeSchema(env),ensureGameControls(env)]);
@@ -865,7 +882,7 @@ async function handleApi(request, env, url) {
       return json({castles:fallbackCastles.results,tradeNotice:{count:0,byCastle:{}},scenarioNotice:{items:[]},roleStatus:{available:true,remainingSeconds:0},claimLocked:false});
     }
   }
-  if (method === "GET" && path === "/api/my-castles") { if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); return json((await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(userSession.user_id).all()).results); }
+  if (method === "GET" && path === "/api/my-castles") { if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); await ensurePlayerAccountSchema(env); return json((await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(userSession.user_id).all()).results); }
   if (method === "GET" && path === "/api/claim/status") {
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     await ensureGameControls(env); const row=await env.DB.prepare("SELECT locked FROM game_controls WHERE control_key='claim'").first();
@@ -873,6 +890,7 @@ async function handleApi(request, env, url) {
   }
   if (method === "POST" && path === "/api/register") {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
+    await ensurePlayerAccountSchema(env);
     if(await isGameControlLocked(env,"claim"))return json({error:"انتخاب قلعه فعلاً توسط ادمین قفل شده است."},423);
     if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); const b=await body(request), username=normalizeUsername(b.username), region=String(b.region||"").trim(), castle=String(b.castle||"").trim();
     if(!validTelegramUsername(username)) return json({error:"Username تلگرام معتبر نیست. فقط حروف، عدد و _ و بین ۵ تا ۳۲ کاراکتر."},400); const selected=await dynamicCastle(env,region,castle); if(!selected) return json({error:"قلمرو یا قلعه معتبر نیست."},400);
@@ -1536,6 +1554,7 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
     const b=await body(request);
     if(b.confirmation!=="RESET_GAME_WORLD")return json({error:"برای تأیید، عبارت RESET_GAME_WORLD لازم است."},400);
+    await ensurePlayerAccountSchema(env);
     await ensureEconomySchema(env);
     await ensureWarLogSchema(env);
     await ensureTradeSchema(env);
