@@ -458,9 +458,16 @@ async function ensurePlayerAccountSchema(env) {
   if(playerAccountSchemaPromise)return playerAccountSchemaPromise;
   playerAccountSchemaPromise=(async()=>{
     await env.DB.prepare("CREATE TABLE IF NOT EXISTS players (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, region TEXT NOT NULL, house TEXT NOT NULL, castle TEXT NOT NULL UNIQUE, account_id TEXT, created_at TEXT NOT NULL)").run();
-    const columns=(await env.DB.prepare("PRAGMA table_info(players)").all()).results||[];
+    let columns=(await env.DB.prepare("PRAGMA table_info(players)").all()).results||[];
     if(!columns.some(column=>column.name==="account_id")){
-      await env.DB.prepare("ALTER TABLE players ADD COLUMN account_id TEXT").run();
+      // Multiple Worker isolates can run this migration at once. Re-check after
+      // ALTER because another isolate may have added the column between PRAGMA and ALTER.
+      try {
+        await env.DB.prepare("ALTER TABLE players ADD COLUMN account_id TEXT").run();
+      } catch(error) {
+        columns=(await env.DB.prepare("PRAGMA table_info(players)").all()).results||[];
+        if(!columns.some(column=>column.name==="account_id")) throw error;
+      }
     }
     await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_players_account ON players(account_id)").run();
   })().catch(error=>{playerAccountSchemaPromise=null;throw error;});
@@ -890,9 +897,13 @@ async function handleApi(request, env, url) {
   }
   if (method === "POST" && path === "/api/register") {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
+    if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401);
+    // Complete all schema migrations before inserting the claim, so a migration
+    // failure cannot leave a half-registered player behind.
     await ensurePlayerAccountSchema(env);
+    await ensureEconomySchema(env);
     if(await isGameControlLocked(env,"claim"))return json({error:"انتخاب قلعه فعلاً توسط ادمین قفل شده است."},423);
-    if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); const b=await body(request), username=normalizeUsername(b.username), region=String(b.region||"").trim(), castle=String(b.castle||"").trim();
+    const b=await body(request), username=normalizeUsername(b.username), region=String(b.region||"").trim(), castle=String(b.castle||"").trim();
     if(!validTelegramUsername(username)) return json({error:"Username تلگرام معتبر نیست. فقط حروف، عدد و _ و بین ۵ تا ۳۲ کاراکتر."},400); const selected=await dynamicCastle(env,region,castle); if(!selected) return json({error:"قلمرو یا قلعه معتبر نیست."},400);
     if(await env.DB.prepare("SELECT id FROM players WHERE region=? AND castle=?").bind(region,castle).first()) return json({error:"این قلعه قبلاً توسط یک لرد انتخاب شده است."},409);
     if(await env.DB.prepare("SELECT id FROM players WHERE lower(username)=lower(?)").bind("@"+username).first()) return json({error:"این Telegram Username قبلاً ثبت شده است."},409);
@@ -903,7 +914,7 @@ async function handleApi(request, env, url) {
        if(String(e?.message||e).toLowerCase().includes("unique"))return json({error:"این قلعه یا نام کاربری همزمان توسط دیگری ثبت شد."},409);
        throw e;
      }
-     await ensureEconomySchema(env); await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=?").bind(p.account_id,p.castle).run(); return json({message:`ثبت شد لرد ${selected.house}`,player:p});
+     await env.DB.prepare("UPDATE castle_state SET owner_account_id=? WHERE castle=?").bind(p.account_id,p.castle).run(); return json({message:`ثبت شد لرد ${selected.house}`,player:p});
   }
   if (method === "POST" && path === "/api/admin/login") {
     if (!sameOrigin(request)) return json({error:"درخواست نامعتبر است."},403);
