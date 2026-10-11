@@ -251,6 +251,7 @@ async function ensureWarLogSchema(env){
     castle_b TEXT NOT NULL, owner_b TEXT NOT NULL, created_at TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'accepted', UNIQUE(castle_a,castle_b)
   )`).run();
+  for(const [column,definition] of [["status","TEXT NOT NULL DEFAULT 'accepted'"],["responded_at","TEXT"]]){try{await env.DB.prepare("ALTER TABLE military_alliances ADD COLUMN "+column+" "+definition).run();}catch{}}
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS troop_transfer_requests (
     war_id TEXT PRIMARY KEY, sender_account_id TEXT NOT NULL, receiver_account_id TEXT NOT NULL,
     source_castle TEXT NOT NULL, destination_castle TEXT NOT NULL, assets_json TEXT NOT NULL DEFAULT '{}',
@@ -1061,13 +1062,13 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
       }
       if(choice==="alliance"){
         const a=[war.source_castle,session.user_id],bb=[war.destination_castle,dest.ownerAccountId];
-        const allianceId=newId(); qs.push(env.DB.prepare("INSERT OR IGNORE INTO military_alliances(id,castle_a,owner_a,castle_b,owner_b,created_at,status) VALUES(?,?,?,?,?,?,?)").bind(allianceId,a[0],a[1],bb[0],bb[1],now,"pending")); if(dest.ownerAccountId!==session.user_id)qs.push(env.DB.prepare("INSERT INTO notifications(id,account_id,castle,type,title,body,related_id,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(newId(),dest.ownerAccountId,war.destination_castle,"alliance_request","درخواست اتحاد نظامی",war.source_castle+" درخواست اتحاد نظامی با قلعه شما را دارد.",allianceId,now));
+        const allianceId=newId(); qs.push(env.DB.prepare("INSERT OR IGNORE INTO military_alliances(id,castle_a,owner_a,castle_b,owner_b,created_at,status) VALUES(?,?,?,?,?,?,?)").bind(allianceId,a[0],a[1],bb[0],bb[1],now,"pending")); qs.push(env.DB.prepare("INSERT INTO notifications(id,account_id,castle,type,title,body,related_id,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(newId(),dest.ownerAccountId,war.destination_castle,"alliance_request","درخواست اتحاد نظامی",war.source_castle+" درخواست اتحاد نظامی با قلعه شما را دارد.",allianceId,now));
       }
       const result=await env.DB.batch(qs);if(!result[1]?.meta?.changes)return json({error:"گزینه رسیدن همزمان ثبت شده است."},409);
       return json({ok:true,choice});
     }
     if(choice==="transfer"){
-      if(!dest?.ownerAccountId||dest.ownerAccountId===session.user_id)return json({error:"انتقال مالکیت فقط به قلعه‌ای با مالک دیگر امکان‌پذیر است."},400);
+      if(!dest?.ownerAccountId)return json({error:"قلعه مقصد مالک ندارد؛ درخواست انتقال قابل ارسال نیست."},400);
       const now=new Date().toISOString(),assets=JSON.stringify(JSON.parse(war.assets_json||"{}"));
       const qs=[env.DB.prepare("INSERT INTO troop_transfer_requests(war_id,sender_account_id,receiver_account_id,source_castle,destination_castle,assets_json,status,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,session.user_id,dest.ownerAccountId,war.source_castle,war.destination_castle,assets,"pending",now),
         env.DB.prepare("UPDATE war_logs SET arrival_choice='transfer',transfer_status='pending' WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy'").bind(id)];
