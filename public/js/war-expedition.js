@@ -18,7 +18,9 @@ async function changeSource(){
   const source=$('weSource')?.value||'';
   if(!source)return;
   try{
-    assets=await api('/api/my-castle/assets?castle='+encodeURIComponent(source));
+    const sourceRecord=myCastles.find(c=>c.castle===source);
+    const endpoint=sourceRecord?.garrisonSource?'/api/my-castle/garrison-assets?castle=':'/api/my-castle/assets?castle=';
+    assets=await api(endpoint+encodeURIComponent(source));
     if(type==='sea' && !houses.some(r=>r.castles.some(c=>c.castle===source&&c.naval))) type='land';
     renderForm();
   }catch(e){$('weFormStep').insertAdjacentHTML('afterbegin','<div class="we-error">❌ '+esc(e.message)+'</div>');}
@@ -90,7 +92,7 @@ async function changeSource(){
       return '<article class="we-log-banner '+(Number(x.cancelled)?'cancelled':'')+'"><strong>'+title+'</strong><div>لرد مهاجم: '+esc(x.lordName||'—')+' · لرد مدافع: '+esc(x.defenderLordName||'—')+(x.outcome?' · نتیجه: '+(x.outcome==='attacker'?'پیروزی مهاجم':'پیروزی مدافع'):'')+(Number(x.cancelled)?' · <b class="we-cancelled-mark">✓ لغو شده</b>':'')+'</div><small>'+esc(x.type==='sea'?'دریایی':'زمینی')+' · ثبت دستور '+esc(formatTehranDateTime(x.commandAt||x.createdAt))+'</small></article>';
     }).join(''):'<div class="war-log-empty">هنوز لاگ جنگی ثبت نشده است.</div>');
   }
-  async function open(sourceCastle){ $('warExpeditionModal').classList.remove('hidden');document.body.classList.add('modal-open');reset();try{[assets,houses,myCastles]=await Promise.all([api('/api/my-castle/assets?castle='+encodeURIComponent(sourceCastle||'')),api('/api/houses'),api('/api/my-castles')]);const st=await api('/api/war-expeditions/status');fakeAvailable=!!st.fakeAvailable;$('weTypeStep').innerHTML='<h3>لشکرکشی شما زمینی است یا دریایی؟</h3><div class="we-types"><button class="we-type" data-we-type="land">⚔️ لشکرکشی زمینی</button><button class="we-type" data-we-type="sea" '+(assets&&houses.some(r=>r.castles.some(c=>c.castle===assets.castle&&c.naval))?'':'disabled')+'>⚓ لشکرکشی دریایی</button></div><div class="we-note">'+(st.gameRunning?'بازی فعال است.':'بازی متوقف است.')+'</div>';document.querySelectorAll('[data-we-type]').forEach(b=>b.onclick=()=>{type=b.dataset.weType;renderForm();$('weTypeStep').classList.remove('active');$('weFormStep').classList.add('active');});}catch(e){$('weTypeStep').innerHTML='<div class="we-error">❌ '+esc(e.message)+'</div>';}}
+  async function open(sourceCastle){ $('warExpeditionModal').classList.remove('hidden');document.body.classList.add('modal-open');reset();try{const loaded=await Promise.all([api('/api/my-castle/assets?castle='+encodeURIComponent(sourceCastle||'')),api('/api/houses'),api('/api/my-castles'),api('/api/my-castle/garrisons')]);assets=loaded[0];houses=loaded[1];myCastles=loaded[2];for(const g of (loaded[3].garrisons||[])){if(!myCastles.some(c=>c.castle===g.castle))myCastles.push({castle:g.castle,region:houses.find(r=>r.castles.some(x=>x.castle===g.castle))?.region||assets.region||'',garrisonSource:true});}const st=await api('/api/war-expeditions/status');fakeAvailable=!!st.fakeAvailable;$('weTypeStep').innerHTML='<h3>لشکرکشی شما زمینی است یا دریایی؟</h3><div class="we-types"><button class="we-type" data-we-type="land">⚔️ لشکرکشی زمینی</button><button class="we-type" data-we-type="sea" '+(assets&&houses.some(r=>r.castles.some(c=>c.castle===assets.castle&&c.naval))?'':'disabled')+'>⚓ لشکرکشی دریایی</button></div><div class="we-note">'+(st.gameRunning?'بازی فعال است.':'بازی متوقف است.')+'</div>';document.querySelectorAll('[data-we-type]').forEach(b=>b.onclick=()=>{type=b.dataset.weType;renderForm();$('weTypeStep').classList.remove('active');$('weFormStep').classList.add('active');});}catch(e){$('weTypeStep').innerHTML='<div class="we-error">❌ '+esc(e.message)+'</div>';}}
   function close(){$('warExpeditionModal').classList.add('hidden');document.body.classList.remove('modal-open');}
   document.addEventListener('click',e=>{if(e.target.id==='warExpeditionModal'||e.target.id==='weClose')close();});
   $('weClose')?.addEventListener('click',close);
@@ -103,7 +105,7 @@ async function changeSource(){
         await api('/api/war-expeditions/'+encodeURIComponent(warId)+'/command',{method:'POST',body:JSON.stringify({command:command.dataset.warCommand})});
       } else {
         const selected=choice.dataset.arrivalChoice;
-        const payload={choice:selected==='garrison'?'deploy':selected};
+        const payload={choice:selected};
         await api('/api/war-expeditions/'+encodeURIComponent(warId)+'/arrival-choice',{method:'POST',body:JSON.stringify(payload)});
       }
       await loadWarLog();
