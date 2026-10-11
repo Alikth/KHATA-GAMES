@@ -820,6 +820,7 @@ async function handleApi(request, env, url) {
   const userSession=await requireUser(request,env);
   if (method === "GET" && path === "/api/my-dashboard") {
     if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401);
+    try{
     await ensureEconomySchema(env);
     await Promise.all([ensureWarLogSchema(env),ensureTradeSchema(env),ensureNarrativeSchema(env),ensureGameControls(env)]);
     const accountId=userSession.user_id;
@@ -857,6 +858,12 @@ async function handleApi(request, env, url) {
       roleStatus:{available:!Number.isFinite(next)||next<=now,nextAvailableAt:Number.isFinite(next)?new Date(next).toISOString():null,remainingSeconds:Number.isFinite(next)&&next>now?Math.ceil((next-now)/1000):0},
       claimLocked:Number(claimRow?.locked||0)===1
     });
+    }catch(e){
+      console.error("my-dashboard optional data failed",e);
+      // Keep the core castle list available even when a secondary game subsystem fails.
+      const fallbackCastles=await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(userSession.user_id).all();
+      return json({castles:fallbackCastles.results,tradeNotice:{count:0,byCastle:{}},scenarioNotice:{items:[]},roleStatus:{available:true,remainingSeconds:0},claimLocked:false});
+    }
   }
   if (method === "GET" && path === "/api/my-castles") { if(!userSession) return json({error:"ابتدا وارد حساب کاربری شوید."},401); return json((await env.DB.prepare("SELECT id,username,region,house,castle,created_at AS createdAt FROM players WHERE account_id=? ORDER BY created_at").bind(userSession.user_id).all()).results); }
   if (method === "GET" && path === "/api/claim/status") {
@@ -1532,6 +1539,8 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     await ensureEconomySchema(env);
     await ensureWarLogSchema(env);
     await ensureTradeSchema(env);
+    await ensureNarrativeSchema(env);
+    await ensureNotificationSchema(env);
     const rows=(await env.DB.prepare("SELECT castle,region FROM castle_state").all()).results||[];
     const statements=[];
     for(const row of rows){
@@ -1553,6 +1562,8 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     for(const table of ["war_logs","war_garrisons","troop_transfer_requests","trade_requests","military_alliances","game_week_runs","game_notifications","notifications","role_submissions","scenario_submissions"])
       statements.push(env.DB.prepare("DELETE FROM "+table));
     statements.push(env.DB.prepare("DELETE FROM economy_meta WHERE key='seeded'"));
+    // Reset game registrations as well as the world, while preserving user/admin accounts.
+    statements.push(env.DB.prepare("DELETE FROM players"));
     await env.DB.batch(statements);
     await broadcastRealtime(env,{type:"game-reset",at:new Date().toISOString()});
     return json({ok:true,resetCastles:rows.length,adminPreserved:true,accountsPreserved:true});
