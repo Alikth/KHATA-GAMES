@@ -1524,6 +1524,39 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     if(!state)return json({error:"قلعه پیدا نشد."},404);
     return json(state);
   }
+  if (method==="POST" && path==="/api/admin/reset-game") {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
+    const b=await body(request);
+    if(b.confirmation!=="RESET_GAME_WORLD")return json({error:"برای تأیید، عبارت RESET_GAME_WORLD لازم است."},400);
+    await ensureEconomySchema(env);
+    await ensureWarLogSchema(env);
+    await ensureTradeSchema(env);
+    const rows=(await env.DB.prepare("SELECT castle,region FROM castle_state").all()).results||[];
+    const statements=[];
+    for(const row of rows){
+      const castle=row.castle, region=row.region, naval=await isNavalCastle(env,castle);
+      statements.push(env.DB.prepare("UPDATE castle_state SET owner_account_id=NULL,peasants=500,coins=5000,wood=500,stone=500,iron=500,meat=500,fish=500,grain=6000,horses=0,dragon_glass=0,wildfire=0,tar=0,grapes=50,workshop_level=0,port_level=0,port_enabled=?,special_item=NULL,equipment_day=NULL,equipment_week=NULL WHERE castle=?").bind(naval?1:0,castle));
+      for(const table of ["castle_production","castle_camps","castle_special_camps","castle_army","castle_equipment","castle_fleet","castle_equipment_limits","castle_garrison_assets","castle_week_state","food_debts"])
+        statements.push(env.DB.prepare("DELETE FROM "+table+" WHERE castle=?").bind(castle));
+      statements.push(env.DB.prepare("INSERT INTO castle_week_state(castle,last_week_key) VALUES (?,?)").bind(castle,gameWeekKey()));
+      for(const [key,level] of Object.entries({farm:1,village:1,lumber:0,stone:0,iron:0,recreation:0,market:0,stable:0,slaughterhouse:0}))
+        statements.push(env.DB.prepare("INSERT INTO castle_production(castle,production_key,level) VALUES (?,?,?)").bind(castle,key,level));
+      const special=SPECIAL_PRODUCTIONS[region];
+      if(special)statements.push(env.DB.prepare("INSERT INTO castle_production(castle,production_key,level) VALUES (?,?,0)").bind(castle,special.key));
+      for(const key of Object.keys(GENERAL_CAMPS))statements.push(env.DB.prepare("INSERT INTO castle_camps(castle,camp_key,level) VALUES (?,?,0)").bind(castle,key));
+      for(const [unit,count] of [["swordsman",500],["archer",200],["spearman",100],["cavalry",100]])statements.push(env.DB.prepare("INSERT INTO castle_army(castle,unit_key,count) VALUES (?,?,?)").bind(castle,unit,count));
+      for(const key of Object.keys(EQUIPMENT))statements.push(env.DB.prepare("INSERT INTO castle_equipment(castle,item_key,count) VALUES (?,?,0)").bind(castle,key));
+      for(const [ship,count] of [["transport",naval?1:0],["warship",naval?1:0]])statements.push(env.DB.prepare("INSERT INTO castle_fleet(castle,ship_key,count) VALUES (?,?,?)").bind(castle,ship,count));
+      for(const camp of (SPECIAL_CAMPS[region]||[]))statements.push(env.DB.prepare("INSERT INTO castle_special_camps(castle,camp_key,level) VALUES (?,?,0)").bind(castle,camp.key));
+    }
+    for(const table of ["war_logs","war_garrisons","troop_transfer_requests","trade_requests","military_alliances","game_week_runs","game_notifications","notifications","role_submissions","scenario_submissions"])
+      statements.push(env.DB.prepare("DELETE FROM "+table));
+    statements.push(env.DB.prepare("DELETE FROM economy_meta WHERE key='seeded'"));
+    await env.DB.batch(statements);
+    await broadcastRealtime(env,{type:"game-reset",at:new Date().toISOString()});
+    return json({ok:true,resetCastles:rows.length,adminPreserved:true,accountsPreserved:true});
+  }
   if (method==="POST" && path==="/api/admin/castle-assets") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);
