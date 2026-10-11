@@ -985,24 +985,63 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     updates.push(env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by=?,run_started_at=NULL WHERE id=? AND cancelled=0 AND command IS NULL").bind(new Date().toISOString(),session.user_id,id));
     const result=await env.DB.batch(updates); if(!result[updates.length-1]?.meta?.changes)return json({error:"لغو همزمان انجام نشد؛ دوباره تلاش کن."},409);await notifyMany(env,[{accountId:session.user_id,castle:row.source_castle,type:"war_cancelled",title:"لشکرکشی لغو شد",body:"لشکرکشی از "+row.source_castle+" به "+row.destination_castle+" لغو شد و نیروها به مبدا برگشتند.",relatedId:id}]); return json({ok:true});
   }
+  if (method==="GET" && path==="/api/my-castle/garrisons") {
+    await ensureWarLogSchema(env);
+    const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const rows=(await env.DB.prepare("SELECT castle,kind,asset_key AS assetKey,count FROM castle_garrison_assets WHERE owner_account_id=? AND count>0 ORDER BY castle,kind,asset_key").bind(session.user_id).all()).results;
+    const byCastle=new Map();
+    for(const row of rows){if(!byCastle.has(row.castle))byCastle.set(row.castle,{castle:row.castle,army:{},equipment:{},fleet:{},garrisonSource:true});const group=byCastle.get(row.castle)[row.kind];if(group)group[row.assetKey]=Number(row.count)||0;}
+    return json({garrisons:[...byCastle.values()]});
+  }
+  if (method==="GET" && path==="/api/my-castle/garrison-assets") {
+    await ensureWarLogSchema(env);
+    const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const castle=String(url.searchParams.get("castle")||"").trim();
+    if(!castle)return json({error:"قلعه مقصد نیروهای مستقر مشخص نشده است."},400);
+    const rows=(await env.DB.prepare("SELECT kind,asset_key AS assetKey,count FROM castle_garrison_assets WHERE castle=? AND owner_account_id=? AND count>0").bind(castle,session.user_id).all()).results;
+    if(!rows.length)return json({error:"نیروی مستقر متعلق به این حساب در این قلعه پیدا نشد."},403);
+    const assets={castle,army:{},equipment:{},fleet:{}};
+    for(const row of rows){if(assets[row.kind])assets[row.kind][row.assetKey]=Number(row.count)||0;}
+    return json(assets);
+  }
   if (method==="POST" && path==="/api/war-expeditions") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     if(await isGameControlLocked(env,"war"))return json({error:"لشکرکشی‌ها فعلاً توسط ادمین قفل شده‌اند."},423);
     if(!(await rateLimit(request,env,"war-create",30)))return json({error:"تعداد درخواست‌های لشکرکشی زیاد است. کمی بعد دوباره تلاش کن."},429,{"retry-after":"900"});
-    await ensureWarLogSchema(env); const rt=await warRuntime(env); if(!rt.running)return json({error:"بازی فعلاً متوقف است؛ شروع بازی را از ادمین صبر کن."},423);
+    await ensureWarLogSchema(env);
+    const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const rt=await warRuntime(env);if(!rt.running)return json({error:"بازی فعلاً متوقف است؛ شروع بازی را از ادمین صبر کن."},423);
     const b=await body(request),type=String(b.type||""),source=String(b.source||"").trim(),destination=String(b.destination||"").trim(),arrivalTime=String(b.arrivalTime||"").trim(),isFake=!!b.fake,lordPresent=b.lordPresent!==false;
     const durationMinutes=Math.floor(Number(b.durationMinutes||0));
-    const state=await requireCastleOwner(request,env,source); if(!state)return json({error:"قلعه مبدا متعلق به این حساب نیست."},403);
+    const ownedState=await requireCastleOwner(request,env,source);
+    const garrisonSourceRow=source?await env.DB.prepare("SELECT castle FROM castle_garrison_assets WHERE castle=? AND owner_account_id=? AND count>0 LIMIT 1").bind(source,session.user_id).first():null;
+    const isGarrisonSource=!ownedState&&!!garrisonSourceRow;
+    const state=ownedState||(isGarrisonSource?await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(source).first():null);
+    if(!state)return json({error:"مبدأ باید قلعه متعلق به شما یا محل استقرار نیروهای شما باشد."},403);
+    if(isFake&&isGarrisonSource)return json({error:"لشکرکشی فیک فقط از قلعه متعلق به خودت امکان‌پذیر است."},400);
     if(!["land","sea"].includes(type))return json({error:"نوع لشکرکشی معتبر نیست."},400);
     const sourceRow=await env.DB.prepare("SELECT castle,region FROM castle_state WHERE castle=?").bind(source).first(),destRow=await env.DB.prepare("SELECT castle,region,owner_account_id AS ownerAccountId FROM castle_state WHERE castle=?").bind(destination).first();
-    if(!sourceRow||!destRow)return json({error:"مبدا یا مقصد معتبر نیست."},400); if(source!==state.castle)return json({error:"مبدا باید قلعه ثبت‌شده خودت باشد."},403); if(destination===source)return json({error:"مقصد باید با مبدا متفاوت باشد."},400);
+    if(!sourceRow||!destRow)return json({error:"مبدا یا مقصد معتبر نیست."},400);
+    if(destination===source)return json({error:"مقصد باید با مبدا متفاوت باشد."},400);
+    if(await castleUnderActiveAttack(env,source))return json({error:"این قلعه درگیر حمله یا محاصره است و فعلاً نمی‌تواند لشکرکشی جدید بفرستد."},423);
     if(type==="sea" && (!await isNavalCastle(env,source) || !await isNavalCastle(env,destination)))return json({error:"لشکرکشی دریایی فقط بین قلعه‌های دریایی امکان‌پذیر است."},400);
     if(!Number.isInteger(durationMinutes)||durationMinutes<1||durationMinutes>10080)return json({error:"مدت زمان لشکرکشی باید بین 1 دقیقه تا 7 روز باشد."},400);
     if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(arrivalTime))return json({error:"ساعت نمایش رسیدن باید به صورت HH:MM باشد."},400);
-    const accountId=state.owner_account_id,user=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(accountId).first();if(!user)return json({error:"حساب کاربری پیدا نشد."},404);
+    const accountId=session.user_id,user=await env.DB.prepare("SELECT username FROM users WHERE id=?").bind(accountId).first();if(!user)return json({error:"حساب کاربری پیدا نشد."},404);
     const week=gameWeekKey();if(isFake){const used=await env.DB.prepare("SELECT id FROM war_logs WHERE attacker_account_id=? AND week_key=? AND is_fake=1 LIMIT 1").bind(accountId,week).first();if(used)return json({error:"لشکرکشی فیک این هفته قبلاً استفاده شده است."},409);}
     const selected=b.assets&&typeof b.assets==="object"?b.assets:{},allowed={army:["castle_army","unit_key"],equipment:["castle_equipment","item_key"],fleet:["castle_fleet","ship_key"]},deductions=[],sanitizedAssets={};let selectedTotal=0;
-    if(!isFake){for(const kind of type==="sea"?["army","equipment","fleet"]:["army","equipment"]){const group=selected[kind]&&typeof selected[kind]==="object"?selected[kind]:{};for(const [key,raw] of Object.entries(group)){const n=Math.floor(Number(raw));if(!Number.isFinite(n)||n<0||n>1000000)return json({error:"تعداد واردشده معتبر نیست."},400);if(!n)continue;const def=allowed[kind],row=await env.DB.prepare(`SELECT count FROM ${def[0]} WHERE castle=? AND ${def[1]}=?`).bind(state.castle,key).first();const have=Number(row?.count||0);if(n>have)return json({error:`تعداد ${key} بیشتر از موجودی قلعه است.`},400);deductions.push({table:def[0],keyField:def[1],key,n});sanitizedAssets[kind]??={};sanitizedAssets[kind][key]=n;selectedTotal+=n;}}
+    if(!isFake){
+      for(const kind of (type==="sea"?["army","equipment","fleet"]:["army","equipment"])){
+        const group=selected[kind]&&typeof selected[kind]==="object"?selected[kind]:{};
+        for(const [key,raw] of Object.entries(group)){
+          const n=Math.floor(Number(raw));if(!Number.isFinite(n)||n<0||n>1000000)return json({error:"تعداد واردشده معتبر نیست."},400);if(!n)continue;
+          let row;
+          if(isGarrisonSource)row=await env.DB.prepare("SELECT count FROM castle_garrison_assets WHERE castle=? AND owner_account_id=? AND kind=? AND asset_key=?").bind(source,accountId,kind,key).first();
+          else {const def=allowed[kind];row=await env.DB.prepare(`SELECT count FROM ${def[0]} WHERE castle=? AND ${def[1]}=?`).bind(state.castle,key).first();}
+          const have=Number(row?.count||0);if(n>have)return json({error:`تعداد ${key} بیشتر از موجودی قابل استفاده در مبدأ است.`},400);
+          deductions.push({kind,table:allowed[kind][0],keyField:allowed[kind][1],key,n});sanitizedAssets[kind]??={};sanitizedAssets[kind][key]=n;selectedTotal+=n;
+        }
+      }
       if(!selectedTotal)return json({error:"برای لشکرکشی واقعی حداقل یک نیرو، ادوات یا کشتی انتخاب کن."},400);
       if(type==="sea"){
         const fleet=selected.fleet&&typeof selected.fleet==="object"?selected.fleet:{};
@@ -1014,19 +1053,28 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
         if(required>capacity)return json({error:`ظرفیت ناوگان کافی نیست. ظرفیت ${capacity} و ظرفیت موردنیاز نیروها ${required} است.`},400);
       }
     }
-    const statements=[];for(const d of deductions)statements.push(env.DB.prepare(`UPDATE ${d.table} SET count=count-? WHERE castle=? AND ${d.keyField}=? AND count>=?`).bind(d.n,state.castle,d.key,d.n));
-    const id=newId(),createdAt=new Date().toISOString(),lordName=WAR_LORDS[source]||"",commandWindowMinutes=Math.floor(await getGameSettingNumber(env,"war_command_window_minutes",90));
-    statements.push(env.DB.prepare("INSERT INTO war_logs(id,week_key,created_at,attacker_account_id,attacker_username,lord_name,type,source_castle,destination_castle,arrival_time,is_fake,assets_json,duration_minutes,elapsed_seconds,run_started_at,lord_present,command_window_minutes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,week,createdAt,accountId,user.username,lordName,type,source,destination,arrivalTime,isFake?1:0,JSON.stringify(isFake?{}:sanitizedAssets),durationMinutes,0,createdAt,lordPresent?1:0,commandWindowMinutes));
-    let result;
-    try {
-      result=await env.DB.batch(statements);
-    } catch(e) {
-      if(isFake && String(e?.message||e).toLowerCase().includes("unique"))return json({error:"لشکرکشی فیک این هفته قبلاً استفاده شده است."},409);
-      throw e;
+    const id=newId(),createdAt=new Date().toISOString(),lordName=WAR_LORDS[source]||"",commandWindowMinutes=Math.floor(await getGameSettingNumber(env,"war_command_window_minutes",90)),assetOrigin=isGarrisonSource?"garrison":"castle";
+    const statements=[];
+    for(const d of deductions){
+      if(isGarrisonSource)statements.push(env.DB.prepare("UPDATE castle_garrison_assets SET count=count-? WHERE castle=? AND owner_account_id=? AND kind=? AND asset_key=? AND count>=?").bind(d.n,source,accountId,d.kind,d.key,d.n));
+      else statements.push(env.DB.prepare(`UPDATE ${d.table} SET count=count-? WHERE castle=? AND ${d.keyField}=? AND count>=?`).bind(d.n,source,d.key,d.n));
     }
-    for(let i=0;i<deductions.length;i++)if(!result[i]?.meta?.changes)return json({error:"تغییر همزمان دارایی انجام نشد؛ دوباره تلاش کن."},409);if(destRow.ownerAccountId&&destRow.ownerAccountId!==accountId)await notifyMany(env,[{accountId:destRow.ownerAccountId,castle:destination,type:"war_incoming",title:"لشکرکشی به قلعه تو",body:user.username+" از قلعه "+source+" به سمت قلعه تو لشکرکشی کرده است.",relatedId:id}]);return json({ok:true,id});
+    statements.push(env.DB.prepare("INSERT INTO war_logs(id,week_key,created_at,attacker_account_id,attacker_username,lord_name,type,source_castle,destination_castle,arrival_time,is_fake,assets_json,duration_minutes,elapsed_seconds,run_started_at,lord_present,command_window_minutes,asset_origin) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,week,createdAt,accountId,user.username,lordName,type,source,destination,arrivalTime,isFake?1:0,JSON.stringify(isFake?{}:sanitizedAssets),durationMinutes,0,createdAt,lordPresent?1:0,commandWindowMinutes,assetOrigin));
+    let result;
+    try { result=await env.DB.batch(statements); }
+    catch(e){if(isFake&&String(e?.message||e).toLowerCase().includes("unique"))return json({error:"لشکرکشی فیک این هفته قبلاً استفاده شده است."},409);throw e;}
+    const failed=deductions.findIndex((_,i)=>!result[i]?.meta?.changes);
+    if(failed>=0){
+      const rollback=[];
+      for(let i=0;i<deductions.length;i++){if(!result[i]?.meta?.changes)continue;const d=deductions[i];if(isGarrisonSource)rollback.push(env.DB.prepare("UPDATE castle_garrison_assets SET count=count+? WHERE castle=? AND owner_account_id=? AND kind=? AND asset_key=?").bind(d.n,source,accountId,d.kind,d.key));else rollback.push(env.DB.prepare(`UPDATE ${d.table} SET count=count+? WHERE castle=? AND ${d.keyField}=?`).bind(d.n,source,d.key));}
+      rollback.push(env.DB.prepare("DELETE FROM war_logs WHERE id=? AND command IS NULL").bind(id));
+      await env.DB.batch(rollback);
+      return json({error:"موجودی همزمان تغییر کرد؛ لشکر ثبت نشد و دارایی‌ها بازگردانده شدند. دوباره تلاش کن."},409);
+    }
+    if(destRow.ownerAccountId&&destRow.ownerAccountId!==accountId)await notifyMany(env,[{accountId:destRow.ownerAccountId,castle:destination,type:"war_incoming",title:"لشکرکشی به قلعه تو",body:user.username+" از قلعه "+source+" به سمت قلعه تو لشکرکشی کرده است.",relatedId:id}]);
+    return json({ok:true,id});
   }
-  if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/arrival-choice$/)) {
+    if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/arrival-choice$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     await ensureWarLogSchema(env);
     const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
