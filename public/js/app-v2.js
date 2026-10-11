@@ -415,7 +415,6 @@ window.addEventListener("DOMContentLoaded", () => {
     let scenarioNotice = {items:[]};
     let roleStatus = {available:true,remainingSeconds:0};
     let notificationNotice = {byCastle:{}};
-    let dashboardLoaded = false;
 
     // Fetch the lightweight ownership list first; don't block castle cards on dashboard extras.
     try {
@@ -459,7 +458,6 @@ window.addEventListener("DOMContentLoaded", () => {
       roleStatus = dashboard.roleStatus || roleStatus;
       notificationNotice = dashboard.notificationNotice || notificationNotice;
       claimLocked = !!dashboard.claimLocked;
-      dashboardLoaded = true;
       paint();
     }).catch(() => {
       // Castle ownership list is already displayed; dashboard-only features can retry later.
