@@ -1389,7 +1389,7 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
       const currentDefender=loss?await env.DB.prepare("SELECT count FROM castle_army WHERE castle=? AND unit_key=?").bind(row.destination_castle,key).first():null;
       if(loss>Number(currentDefender?.count||0))return json({error:"موجودی فعلی مدافع از مقدار تلفات واردشده کمتر است؛ پنل را تازه‌سازی کن."},409);
       saved.defender.casualties.army[key]=loss;
-      if(loss>0)qs.push(env.DB.prepare("UPDATE castle_army SET count=MAX(0,count-?) WHERE castle=? AND unit_key=? AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND assets_settled_at=?)").bind(loss,row.destination_castle,key,id,token));
+      if(loss>0)qs.push(env.DB.prepare("UPDATE castle_army SET count=count-? WHERE castle=? AND unit_key=? AND count>=? AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND assets_settled_at=?)").bind(loss,row.destination_castle,key,loss,id,token));
     }
     qs.unshift(env.DB.prepare("UPDATE war_logs SET casualties_json=?,assets_settled_at=? WHERE id=? AND command IN ('attack','siege') AND outcome IS NOT NULL AND cancelled=0 AND (casualties_json IS NULL OR casualties_json='{}') AND assets_settled_at IS NULL").bind(JSON.stringify(saved),token,id));
 
