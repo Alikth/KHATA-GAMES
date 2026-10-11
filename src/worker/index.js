@@ -1024,12 +1024,20 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const id=decodeURIComponent(path.split("/")[3]),b=await body(request),choice=String(b.choice||"");
     if(!["deploy","garrison","alliance","transfer","accept-transfer","reject-transfer","accept-alliance","reject-alliance"].includes(choice))return json({error:"گزینه معتبر نیست."},400);
+    if(choice==="accept-alliance"||choice==="reject-alliance"){
+      const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+      const pending=await env.DB.prepare("SELECT * FROM military_alliances WHERE id=? AND owner_b=? AND status='pending'").bind(id,session.user_id).first();
+      if(!pending)return json({error:"درخواست اتحاد پیدا نشد یا قبلاً بررسی شده است."},404);
+      const status=choice==="accept-alliance"?"accepted":"rejected";
+      const rr=await env.DB.prepare("UPDATE military_alliances SET status=? WHERE id=? AND owner_b=? AND status='pending'").bind(status,id,session.user_id).run();
+      if(!rr.meta?.changes)return json({error:"درخواست قبلاً بررسی شده است."},409);
+      return json({ok:true,status});
+    }
     const war=await env.DB.prepare("SELECT * FROM war_logs WHERE id=?").bind(id).first();
     if(!war||Number(war.cancelled))return json({error:"لشکرکشی پیدا نشد یا لغو شده است."},404);
     const rt=await warRuntime(env);if(warIsActive(war,rt)||(war.command&&war.command!=="deploy"))return json({error:"این گزینه فقط پس از رسیدن ارتش و انتخاب استقرار ممکن است."},409);if(!["accept-transfer","reject-transfer","accept-alliance","reject-alliance"].includes(choice)&&war.command!=="deploy")return json({error:"ابتدا در گزینه‌های اولیه، «استقرار» را انتخاب کن."},409);
     const source=await env.DB.prepare("SELECT owner_account_id AS ownerAccountId FROM castle_state WHERE castle=?").bind(war.source_castle).first();
     const dest=await env.DB.prepare("SELECT owner_account_id AS ownerAccountId FROM castle_state WHERE castle=?").bind(war.destination_castle).first();
-    if(choice==="accept-alliance"||choice==="reject-alliance"){const pending=await env.DB.prepare("SELECT * FROM military_alliances WHERE id=? AND owner_b=? AND status='pending'").bind(id,session.user_id).first();if(!pending)return json({error:"درخواست اتحاد پیدا نشد."},404);const status=choice==="accept-alliance"?"accepted":"rejected";const rr=await env.DB.prepare("UPDATE military_alliances SET status=? WHERE id=? AND owner_b=? AND status='pending'").bind(status,id,session.user_id).run();if(!rr.meta?.changes)return json({error:"درخواست قبلاً بررسی شده است."},409);return json({ok:true,status});}
     if(choice==="accept-transfer"||choice==="reject-transfer"){
       if(!dest?.ownerAccountId||dest.ownerAccountId!==session.user_id)return json({error:"فقط مالک قلعه مقصد می‌تواند درباره انتقال تصمیم بگیرد."},403);
       const req=await env.DB.prepare("SELECT * FROM troop_transfer_requests WHERE war_id=? AND status='pending'").bind(id).first();
