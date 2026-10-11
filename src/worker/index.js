@@ -1306,18 +1306,22 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     for(const [key,rawSnapshot] of Object.entries(defender)){
       const snapshot=Math.max(0,Math.floor(Number(rawSnapshot)||0)),raw=suppliedDef[key]===undefined?0:suppliedDef[key],loss=Math.floor(Number(raw));
       if(!Number.isFinite(loss)||loss<0||loss>snapshot)return json({error:"تعداد تلفات مدافع نامعتبر است."},400);
+      const currentDefender=loss?await env.DB.prepare("SELECT count FROM castle_army WHERE castle=? AND unit_key=?").bind(row.destination_castle,key).first():null;
+      if(loss>Number(currentDefender?.count||0))return json({error:"موجودی فعلی مدافع از مقدار تلفات واردشده کمتر است؛ پنل را تازه‌سازی کن."},409);
       saved.defender.casualties.army[key]=loss;
       if(loss>0)qs.push(env.DB.prepare("UPDATE castle_army SET count=count-? WHERE castle=? AND unit_key=? AND count>=? AND EXISTS (SELECT 1 FROM war_logs WHERE id=? AND assets_settled_at=?)").bind(loss,row.destination_castle,key,loss,id,token));
     }
     qs.unshift(env.DB.prepare("UPDATE war_logs SET casualties_json=?,assets_settled_at=? WHERE id=? AND command IN ('attack','siege') AND outcome IS NOT NULL AND cancelled=0 AND (casualties_json IS NULL OR casualties_json='{}') AND assets_settled_at IS NULL").bind(JSON.stringify(saved),token,id));
 
-    const survivorTarget=row.outcome==="attacker"?"garrison":(row.asset_origin==="garrison"?"garrison":"castle");
+    const destinationOwnership=await env.DB.prepare("SELECT owner_account_id AS ownerAccountId FROM castle_state WHERE castle=?").bind(row.destination_castle).first();
+    const attackerWonInOwnCastle=row.outcome==="attacker"&&destinationOwnership?.ownerAccountId===row.attacker_account_id;
+    const survivorTarget=row.outcome==="attacker"&&!attackerWonInOwnCastle?"garrison":(row.asset_origin==="garrison"?"garrison":"castle");
     const survivorCastle=row.outcome==="attacker"?row.destination_castle:row.source_castle;
     for(const kind of ["army","equipment","fleet"])for(const [key,n] of Object.entries(saved.attacker.survivors[kind]||{})){
       const stmt=assetCreditStatement(env,{target:survivorTarget,castle:survivorCastle,ownerId:row.attacker_account_id,kind,key,amount:n,warId:id,token});
       if(stmt)qs.push(stmt);
     }
-    if(row.outcome==="attacker"){
+    if(row.outcome==="attacker"&&!attackerWonInOwnCastle){
       qs.push(env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM war_logs WHERE id=? AND assets_settled_at=?) ON CONFLICT(war_id) DO UPDATE SET assets_json=excluded.assets_json,mode='garrison'").bind(id,row.attacker_account_id,row.source_castle,row.destination_castle,JSON.stringify(saved.attacker.survivors),"garrison",new Date().toISOString(),id,token));
     }
     const result=await env.DB.batch(qs);
