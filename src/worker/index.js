@@ -1532,6 +1532,8 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     await ensureEconomySchema(env);
     await ensureWarLogSchema(env);
     await ensureTradeSchema(env);
+    await ensureNarrativeSchema(env);
+    await ensureNotificationSchema(env);
     const rows=(await env.DB.prepare("SELECT castle,region FROM castle_state").all()).results||[];
     const statements=[];
     for(const row of rows){
@@ -1553,6 +1555,8 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     for(const table of ["war_logs","war_garrisons","troop_transfer_requests","trade_requests","military_alliances","game_week_runs","game_notifications","notifications","role_submissions","scenario_submissions"])
       statements.push(env.DB.prepare("DELETE FROM "+table));
     statements.push(env.DB.prepare("DELETE FROM economy_meta WHERE key='seeded'"));
+    // Reset game registrations as well as the world, while preserving user/admin accounts.
+    statements.push(env.DB.prepare("DELETE FROM players"));
     await env.DB.batch(statements);
     await broadcastRealtime(env,{type:"game-reset",at:new Date().toISOString()});
     return json({ok:true,resetCastles:rows.length,adminPreserved:true,accountsPreserved:true});
