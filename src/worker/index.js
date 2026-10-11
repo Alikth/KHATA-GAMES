@@ -1046,11 +1046,19 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     if(!source?.ownerAccountId||source.ownerAccountId!==session.user_id||war.attacker_account_id!==session.user_id)return json({error:"فقط مالک ارتش اعزام‌شده می‌تواند گزینه رسیدن را انتخاب کند."},403);
     if(war.arrival_choice)return json({error:"برای این ارتش قبلاً گزینه رسیدن ثبت شده است."},409);
     if(choice==="garrison"||choice==="alliance"){
-      const now=new Date().toISOString(),assets=JSON.stringify(JSON.parse(war.assets_json||"{}"));
-      const qs=[env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) VALUES(?,?,?,?,?,?,?)").bind(id,session.user_id,war.source_castle,war.destination_castle,assets,choice==="garrison"?"deploy":choice,now),
-        env.DB.prepare("UPDATE war_logs SET arrival_choice=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy'").bind(choice==="garrison"?"garrison":choice,id)];
+      const now=new Date().toISOString();let assets={};try{assets=JSON.parse(war.assets_json||"{}")}catch{}
+      if(choice==="alliance"&&(!dest?.ownerAccountId||dest.ownerAccountId===session.user_id))return json({error:"اتحاد نظامی به مالک دیگری در قلعه مقصد نیاز دارد."},400);
+      const qs=[env.DB.prepare("INSERT INTO war_garrisons(war_id,owner_account_id,source_castle,destination_castle,assets_json,mode,created_at) VALUES(?,?,?,?,?,?,?)").bind(id,session.user_id,war.source_castle,war.destination_castle,JSON.stringify(assets),choice==="garrison"?"deploy":"alliance",now),
+        env.DB.prepare("UPDATE war_logs SET arrival_choice=? WHERE id=? AND arrival_choice IS NULL AND cancelled=0 AND command='deploy'").bind(choice==="garrison"?"garrison":"alliance",id)];
+      if(choice==="garrison"){
+        for(const [kind,group] of Object.entries(assets))for(const [key,raw] of Object.entries(group||{})){
+          const amount=Math.max(0,Math.floor(Number(raw)||0));if(!amount)continue;
+          const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":kind==="fleet"?"castle_fleet":null;
+          const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";
+          if(table)qs.push(env.DB.prepare(`INSERT INTO ${table}(castle,${field},count) VALUES(?,?,?) ON CONFLICT(castle,${field}) DO UPDATE SET count=count+excluded.count`).bind(war.destination_castle,key,amount));
+        }
+      }
       if(choice==="alliance"){
-        if(!dest?.ownerAccountId||dest.ownerAccountId===session.user_id)return json({error:"اتحاد نظامی به مالک دیگری در قلعه مقصد نیاز دارد."},400);
         const a=[war.source_castle,session.user_id],bb=[war.destination_castle,dest.ownerAccountId];
         qs.push(env.DB.prepare("INSERT OR IGNORE INTO military_alliances(id,castle_a,owner_a,castle_b,owner_b,created_at) VALUES(?,?,?,?,?,?)").bind(newId(),a[0],a[1],bb[0],bb[1],now));
       }
