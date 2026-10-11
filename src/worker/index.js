@@ -124,7 +124,7 @@ function warCommandExpiresAtMs(row,windowMinutes=90){const arrival=warArrivalMs(
 function warCommandMeta(row,now=Date.now(),windowMinutes=90){const expires=warCommandExpiresAtMs(row,windowMinutes);return {commandExpiresAt:expires?new Date(expires).toISOString():null,commandExpired:!!(expires&&now>=expires)};}
 async function returnExpiredUncommandedWarExpeditions(env){
   await ensureWarLogSchema(env);
-  const rows=(await env.DB.prepare("SELECT * FROM war_logs WHERE cancelled=0 AND command IS NULL AND assets_settled_at IS NULL").all()).results;
+  const rows=(await env.DB.prepare("SELECT * FROM war_logs WHERE cancelled=0 AND assets_settled_at IS NULL AND (command IS NULL OR (command='deploy' AND arrival_choice IS NULL))").all()).results;
   const now=Date.now();
   for(const row of rows){
     const windowMinutes=Math.max(1,Number(row.command_window_minutes)||await getGameSettingNumber(env,"war_command_window_minutes",90));
@@ -132,7 +132,7 @@ async function returnExpiredUncommandedWarExpeditions(env){
     if(!expires||now<expires)continue;
     let assets={};try{assets=JSON.parse(row.assets_json||"{}");}catch{}
     const token=newId(),cancelledAt=new Date(now).toISOString(),updates=[
-      env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by='timeout',run_started_at=NULL,assets_settled_at=? WHERE id=? AND cancelled=0 AND command IS NULL AND assets_settled_at IS NULL").bind(cancelledAt,token,row.id)
+      env.DB.prepare("UPDATE war_logs SET cancelled=1,cancelled_at=?,cancelled_by='timeout',run_started_at=NULL,assets_settled_at=? WHERE id=? AND cancelled=0 AND assets_settled_at IS NULL AND (command IS NULL OR (command='deploy' AND arrival_choice IS NULL))").bind(cancelledAt,token,row.id)
     ];
     if(!Number(row.is_fake)){
       for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(assets[kind]||{})){
@@ -845,6 +845,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/my-castle/production/upgrade") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    if(await castleUnderSiege(env,state.castle))return json({error:"قلعه در محاصره است و تا پایان محاصره ارتقا ممکن نیست."},423);
     const key=String(b.key||""); const def=GENERAL_PRODUCTIONS[key];
     if(!def)return json({error:"تولیدی معتبر نیست."},400);
     const result=await upgradeResourceBacked(env,state.castle,"castle_production",key,def,def.max);
@@ -854,6 +855,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/my-castle/camp/upgrade") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    if(await castleUnderSiege(env,state.castle))return json({error:"قلعه در محاصره است و تا پایان محاصره ارتقا ممکن نیست."},423);
     const key=String(b.key||""); const def=GENERAL_CAMPS[key];
     if(!def)return json({error:"کمپ معتبر نیست."},400);
     const result=await upgradeResourceBacked(env,state.castle,"castle_camps",key,def,def.max);
@@ -863,6 +865,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/my-castle/special-camp/upgrade") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    if(await castleUnderSiege(env,state.castle))return json({error:"قلعه در محاصره است و تا پایان محاصره ارتقا ممکن نیست."},423);
     const key=String(b.key||""), def=(SPECIAL_CAMPS[state.region]||[]).find(x=>x.key===key);
     if(!def)return json({error:"کمپ ویژه این اقلیم معتبر نیست."},400);
     const result=await upgradeResourceBacked(env,state.castle,"castle_special_camps",key,def,Number(def.max||20));
@@ -872,6 +875,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/my-castle/special-production/upgrade") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    if(await castleUnderSiege(env,state.castle))return json({error:"قلعه در محاصره است و تا پایان محاصره ارتقا ممکن نیست."},423);
     const sp=SPECIAL_PRODUCTIONS[state.region]; if(!sp)return json({error:"این اقلیم تولیدی ویژه ندارد."},400);
     const result=await upgradeResourceBacked(env,state.castle,"castle_production",sp.key,sp,sp.max);
     if(result.error)return json({error:result.error},result.status);
@@ -880,6 +884,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/my-castle/workshop/upgrade") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    if(await castleUnderSiege(env,state.castle))return json({error:"قلعه در محاصره است و تا پایان محاصره ارتقا ممکن نیست."},423);
     if(state.workshop_level>=5)return json({error:"کارگاه به حداکثر سطح رسیده است."},400);
     const oldCoins=Number(state.coins||0); if(oldCoins<EQUIPMENT_UPGRADE_COST)return json({error:"6000 سکه لازم است."},400);
     const nextLevel=Number(state.workshop_level)+1;
@@ -893,6 +898,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/my-castle/equipment/build") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    if(await castleUnderSiege(env,state.castle))return json({error:"قلعه در محاصره است و تا پایان محاصره ساخت ادوات ممکن نیست."},423);
     const key=String(b.key||""),def=EQUIPMENT[key]; if(!def)return json({error:"ادوات معتبر نیست."},400);
     if(Number(state.workshop_level)<def.level)return json({error:`برای ساخت ${def.label} کارگاه باید حداقل سطح ${def.level} باشد.`},400);
     const trackerKey=`${def.period}:${def.period==="day"?gameDayKey():gameWeekKey()}:${key}`;
@@ -918,6 +924,7 @@ async function handleApi(request, env, url) {
   if (method==="POST" && path==="/api/my-castle/port/upgrade") {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
     const b=await body(request), state=await requireCastleOwner(request,env,String(b.castle||"")); if(!state)return json({error:"قلعه‌ای برای این حساب پیدا نشد."},404);
+    if(await castleUnderSiege(env,state.castle))return json({error:"قلعه در محاصره است و تا پایان محاصره ارتقا ممکن نیست."},423);
     if(!Number(state.port_enabled))return json({error:"این قلعه فعلاً بندری تعریف نشده است."},400);
     if(Number(state.port_level)>=15)return json({error:"اسکله به حداکثر سطح 15 رسیده است."},400);
     const oldCoins=Number(state.coins||0),oldWood=Number(state.wood||0); if(oldCoins<1500||oldWood<1000)return json({error:"برای ارتقای اسکله 1500 سکه و 1000 چوب لازم است."},400);
@@ -1231,7 +1238,7 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     const defenderAccountId=defender?.accountId||null;
     const defenderUsername=defender?.username||"";
     const defenderLordName=WAR_LORDS[war.destination_castle]||"";
-    const scenarioDeadline=command==="attack"?scenarioDeadlineAt(commandAt,await getGameSettingNumber(env,"scenario_window_hours",24)):null;const result=await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=?,defender_account_id=?,defender_username=?,defender_lord_name=?,scenario_deadline_at=? WHERE id=? AND attacker_account_id=? AND command IS NULL").bind(command,commandAt,JSON.stringify(defenderAssets),defenderAccountId,defenderUsername,defenderLordName,scenarioDeadline,id,session.user_id).run();if(!result.meta?.changes)return json({error:"این لشکرکشی قبلاً دستور گرفته است."},409);await notifyMany(env,[{accountId:session.user_id,castle:war.source_castle,type:"war_command",title:"دستور لشکرکشی ثبت شد",body:"دستور "+command+" برای "+war.destination_castle+" ثبت شد.",relatedId:id},...(defenderAccountId?[{accountId:defenderAccountId,castle:war.destination_castle,type:"war_command",title:"به قلعه‌ات دستور جنگی صادر شد",body:war.attacker_username+" علیه قلعه تو دستور "+command+" ثبت کرد.",relatedId:id}]:[])]);return json({ok:true,command});
+    const scenarioDeadline=command==="attack"?scenarioDeadlineAt(commandAt,await getGameSettingNumber(env,"scenario_window_hours",24)):null;const result=await env.DB.prepare("UPDATE war_logs SET command=?,command_at=?,defender_assets_json=?,defender_account_id=?,defender_username=?,defender_lord_name=?,scenario_deadline_at=? WHERE id=? AND attacker_account_id=? AND cancelled=0 AND command IS NULL AND arrival_choice IS NULL AND assets_settled_at IS NULL").bind(command,commandAt,JSON.stringify(defenderAssets),defenderAccountId,defenderUsername,defenderLordName,scenarioDeadline,id,session.user_id).run();if(!result.meta?.changes)return json({error:"این لشکرکشی قبلاً دستور گرفته است."},409);await notifyMany(env,[{accountId:session.user_id,castle:war.source_castle,type:"war_command",title:"دستور لشکرکشی ثبت شد",body:"دستور "+command+" برای "+war.destination_castle+" ثبت شد.",relatedId:id},...(defenderAccountId?[{accountId:defenderAccountId,castle:war.destination_castle,type:"war_command",title:"به قلعه‌ات دستور جنگی صادر شد",body:war.attacker_username+" علیه قلعه تو دستور "+command+" ثبت کرد.",relatedId:id}]:[])]);return json({ok:true,command});
   }
   if (method==="GET" && path==="/api/admin/game-runtime") {if(!session?.is_admin)return json({error:"دسترسی مدیر لازم است."},401);const rt=await warRuntime(env);return json({...rt,announcements:await gameAnnouncements(env)});}
   if (method==="POST" && path==="/api/admin/game-runtime") {
