@@ -166,6 +166,15 @@ function assetCreditStatement(env,{target,castle,ownerId,kind,key,amount,warId,t
   if(!table)return null;
   return env.DB.prepare(`INSERT INTO ${table}(castle,${field},count) SELECT ?,?,? WHERE ${guard} ON CONFLICT(castle,${field}) DO UPDATE SET count=count+excluded.count`).bind(castle,key,n,warId,token);
 }
+function assetCreditByAllianceStatement(env,{target,castle,ownerId,kind,key,amount,allianceId,token}){
+  const n=Math.max(0,Math.floor(Number(amount)||0));if(!n)return null;
+  const guard="EXISTS (SELECT 1 FROM military_alliances WHERE id=? AND status='rejected' AND responded_at=?)";
+  if(target==="garrison")return env.DB.prepare(`INSERT INTO castle_garrison_assets(castle,owner_account_id,kind,asset_key,count) SELECT ?,?,?,?,? WHERE ${guard} ON CONFLICT(castle,owner_account_id,kind,asset_key) DO UPDATE SET count=count+excluded.count`).bind(castle,ownerId,kind,key,n,allianceId,token);
+  const table=kind==="army"?"castle_army":kind==="equipment"?"castle_equipment":kind==="fleet"?"castle_fleet":null;
+  const field=kind==="army"?"unit_key":kind==="equipment"?"item_key":"ship_key";
+  if(!table)return null;
+  return env.DB.prepare(`INSERT INTO ${table}(castle,${field},count) SELECT ?,?,? WHERE ${guard} ON CONFLICT(castle,${field}) DO UPDATE SET count=count+excluded.count`).bind(castle,key,n,allianceId,token);
+}
 
 
 const ECONOMY_SCHEMA = [
