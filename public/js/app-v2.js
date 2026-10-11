@@ -875,6 +875,7 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (action === "save-casualties") saveAdminCasualties(target.dataset.warId);
     else if (action === "claim") { if(claimLocked) showToast("انتخاب قلعه فعلاً توسط ادمین قفل است.",true); else openClaim(Number(target.dataset.region), Number(target.dataset.castle)); }
     else if (action === "go-register") openPage("register").catch(() => {});
+    else if (action === "refresh-my-castles") { invalidateApiCache(); renderMyCastles().catch(err => showToast(err.message || "دریافت قلعه‌ها انجام نشد.", true)); }
     else if (action === "delete-player") deletePlayer(target.dataset.id);
   });
 
