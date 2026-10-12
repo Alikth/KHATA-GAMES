@@ -361,14 +361,23 @@ window.addEventListener("DOMContentLoaded", () => {
     setMessage("formMessage", "", "");
     try {
       const data = await api("/api/register", { method: "POST", body: JSON.stringify({ ...selected, username: $("username").value }) });
-      players = await api("/api/players");
-      await renderMyCastles(); renderPlayers(); renderMap();
+      const claimedCastle = selected.castle;
+      const claimedRegion = selected.region;
+      // Confirm the successful mutation immediately; follow-up refresh failures must not hide success.
       closeModal("registerModal");
-      openRegion(houses.findIndex(x => x.region === selected.region));
-      showToast(`👑 ${data.message} · قلعه ${selected.castle} به نام شما ثبت شد.`);
       selected = null;
+      showToast(`👑 ${data.message || "قلعه با موفقیت ثبت شد"} · قلعه ${claimedCastle} به نام شما ثبت شد.`);
+      try {
+        players = await api("/api/players");
+        await renderMyCastles();
+        renderPlayers();
+        renderMap();
+        openRegion(houses.findIndex(x => x.region === claimedRegion));
+      } catch (refreshError) {
+        console.error("Castle claimed, but refreshing the page data failed:", refreshError);
+      }
     } catch (err) {
-      setMessage("formMessage", "error", err.message);
+      setMessage("formMessage", "error", err.message || "ثبت قلعه انجام نشد.");
     } finally { submit.disabled = false; }
   });
 
