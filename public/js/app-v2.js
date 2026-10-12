@@ -861,6 +861,38 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   // One delegated handler covers dynamic buttons and removes inline onclick usage.
+  const khataFeatureLoads = new Map();
+  async function ensureKhataFeature(key, src, ready) {
+    if (ready()) return;
+    if (!khataFeatureLoads.has(key)) {
+      const load = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        script.async = true;
+        script.dataset.khataFeature = key;
+        script.onload = () => ready() ? resolve() : reject(new Error("بخش موردنظر بارگذاری نشد."));
+        script.onerror = () => reject(new Error("بارگذاری فایل این بخش ناموفق بود."));
+        document.head.appendChild(script);
+      });
+      khataFeatureLoads.set(key, load.catch(err => { khataFeatureLoads.delete(key); throw err; }));
+    }
+    await khataFeatureLoads.get(key);
+    if (!ready()) throw new Error("بخش موردنظر در دسترس نیست.");
+  }
+  async function openWarExpeditionSafe(castle) {
+    try {
+      await ensureKhataFeature("war-expedition", "/js/war-expedition.js?v=8", () => typeof window.khataOpenWarExpedition === "function");
+      await window.khataOpenWarExpedition(castle);
+    } catch (err) { showToast(err.message || "بخش لشکرکشی باز نشد.", true); }
+  }
+  async function openTradeSafe(castle, requestsOnly=false) {
+    try {
+      await ensureKhataFeature("trade", "/js/trade.js?v=8", () => typeof (requestsOnly ? window.khataOpenTradeRequests : window.khataOpenTrade) === "function");
+      if (requestsOnly) await window.khataOpenTradeRequests();
+      else await window.khataOpenTrade(castle);
+    } catch (err) { showToast(err.message || "بخش تجارت باز نشد.", true); }
+  }
+
   document.addEventListener("click", e => {
     const target = e.target.closest("[data-action]"); if (!target) return;
     const action = target.dataset.action;
@@ -869,9 +901,9 @@ window.addEventListener("DOMContentLoaded", () => {
     else if (action === "back-regions") backRegions();
     else if (action === "castle") openCastleDetails(Number(target.dataset.region), Number(target.dataset.castle));
     else if (action === "my-castle-manage") { e.preventDefault(); e.stopImmediatePropagation(); openCastleManagementSafe(target.dataset.castle); }
-    else if (action === "war-expedition") window.khataOpenWarExpedition?.(target.dataset.castle);
-    else if (action === "trade") window.khataOpenTrade?.(target.dataset.castle);
-    else if (action === "trade-requests") window.khataOpenTradeRequests?.();
+    else if (action === "war-expedition") openWarExpeditionSafe(target.dataset.castle);
+    else if (action === "trade") openTradeSafe(target.dataset.castle);
+    else if (action === "trade-requests") openTradeSafe("", true);
     else if (action === "scenario-submit") openSubmission("scenario",{warId:target.dataset.warId,side:target.dataset.side,castle:target.dataset.castle,opponentCastle:target.dataset.opponent||""});
     else if (action === "role-submit") { if(!target.disabled) openSubmission("role",{castle:target.dataset.castle}); }
     else if (action === "admin-cancel-war") cancelAdminWar(target.dataset.warId);
