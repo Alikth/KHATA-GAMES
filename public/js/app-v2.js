@@ -416,11 +416,30 @@ window.addEventListener("DOMContentLoaded", () => {
     let roleStatus = {available:true,remainingSeconds:0};
     let notificationNotice = {byCastle:{}};
     try {
-      // The lightweight endpoint only reads owned castles; show them without waiting for dashboard migrations.
-      const direct = await api("/api/my-castles");
-      mine = Array.isArray(direct) ? direct : [];
+      const dashboard = await api("/api/my-dashboard");
+      mine = Array.isArray(dashboard.castles) ? dashboard.castles : [];
+      tradeNotice = dashboard.tradeNotice || tradeNotice;
+      scenarioNotice = dashboard.scenarioNotice || scenarioNotice;
+      roleStatus = dashboard.roleStatus || roleStatus;
+      notificationNotice = dashboard.notificationNotice || notificationNotice;
+      claimLocked = !!dashboard.claimLocked;
     } catch (e) {
       mineError = e;
+    }
+
+    // Use the dedicated endpoint as a second read path. This also makes partial
+    // dashboard failures visible/recoverable without changing or reassigning ownership.
+    if (!mine.length) {
+      try {
+        const direct = await api("/api/my-castles");
+        if (Array.isArray(direct) && direct.length) {
+          mine = direct;
+          mineError = null;
+        }
+      } catch (e) {
+        if (mineError) mineError = new Error((mineError.message || "داشبورد") + "؛ " + (e.message || "فهرست قلعه‌ها"));
+        else mineError = e;
+      }
     }
 
     if (mineError && !mine.length) {
@@ -441,25 +460,6 @@ window.addEventListener("DOMContentLoaded", () => {
       const roleLabel = roleStatus.available ? '📝 ارسال رول' : '🕒 ارسال رول · '+formatRoleCooldown(roleStatus.remainingSeconds);
       return '<div class="my-castle-group"><article class="my-castle-card"><div class="my-castle-art">'+escapeHTML(c?.icon || "🏰")+'</div><div class="my-castle-body"><span class="my-castle-region">'+escapeHTML(r?.icon || "")+' '+escapeHTML(p.region)+'</span><h3>'+escapeHTML(p.castle)+'</h3><p>HOUSE '+escapeHTML(p.house)+'</p><div class="my-castle-meta"><span>👤 '+escapeHTML(p.username)+'</span><span class="owned-badge">YOUR CASTLE</span></div></div><div class="my-castle-actions"><button class="castle-open" type="button" data-action="my-castle-manage" data-castle="'+escapeHTML(p.castle)+'">🏰 مدیریت قلعه</button><button class="castle-open" type="button" data-action="war-expedition" data-castle="'+escapeHTML(p.castle)+'">⚔️ لشکرکشی</button><button class="castle-open trade-open" type="button" data-action="trade" data-castle="'+escapeHTML(p.castle)+'">⚖️ تجارت <span class="trade-badge-wrap"><span class="trade-badge '+(badge?'':'hidden')+'" data-trade-notification="'+escapeHTML(p.castle)+'">'+(badge||'')+'</span></span></button><button class="castle-open trade-request-open" type="button" data-action="trade-requests">📜 درخواست تجارت</button><button class="castle-open castle-notification-open" type="button" data-action="castle-notifications" data-castle="'+escapeHTML(p.castle)+'">🔔 اعلان‌ها <span class="trade-badge-wrap"><span class="trade-badge '+(noticeCount?'':'hidden')+'">'+(noticeCount||'')+'</span></span></button><button class="castle-open role-submit-btn" type="button" data-action="role-submit" data-castle="'+escapeHTML(p.castle)+'" '+(roleStatus.available?'':'disabled')+'>'+roleLabel+'</button>'+scenarioHtml+'</div></article></div>';
     }).join("");
-    // Enrich optional notices/cooldowns after the castle cards are already visible.
-    api("/api/my-dashboard").then(dashboard => {
-      tradeNotice = dashboard.tradeNotice || tradeNotice;
-      scenarioNotice = dashboard.scenarioNotice || scenarioNotice;
-      roleStatus = dashboard.roleStatus || roleStatus;
-      notificationNotice = dashboard.notificationNotice || notificationNotice;
-      claimLocked = !!dashboard.claimLocked;
-      root.innerHTML = mine.map(p => {
-        const r = houses.find(x => x.region === p.region), c = r?.castles.find(x => x.castle === p.castle);
-        const badge = Number(tradeNotice.byCastle?.[p.castle]||0);
-        const notice=notificationNotice.byCastle?.[p.castle]||{};
-        const noticeCount=Number(notice.unread||0);
-        const scenarios = (scenarioNotice.items||[]).filter(s => s.castle === p.castle);
-        const scenarioHtml = scenarios.length ? '<div class="my-castle-submissions">'+scenarios.map(s => '<button class="castle-open scenario-submit-btn" type="button" data-action="scenario-submit" data-war-id="'+escapeHTML(s.warId)+'" data-side="'+escapeHTML(s.side)+'" data-castle="'+escapeHTML(s.castle)+'" data-opponent="'+escapeHTML(s.opponentCastle)+'">📝 ارسال سناریو · '+escapeHTML(s.side==="attacker"?"حمله به "+s.opponentCastle:"دفاع در برابر "+s.opponentCastle)+'</button>').join('')+'</div>' : '';
-        const roleLabel = roleStatus.available ? '📝 ارسال رول' : '🕒 ارسال رول · '+formatRoleCooldown(roleStatus.remainingSeconds);
-        return '<div class="my-castle-group"><article class="my-castle-card"><div class="my-castle-art">'+escapeHTML(c?.icon || "🏰")+'</div><div class="my-castle-body"><span class="my-castle-region">'+escapeHTML(r?.icon || "")+' '+escapeHTML(p.region)+'</span><h3>'+escapeHTML(p.castle)+'</h3><p>HOUSE '+escapeHTML(p.house)+'</p><div class="my-castle-meta"><span>👤 '+escapeHTML(p.username)+'</span><span class="owned-badge">YOUR CASTLE</span></div></div><div class="my-castle-actions"><button class="castle-open" type="button" data-action="my-castle-manage" data-castle="'+escapeHTML(p.castle)+'">🏰 مدیریت قلعه</button><button class="castle-open" type="button" data-action="war-expedition" data-castle="'+escapeHTML(p.castle)+'">⚔️ لشکرکشی</button><button class="castle-open trade-open" type="button" data-action="trade" data-castle="'+escapeHTML(p.castle)+'">⚖️ تجارت <span class="trade-badge-wrap"><span class="trade-badge '+(badge?'':'hidden')+'" data-trade-notification="'+escapeHTML(p.castle)+'">'+(badge||'')+'</span></span></button><button class="castle-open trade-request-open" type="button" data-action="trade-requests">📜 درخواست تجارت</button><button class="castle-open castle-notification-open" type="button" data-action="castle-notifications" data-castle="'+escapeHTML(p.castle)+'">🔔 اعلان‌ها <span class="trade-badge-wrap"><span class="trade-badge '+(noticeCount?'':'hidden')+'">'+(noticeCount||'')+'</span></span></button><button class="castle-open role-submit-btn" type="button" data-action="role-submit" data-castle="'+escapeHTML(p.castle)+'" '+(roleStatus.available?'':'disabled')+'>'+roleLabel+'</button>'+scenarioHtml+'</div></article></div>';
-      }).join("");
-    }).catch(() => {});
-
   }
   function formatRoleCooldown(seconds){ const s=Math.max(0,Number(seconds)||0),h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h+"س "+String(m).padStart(2,"0")+"د"; }
   function openSubmission(type,payload){ submissionState={type,...payload}; $("submissionKicker").textContent=type==="scenario"?"SCENARIO":"ROLE"; $("submissionTitle").textContent=type==="scenario"?"ارسال سناریو":"ارسال رول"; $("submissionContext").textContent=type==="scenario"?(payload.side==="attacker"?"مهاجم":"مدافع")+" · "+payload.castle+" · "+(payload.opponentCastle||""):"لرد "+payload.castle+" · هر پلیر هر ۴۸ ساعت یکبار"; $("submissionText").value=""; $("submissionMessage").innerHTML=""; $("submissionSend").disabled=false; $("submissionModal").classList.remove("hidden"); document.body.classList.add("modal-open"); setTimeout(()=>$("submissionText").focus(),60); }
