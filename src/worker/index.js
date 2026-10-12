@@ -489,7 +489,9 @@ async function ensureEconomySchema(env) {
 
   const ready=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='seeded'").first();
   const version=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='schema_version'").first();
-  if(ready?.value==="1" && version?.value==="5") return;
+  const seededCastleCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM castle_state").first();
+  const expectedStaticCastleCount=houses.reduce((n,r)=>n+r.castles.length,0);
+  if(ready?.value==="1" && version?.value==="5" && Number(seededCastleCount?.n||0)>=expectedStaticCastleCount) return;
   await ensureAllCastleSupportRows(env);
 
   const week=gameWeekKey();
