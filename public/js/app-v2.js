@@ -40,7 +40,10 @@ window.addEventListener("DOMContentLoaded", () => {
         let timeoutId = null;
         if (method === "GET" && !options.signal) {
           const controller = new AbortController();
-          timeoutId = setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), 12000);
+          // The castle list can wait on D1 during a cold Worker / schema migration.
+          // Give account-owned game state a longer deadline than ordinary GETs.
+          const timeoutMs = /\/api\/(my-castles|my-dashboard)$/.test(url) ? 30000 : 12000;
+          timeoutId = setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), timeoutMs);
           requestOptions.signal = controller.signal;
         }
         try {
