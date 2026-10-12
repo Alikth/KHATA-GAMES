@@ -1,6 +1,6 @@
 (function(){
   if(!window.__khataWarRulesLoaded){window.__khataWarRulesLoaded=true;const s=document.createElement('script');s.src='/js/war-rules-v2.js?v=3';s.async=false;document.head.appendChild(s);}
-  if(!window.khataOpenCastleManagement&&!window.__khataCastleManagementPreload){window.__khataCastleManagementPreload=true;const s=document.createElement('script');s.src='/js/castle-management-v2.js?v=17';s.async=true;s.onload=()=>{window.__khataCastleManagementPreloaded=true;};s.onerror=()=>{window.__khataCastleManagementPreload=false;};document.head.appendChild(s);}
+  if(!window.khataOpenCastleManagement&&!window.__khataCastleManagementPreload){window.__khataCastleManagementPreload=true;const s=document.createElement('script');s.src='/js/castle-management-v2.js?v=19';s.async=true;s.onload=()=>{window.__khataCastleManagementPreloaded=true;};s.onerror=()=>{window.__khataCastleManagementPreload=false;};document.head.appendChild(s);}
   const mobile=window.matchMedia('(max-width:600px)');
   if(!mobile.matches)return;
   document.documentElement.classList.add('mobile-fx-enabled');document.body.classList.add('mobile-fx-enabled');
