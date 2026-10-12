@@ -963,17 +963,26 @@ document.addEventListener("click", async e => {
     e.__khataMyCastleHandled = true;
     e.preventDefault();
     e.stopImmediatePropagation();
-    if (typeof window.khataOpenCastleManagement === "function") {
+    try {
+      if (typeof window.khataOpenCastleManagement !== "function") {
+        if (!window.__khataCastleManagementLoadPromise) {
+          window.__khataCastleManagementLoadPromise = new Promise((resolve, reject) => {
+            const tag = document.createElement("script");
+            tag.src = "/js/castle-management-v2.js?v=19";
+            tag.onload = resolve;
+            tag.onerror = () => reject(new Error("فایل مدیریت قلعه بارگذاری نشد."));
+            document.head.appendChild(tag);
+          }).catch(err => {
+            window.__khataCastleManagementLoadPromise = null;
+            throw err;
+          });
+        }
+        await window.__khataCastleManagementLoadPromise;
+      }
+      if (typeof window.khataOpenCastleManagement !== "function") throw new Error("مدیریت قلعه در دسترس نیست.");
       await window.khataOpenCastleManagement(manage.dataset.castle);
-    } else {
-      await new Promise((resolve, reject) => {
-        const tag = document.createElement("script");
-        tag.src = "/js/castle-management-v2.js?v=19";
-        tag.onload = resolve;
-        tag.onerror = () => reject(new Error("فایل مدیریت قلعه بارگذاری نشد."));
-        document.head.appendChild(tag);
-      });
-      await window.khataOpenCastleManagement?.(manage.dataset.castle);
+    } catch (err) {
+      showMyCastleFallbackToast(err.message || "مدیریت قلعه باز نشد.", true);
     }
     return;
   }
