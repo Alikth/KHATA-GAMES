@@ -491,7 +491,19 @@ async function ensureEconomySchema(env) {
   const version=await env.DB.prepare("SELECT value FROM economy_meta WHERE key='schema_version'").first();
   const seededCastleCount=await env.DB.prepare("SELECT COUNT(*) AS n FROM castle_state").first();
   const expectedStaticCastleCount=houses.reduce((n,r)=>n+r.castles.length,0);
-  if(ready?.value==="1" && version?.value==="5" && Number(seededCastleCount?.n||0)>=expectedStaticCastleCount) return;
+  const castleCount=Number(seededCastleCount?.n||0);
+
+  // A legacy/manual cleanup can remove the 'seeded' marker while leaving the
+  // v5 schema and all castle rows intact. Previously this forced the expensive
+  // serial seed/reconciliation loop on every request, slowing startup and claims.
+  // Reconcile the marker only when the schema version and canonical castle count
+  // already match; otherwise keep the full repair path below.
+  if(version?.value==="5" && castleCount>=expectedStaticCastleCount) {
+    if(ready?.value!=="1") {
+      await env.DB.prepare("INSERT INTO economy_meta(key,value) VALUES('seeded','1') ON CONFLICT(key) DO UPDATE SET value='1'").run();
+    }
+    return;
+  }
   await ensureAllCastleSupportRows(env);
 
   const week=gameWeekKey();
