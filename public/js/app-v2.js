@@ -3,6 +3,8 @@ window.addEventListener("DOMContentLoaded", () => {
   let castleRequestId = 0, myCastlesRenderId = 0, submissionState = null, claimLocked = false;
   let adminRequested = new URLSearchParams(location.search).get("admin") === "1";
   const $ = id => document.getElementById(id);
+  // Shared read-only auth state for secondary game modules; prevents unauthenticated polling.
+  window.khataIsAuthenticated = () => Boolean(currentUser);
 
   const escapeHTML = value => String(value ?? "").replace(/[&<>'"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[ch]));
   const stripAt = value => String(value || "").replace(/^@+/, "");
