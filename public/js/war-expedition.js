@@ -117,5 +117,5 @@ async function changeSource(){
     }catch(err){alert(err.message);button.disabled=false;}
   });
 
-  window.khataOpenWarExpedition=open;window.khataLoadWarLog=loadWarLog;window.khataLoadWarList=loadWarList;document.addEventListener('DOMContentLoaded',()=>{loadWarLog().catch(()=>{});window.setInterval(()=>{const root=$('warLogList'),page=root?.closest('.page');if(root&&!document.hidden&&page?.classList.contains('active'))loadWarLog().catch(()=>{});},10000);});
+  window.khataOpenWarExpedition=open;window.khataLoadWarLog=loadWarLog;window.khataLoadWarList=loadWarList;document.addEventListener('DOMContentLoaded',()=>{const canLoad=()=>Boolean(window.khataIsAuthenticated?.());window.setInterval(()=>{const root=$('warLogList'),page=root?.closest('.page');if(canLoad()&&root&&!document.hidden&&page?.classList.contains('active'))loadWarLog().catch(()=>{});},10000);});
 })();
