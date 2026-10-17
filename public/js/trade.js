@@ -45,6 +45,7 @@
     catch(e){if(button)button.disabled=false;alert(e.message);}
   }
   async function refreshNotifications(){
+    if(typeof window.khataIsAuthenticated==='function'&&!window.khataIsAuthenticated())return 0;
     try{
       const d=await api('/api/trades/notifications');
       document.querySelectorAll('[data-trade-notification]').forEach(x=>{
