@@ -1100,7 +1100,23 @@ async function handleApi(request, env, url) {
   }
 if (method==="GET" && path==="/api/my-war-expeditions/active") {
     await ensureWarLogSchema(env); await returnExpiredUncommandedWarExpeditions(env); const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
-    const rt=await warRuntime(env); const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent,arrival_choice AS arrivalChoice,transfer_status AS transferStatus,command_window_minutes AS commandWindowMinutes,asset_origin AS assetOrigin,arrival_at AS arrivalAt,command_remaining_seconds AS commandRemainingSeconds FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND (command IS NULL OR (command='deploy' AND (arrival_choice IS NULL OR arrival_choice='deploy'))) ORDER BY created_at DESC").bind(session.user_id).all()).results;
+    const rt=await warRuntime(env);
+    const returning=(await env.DB.prepare("SELECT * FROM war_logs WHERE attacker_account_id=? AND command='return' AND cancelled=0 AND assets_settled_at IS NULL").bind(session.user_id).all()).results;
+    for(const rw of returning){
+      if(warIsActive(rw,rt))continue;
+      const token=newId(),settledAt=new Date().toISOString();
+      const updates=[env.DB.prepare("UPDATE war_logs SET assets_settled_at=?,run_started_at=NULL,arrival_at=COALESCE(arrival_at,?) WHERE id=? AND command='return' AND assets_settled_at IS NULL AND cancelled=0").bind(token,settledAt,rw.id)];
+      if(!Number(rw.is_fake)){
+        let returned={};try{returned=JSON.parse(rw.assets_json||"{}")}catch{}
+        for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(returned[kind]||{})){
+          const stmt=assetCreditStatement(env,{target:"castle",castle:rw.destination_castle,ownerId:session.user_id,kind,key,amount:raw,warId:rw.id,token});
+          if(stmt)updates.push(stmt);
+        }
+      }
+      const results=await env.DB.batch(updates);
+      if(!results[0]?.meta?.changes)continue;
+    }
+    const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent,arrival_choice AS arrivalChoice,transfer_status AS transferStatus,command_window_minutes AS commandWindowMinutes,asset_origin AS assetOrigin,arrival_at AS arrivalAt,command_remaining_seconds AS commandRemainingSeconds FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND (command IS NULL OR command='return' OR (command='deploy' AND (arrival_choice IS NULL OR arrival_choice='deploy'))) ORDER BY created_at DESC").bind(session.user_id).all()).results;
     return json({expeditions:rows.map(x=>{const active=warIsActive(x,rt);return {...x,active,arrived:!active,...warCommandMeta(x,Date.now(),Number(x.commandWindowMinutes||90),rt)};})});
   }
   if (method==="GET" && path==="/api/my-war-expeditions/commands") {
@@ -1341,7 +1357,22 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
       return json({ok:true,choice,status:"pending"});
     }
   }
-    if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/command$/)) {
+    if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/return$/)) {
+    if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403);
+    await ensureWarLogSchema(env);
+    const session=await requireUser(request,env);if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
+    const id=decodeURIComponent(path.split("/")[3]);
+    const war=await env.DB.prepare("SELECT * FROM war_logs WHERE id=? AND attacker_account_id=? AND cancelled=0").bind(id,session.user_id).first();
+    if(!war)return json({error:"لشکرکشی پیدا نشد یا متعلق به این حساب نیست."},404);
+    if((war.command&&war.command!=="deploy")||(war.arrival_choice&&war.arrival_choice!=="deploy")||war.assets_settled_at)return json({error:"این لشکر دیگر امکان بازگشت عادی ندارد."},409);
+    const rt=await warRuntime(env);if(!rt.running)return json({error:"بازی متوقف است؛ تا شروع دوباره نمی‌توان بازگشت را آغاز کرد."},423);
+    if(warIsActive(war,rt))return json({error:"لشکر هنوز به مقصد نرسیده است."},409);
+    const now=new Date().toISOString();
+    const result=await env.DB.prepare("UPDATE war_logs SET command='return',command_at=?,source_castle=destination_castle,destination_castle=source_castle,elapsed_seconds=0,run_started_at=?,arrival_at=NULL,arrival_choice=NULL,assets_settled_at=NULL,command_remaining_seconds=NULL WHERE id=? AND attacker_account_id=? AND cancelled=0 AND (command IS NULL OR command='deploy') AND assets_settled_at IS NULL").bind(now,now,id,session.user_id).run();
+    if(!result.meta?.changes)return json({error:"بازگشت هم‌زمان تغییر کرده است؛ وضعیت لشکر را تازه‌سازی کن."},409);
+    return json({ok:true,returning:true,durationMinutes:Number(war.duration_minutes||1)});
+  }
+  if (method==="POST" && path.match(/^\/api\/war-expeditions\/[^/]+\/command$/)) {
     if(!sameOrigin(request))return json({error:"درخواست نامعتبر است."},403); await ensureWarLogSchema(env); await returnExpiredUncommandedWarExpeditions(env);
     if(!(await rateLimit(request,env,"war-command",30)))return json({error:"تعداد درخواست‌های دستور جنگ زیاد است. کمی بعد دوباره تلاش کن."},429,{"retry-after":"900"});
     const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);

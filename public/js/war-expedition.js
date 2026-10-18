@@ -85,7 +85,7 @@ async function changeSource(){
   async function renderWarLog(){
     const d=await api('/api/war-logs');const root=$('warLogList');if(!root)return;const announcements=d.gameAnnouncements||[];const announcementHtml=announcements.map(a=>'<article class="we-announcement-banner"><strong>⚔️ اطلاعیه رسمی بازی ⚔️</strong><div class="we-announcement-text">'+esc(a.body||a.title)+'</div><small>⚔ ثبت‌شده در '+esc(formatTehranDateTime(a.createdAt))+' ⚔</small></article>').join('');
     let arrivals=[],transfers=[];try{const [a,t]=await Promise.all([api('/api/my-war-expeditions/active'),api('/api/my-troop-transfers')]);arrivals=(a.expeditions||[]).filter(x=>x.arrived&&!x.cancelled&&(!x.command||(x.command==='deploy'&&(!x.arrivalChoice||x.arrivalChoice==='deploy'))));transfers=t.requests||[];}catch{}
-    const arrivalHtml=arrivals.length?'<section class="we-arrival-actions"><h3>🏰 لشکرهای رسیده</h3>'+arrivals.map(x=>'<article class="we-log-banner"><strong>'+esc(x.sourceCastle)+' → '+esc(x.destinationCastle)+'</strong><div>'+((x.command==='deploy'&&(!x.arrivalChoice||x.arrivalChoice==='deploy'))?'استقرار انتخاب شده؛ حالا وضعیت ارتش را مشخص کن.':'لشکر به مقصد رسیده؛ دستور بعدی را انتخاب کن.')+'</div><div class="we-actions">'+((x.command==='deploy'&&(!x.arrivalChoice||x.arrivalChoice==='deploy'))?'<button class="we-btn" data-arrival-choice="garrison" data-war-id="'+esc(x.id)+'">استقرار</button><button class="we-btn" data-arrival-choice="alliance" data-war-id="'+esc(x.id)+'">اتحاد</button><button class="we-btn" data-arrival-choice="transfer" data-war-id="'+esc(x.id)+'">انتقال مالکیت</button>':(x.command?'<span>دستور '+esc(x.command==='siege'?'محاصره':'حمله')+' ثبت شده است.</span>':'<button class="we-btn" data-war-command="siege" data-war-id="'+esc(x.id)+'">محاصره</button><button class="we-btn" data-war-command="attack" data-war-id="'+esc(x.id)+'">حمله</button><button class="we-btn" data-war-command="deploy" data-war-id="'+esc(x.id)+'">استقرار</button>'))+'</div></article>').join('')+'</section>':'';
+    const arrivalHtml=arrivals.length?'<section class="we-arrival-actions"><h3>🏰 لشکرهای رسیده</h3>'+arrivals.map(x=>'<article class="we-log-banner"><strong>'+esc(x.sourceCastle)+' → '+esc(x.destinationCastle)+'</strong><div>'+((x.command==='deploy'&&(!x.arrivalChoice||x.arrivalChoice==='deploy'))?'استقرار انتخاب شده؛ حالا وضعیت ارتش را مشخص کن.':'لشکر به مقصد رسیده؛ دستور بعدی را انتخاب کن.')+'</div><div class="we-actions">'+((x.command==='deploy'&&(!x.arrivalChoice||x.arrivalChoice==='deploy'))?'<button class="we-btn" data-arrival-choice="garrison" data-war-id="'+esc(x.id)+'">استقرار</button><button class="we-btn" data-arrival-choice="alliance" data-war-id="'+esc(x.id)+'">اتحاد</button><button class="we-btn" data-arrival-choice="transfer" data-war-id="'+esc(x.id)+'">انتقال مالکیت</button><button class="we-btn" data-return-war="1" data-war-id="'+esc(x.id)+'">↩️ بازگشت به مبدأ</button>':(x.command?'<span>دستور '+esc(x.command==='siege'?'محاصره':'حمله')+' ثبت شده است.</span>':'<button class="we-btn" data-war-command="siege" data-war-id="'+esc(x.id)+'">محاصره</button><button class="we-btn" data-war-command="attack" data-war-id="'+esc(x.id)+'">حمله</button><button class="we-btn" data-war-command="deploy" data-war-id="'+esc(x.id)+'">استقرار</button>'))+'</div></article>').join('')+'</section>':'';
     const transferHtml=transfers.length?'<section class="we-arrival-actions"><h3>📨 درخواست‌های انتقال نیرو</h3>'+transfers.map(x=>'<article class="we-log-banner"><strong>'+esc(x.sourceCastle)+' → '+esc(x.destinationCastle)+'</strong><div>مالک ارتش درخواست انتقال نیرو داده است. با پذیرش، نیروها به موجودی قلعه مقصد اضافه می‌شوند.</div><div class="we-actions"><button class="we-btn positive" data-transfer-response="accept" data-war-id="'+esc(x.warId)+'">تأیید انتقال</button><button class="we-btn negative" data-transfer-response="reject" data-war-id="'+esc(x.warId)+'">رد درخواست</button></div></article>').join('')+'</section>':'';
 
     root.innerHTML=arrivalHtml+transferHtml+announcementHtml+(d.logs?.length?d.logs.map(x=>{
@@ -101,11 +101,13 @@ async function changeSource(){
   document.addEventListener('click',e=>{if(e.target.id==='warExpeditionModal'||e.target.id==='weClose')close();});
   $('weClose')?.addEventListener('click',close);
   document.addEventListener('click',async e=>{
-    const choice=e.target.closest('[data-arrival-choice]'),response=e.target.closest('[data-transfer-response]'),command=e.target.closest('[data-war-command]');
-    if(!choice&&!response&&!command)return;
-    const button=choice||response||command,warId=button.dataset.warId;button.disabled=true;
+    const choice=e.target.closest('[data-arrival-choice]'),response=e.target.closest('[data-transfer-response]'),command=e.target.closest('[data-war-command]'),returnBtn=e.target.closest('[data-return-war]');
+    if(!choice&&!response&&!command&&!returnBtn)return;
+    const button=choice||response||command||returnBtn,warId=button.dataset.warId;button.disabled=true;
     try{
-      if(command){
+      if(returnBtn){
+        await api('/api/war-expeditions/'+encodeURIComponent(warId)+'/return',{method:'POST',body:JSON.stringify({})});
+      } else if(command){
         await api('/api/war-expeditions/'+encodeURIComponent(warId)+'/command',{method:'POST',body:JSON.stringify({command:command.dataset.warCommand})});
       } else {
         const selected=choice.dataset.arrivalChoice;
@@ -113,7 +115,7 @@ async function changeSource(){
         await api('/api/war-expeditions/'+encodeURIComponent(warId)+'/arrival-choice',{method:'POST',body:JSON.stringify(payload)});
       }
       await loadWarLog();
-      alert(command?'دستور لشکرکشی ثبت شد.':(choice?'گزینه ثبت شد.':(response.dataset.transferResponse==='accept'?'انتقال نیرو پذیرفته شد.':'درخواست انتقال رد شد.')));
+      alert(returnBtn?'بازگشت لشکر آغاز شد.':(command?'دستور لشکرکشی ثبت شد.':(choice?'گزینه ثبت شد.':(response.dataset.transferResponse==='accept'?'انتقال نیرو پذیرفته شد.':'درخواست انتقال رد شد.'))));
     }catch(err){alert(err.message);button.disabled=false;}
   });
 
