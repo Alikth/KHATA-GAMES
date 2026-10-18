@@ -1102,7 +1102,20 @@ if (method==="GET" && path==="/api/my-war-expeditions/active") {
     await ensureWarLogSchema(env); await returnExpiredUncommandedWarExpeditions(env); const session=await requireUser(request,env); if(!session)return json({error:"ابتدا وارد حساب شوید."},401);
     const rt=await warRuntime(env);
     const returning=(await env.DB.prepare("SELECT * FROM war_logs WHERE attacker_account_id=? AND command='return' AND cancelled=0 AND assets_settled_at IS NULL").bind(session.user_id).all()).results;
-    for(const rw of returning){if(warIsActive(rw,rt))continue;const token=newId(),settled=await env.DB.prepare("UPDATE war_logs SET assets_settled_at=?,run_started_at=NULL,arrival_at=COALESCE(arrival_at,?) WHERE id=? AND command='return' AND assets_settled_at IS NULL AND cancelled=0").bind(token,new Date().toISOString(),rw.id).run();if(!settled.meta?.changes)continue;let returned={};try{returned=JSON.parse(rw.assets_json||"{}")}catch{};for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(returned[kind]||{})){const stmt=assetCreditStatement(env,{target:"castle",castle:rw.destination_castle,ownerId:session.user_id,kind,key,amount:raw,warId:rw.id,token});if(stmt)await stmt.run();}}
+    for(const rw of returning){
+      if(warIsActive(rw,rt))continue;
+      const token=newId(),settledAt=new Date().toISOString();
+      const updates=[env.DB.prepare("UPDATE war_logs SET assets_settled_at=?,run_started_at=NULL,arrival_at=COALESCE(arrival_at,?) WHERE id=? AND command='return' AND assets_settled_at IS NULL AND cancelled=0").bind(token,settledAt,rw.id)];
+      if(!Number(rw.is_fake)){
+        let returned={};try{returned=JSON.parse(rw.assets_json||"{}")}catch{}
+        for(const kind of ["army","equipment","fleet"])for(const [key,raw] of Object.entries(returned[kind]||{})){
+          const stmt=assetCreditStatement(env,{target:"castle",castle:rw.destination_castle,ownerId:session.user_id,kind,key,amount:raw,warId:rw.id,token});
+          if(stmt)updates.push(stmt);
+        }
+      }
+      const results=await env.DB.batch(updates);
+      if(!results[0]?.meta?.changes)continue;
+    }
     const rows=(await env.DB.prepare("SELECT id,attacker_username AS attackerUsername,lord_name AS lordName,type,source_castle AS sourceCastle,destination_castle AS destinationCastle,arrival_time AS arrivalTime,is_fake AS fake,created_at AS createdAt,assets_json AS assetsJson,cancelled,duration_minutes AS durationMinutes,elapsed_seconds AS elapsedSeconds,run_started_at AS runStartedAt,command,command_at AS commandAt,outcome,lord_present AS lordPresent,arrival_choice AS arrivalChoice,transfer_status AS transferStatus,command_window_minutes AS commandWindowMinutes,asset_origin AS assetOrigin,arrival_at AS arrivalAt,command_remaining_seconds AS commandRemainingSeconds FROM war_logs WHERE attacker_account_id=? AND cancelled=0 AND (command IS NULL OR command='return' OR (command='deploy' AND (arrival_choice IS NULL OR arrival_choice='deploy'))) ORDER BY created_at DESC").bind(session.user_id).all()).results;
     return json({expeditions:rows.map(x=>{const active=warIsActive(x,rt);return {...x,active,arrived:!active,...warCommandMeta(x,Date.now(),Number(x.commandWindowMinutes||90),rt)};})});
   }
