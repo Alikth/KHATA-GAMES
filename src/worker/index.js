@@ -819,7 +819,8 @@ async function ensureBotIntegrationSchema(env){
     updated_at TEXT NOT NULL
   )`).run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS integration_outbox (
-    operation_id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    operation_id TEXT NOT NULL UNIQUE,
     aggregate_type TEXT NOT NULL,
     aggregate_key TEXT NOT NULL,
     event_type TEXT NOT NULL,
@@ -827,6 +828,24 @@ async function ensureBotIntegrationSchema(env){
     created_at TEXT NOT NULL,
     delivered_at TEXT
   )`).run();
+  const watched = [
+    ["castle_state","castle"],["castle_production","castle"],["castle_camps","castle"],
+    ["castle_special_camps","castle"],["castle_army","castle"],["castle_equipment","castle"],
+    ["castle_fleet","castle"],["food_debts","castle"]
+  ];
+  for(const [table,key] of watched){
+    for(const operation of ["INSERT","UPDATE","DELETE"]){
+      const suffix=operation.toLowerCase();
+      const ref=operation==="DELETE"?"OLD":"NEW";
+      const trigger=`integration_${table}_${suffix}`;
+      await env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS ${trigger} AFTER ${operation} ON ${table}
+        BEGIN
+          INSERT INTO integration_outbox(operation_id,aggregate_type,aggregate_key,event_type,payload,created_at)
+          VALUES(lower(hex(randomblob(16))),'castle',${ref}.${key},'castle.changed',
+            json_object('castle',${ref}.${key},'table','${table}','operation','${suffix}'),strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+        END`).run();
+    }
+  }
 }
 async function requireBotService(request,env){
   const expected=String(env.BOT_API_SECRET||"");
@@ -866,6 +885,16 @@ async function handleApi(request, env, url) {
       if(!/^\\d{5,20}$/.test(telegramUserId))return json({error:"شناسه تلگرام معتبر نیست."},400);
       await env.DB.prepare("UPDATE integration_bot_assignments SET active=0,updated_at=? WHERE telegram_user_id=?").bind(new Date().toISOString(),telegramUserId).run();
       return json({ok:true});
+    }
+    if(method==="GET"&&path==="/api/integration/v1/events"){
+      const after=Math.max(0,Number(url.searchParams.get("after")||0));
+      const limit=Math.min(200,Math.max(1,Number(url.searchParams.get("limit")||100)));
+      const rows=(await env.DB.prepare(`SELECT e.id,e.operation_id AS operationId,e.aggregate_key AS castle,
+        e.event_type AS eventType,e.payload,e.created_at AS createdAt
+        FROM integration_outbox e
+        INNER JOIN integration_bot_assignments a ON a.castle=e.aggregate_key AND a.active=1
+        WHERE e.id>? ORDER BY e.id LIMIT ?`).bind(after,limit).all()).results;
+      return json({events:rows.map(x=>({...x,payload:JSON.parse(x.payload||"{}")})),nextCursor:rows.length?rows[rows.length-1].id:after});
     }
     if(method==="GET"&&path==="/api/integration/v1/snapshot"){
       const telegramUserId=String(url.searchParams.get("telegramUserId")||"").trim();
