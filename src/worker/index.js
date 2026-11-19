@@ -867,7 +867,7 @@ async function ensureBotIntegrationSchema(env){
 }
 async function requireBotService(request,env){
   const expected=String(env.BOT_API_SECRET||"");
-  const supplied=String(request.headers.get("authorization")||"").replace(/^Bearer\\s+/i,"");
+  const supplied=String(request.headers.get("authorization")||"").replace(/^Bearer\s+/i,"");
   if(!expected || !(await constantTimeSecretEqual(supplied,expected)))return false;
   return true;
 }
@@ -886,7 +886,7 @@ async function handleApi(request, env, url) {
       const telegramUserId=String(b.telegramUserId||"").trim();
       const castle=String(b.castle||"").trim();
       const actor=String(b.assignedBy||"").trim();
-      if(!/^\\d{5,20}$/.test(telegramUserId)||!castle||!/^\\d{5,20}$/.test(actor))return json({error:"اطلاعات انتساب لرد معتبر نیست."},400);
+      if(!/^\d{5,20}$/.test(telegramUserId)||!castle||!/^\d{5,20}$/.test(actor))return json({error:"اطلاعات انتساب لرد معتبر نیست."},400);
       const state=await env.DB.prepare("SELECT castle FROM castle_state WHERE castle=?").bind(castle).first();
       if(!state)return json({error:"قلعه در سایت وجود ندارد یا هنوز اقتصاد آن ایجاد نشده است."},404);
       const current=await env.DB.prepare("SELECT castle FROM integration_bot_assignments WHERE telegram_user_id=? AND active=1").bind(telegramUserId).first();
@@ -900,7 +900,7 @@ async function handleApi(request, env, url) {
     }
     if(method==="DELETE"&&path==="/api/integration/v1/assign-lord"){
       const telegramUserId=String(url.searchParams.get("telegramUserId")||"").trim();
-      if(!/^\\d{5,20}$/.test(telegramUserId))return json({error:"شناسه تلگرام معتبر نیست."},400);
+      if(!/^\d{5,20}$/.test(telegramUserId))return json({error:"شناسه تلگرام معتبر نیست."},400);
       await env.DB.prepare("UPDATE integration_bot_assignments SET active=0,updated_at=? WHERE telegram_user_id=?").bind(new Date().toISOString(),telegramUserId).run();
       return json({ok:true});
     }
@@ -917,7 +917,7 @@ async function handleApi(request, env, url) {
     if(method==="GET"&&path==="/api/integration/v1/snapshot"){
       const telegramUserId=String(url.searchParams.get("telegramUserId")||"").trim();
       const castle=String(url.searchParams.get("castle")||"").trim();
-      if(!/^\\d{5,20}$/.test(telegramUserId)||!castle)return json({error:"شناسه لرد یا قلعه معتبر نیست."},400);
+      if(!/^\d{5,20}$/.test(telegramUserId)||!castle)return json({error:"شناسه لرد یا قلعه معتبر نیست."},400);
       if(!(await botAssignment(env,telegramUserId,castle)))return json({error:"این لرد به قلعه درخواستی متصل نیست."},403);
       const snapshot=await loadCastleEconomy(env,castle);
       if(!snapshot)return json({error:"اطلاعات قلعه پیدا نشد."},404);
@@ -929,7 +929,7 @@ async function handleApi(request, env, url) {
       const castle=String(b.castle||"").trim();
       const category=String(b.category||"").trim();
       const key=String(b.key||"").trim();
-      if(!/^\\d{5,20}$/.test(telegramUserId)||!castle||!key)return json({error:"درخواست ارتقا معتبر نیست."},400);
+      if(!/^\d{5,20}$/.test(telegramUserId)||!castle||!key)return json({error:"درخواست ارتقا معتبر نیست."},400);
       if(!(await botAssignment(env,telegramUserId,castle)))return json({error:"این لرد مالک قلعه درخواستی نیست."},403);
       const operationId=String(b.operationId||newId());
       if(!/^[A-Za-z0-9-]{16,80}$/.test(operationId))return json({error:"شناسه یکتای عملیات معتبر نیست."},400);
