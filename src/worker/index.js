@@ -952,8 +952,6 @@ async function handleApi(request, env, url) {
         def=(SPECIAL_CAMPS[state.region]||[]).find(x=>x.key===key); table="castle_special_camps"; max=Number(def?.max||20);
       }else return json({error:"دسته ارتقا معتبر نیست."},400);
       if(!def)return json({error:"این مورد برای قلعه تعریف نشده است."},404);
-      const result=await upgradeResourceBacked(env,castle,table,key,def,max);
-      if(result.error)return json({error:result.error},result.status);
       const result=await upgradeResourceBacked(env,castle,table,key,def,max,operationId,telegramUserId);
       if(result.error)return json({error:result.error},result.status);
       return json({ok:true,operationId,result,snapshot:await loadCastleEconomy(env,castle)});
