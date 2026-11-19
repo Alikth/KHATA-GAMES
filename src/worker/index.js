@@ -904,6 +904,16 @@ async function handleApi(request, env, url) {
       await env.DB.prepare("UPDATE integration_bot_assignments SET active=0,updated_at=? WHERE telegram_user_id=?").bind(new Date().toISOString(),telegramUserId).run();
       return json({ok:true});
     }
+    if(method==="POST"&&path==="/api/integration/v1/events/ack"){
+      const b=await body(request);
+      const cursor=Math.max(0,Math.floor(Number(b.cursor)||0));
+      const now=new Date().toISOString();
+      await env.DB.prepare(`UPDATE integration_outbox SET delivered_at=?
+        WHERE id<=? AND aggregate_key IN (SELECT castle FROM integration_bot_assignments WHERE active=1)`).bind(now,cursor).run();
+      await env.DB.prepare("DELETE FROM integration_outbox WHERE delivered_at IS NOT NULL AND delivered_at<?")
+        .bind(new Date(Date.now()-30*86400000).toISOString()).run();
+      return json({ok:true,cursor});
+    }
     if(method==="GET"&&path==="/api/integration/v1/events"){
       const after=Math.max(0,Number(url.searchParams.get("after")||0));
       const limit=Math.min(200,Math.max(1,Number(url.searchParams.get("limit")||100)));
