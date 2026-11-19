@@ -861,6 +861,12 @@ async function handleApi(request, env, url) {
         .bind(telegramUserId,castle,actor,now,now).run();
       return json({ok:true,telegramUserId,castle});
     }
+    if(method==="DELETE"&&path==="/api/integration/v1/assign-lord"){
+      const telegramUserId=String(url.searchParams.get("telegramUserId")||"").trim();
+      if(!/^\\d{5,20}$/.test(telegramUserId))return json({error:"شناسه تلگرام معتبر نیست."},400);
+      await env.DB.prepare("UPDATE integration_bot_assignments SET active=0,updated_at=? WHERE telegram_user_id=?").bind(new Date().toISOString(),telegramUserId).run();
+      return json({ok:true});
+    }
     if(method==="GET"&&path==="/api/integration/v1/snapshot"){
       const telegramUserId=String(url.searchParams.get("telegramUserId")||"").trim();
       const castle=String(url.searchParams.get("castle")||"").trim();
