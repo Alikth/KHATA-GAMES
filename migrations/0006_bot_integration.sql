@@ -2,12 +2,13 @@
 -- Worker also installs equivalent triggers idempotently on first authenticated integration request.
 CREATE TABLE IF NOT EXISTS integration_bot_assignments (
   telegram_user_id TEXT PRIMARY KEY,
-  castle TEXT NOT NULL UNIQUE,
+  castle TEXT NOT NULL,
   assigned_by TEXT NOT NULL,
   active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_integration_bot_active_castle ON integration_bot_assignments(castle) WHERE active=1;
 CREATE TABLE IF NOT EXISTS integration_outbox (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   operation_id TEXT NOT NULL UNIQUE,
