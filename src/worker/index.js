@@ -779,7 +779,7 @@ async function requireCastleOwner(request,env,castleName=""){
   return {...state,owner_account_id:s.user_id};
 }
 function safeCost(cost){return Object.fromEntries(Object.entries(cost).filter(([k,v])=>RESOURCE_KEYS.includes(k)&&Number(v)>0));}
-async function upgradeResourceBacked(env,castle,table,key,def,maxLevel,operationId=null){
+async function upgradeResourceBacked(env,castle,table,key,def,maxLevel,operationId=null,actorId=null){
   const where=table==="castle_production"?"production_key":"camp_key";
   const row=await env.DB.prepare(`SELECT level FROM ${table} WHERE castle=? AND ${where}=?`).bind(castle,key).first();
   const level=Number(row?.level||0);
@@ -808,7 +808,7 @@ async function upgradeResourceBacked(env,castle,table,key,def,maxLevel,operation
     .bind(castle,key,level,castle,...postValues);
   const statements=[first,second];
   if(operationId){
-    const payload=JSON.stringify({castle,category:table==="castle_production"?"production":table==="castle_special_camps"?"special_camp":"camp",key,newLevel:level+1});
+    const payload=JSON.stringify({castle,category:table==="castle_production"?"production":table==="castle_special_camps"?"special_camp":"camp",key,newLevel:level+1,telegramUserId:actorId});
     statements.push(env.DB.prepare(`INSERT OR IGNORE INTO integration_outbox(operation_id,aggregate_type,aggregate_key,event_type,payload,created_at)
       SELECT ?,'castle',?,'castle.upgraded',?,? WHERE
       EXISTS(SELECT 1 FROM ${table} WHERE castle=? AND ${where}=? AND level=?)
@@ -926,6 +926,14 @@ async function handleApi(request, env, url) {
       const key=String(b.key||"").trim();
       if(!/^\\d{5,20}$/.test(telegramUserId)||!castle||!key)return json({error:"درخواست ارتقا معتبر نیست."},400);
       if(!(await botAssignment(env,telegramUserId,castle)))return json({error:"این لرد مالک قلعه درخواستی نیست."},403);
+      const operationId=String(b.operationId||newId());
+      if(!/^[A-Za-z0-9-]{16,80}$/.test(operationId))return json({error:"شناسه یکتای عملیات معتبر نیست."},400);
+      const prior=await env.DB.prepare("SELECT payload FROM integration_outbox WHERE operation_id=? AND event_type='castle.upgraded'").bind(operationId).first();
+      if(prior){
+        const saved=JSON.parse(prior.payload||"{}");
+        if(saved.telegramUserId!==telegramUserId||saved.castle!==castle||saved.category!==category||saved.key!==key)return json({error:"شناسه عملیات قبلاً برای درخواست دیگری استفاده شده است."},409);
+        return json({ok:true,operationId,result:{ok:true,newLevel:Number(saved.newLevel||0),duplicate:true},snapshot:await loadCastleEconomy(env,castle)});
+      }
       if(await castleUnderSiege(env,castle))return json({error:"قلعه در محاصره است و ارتقا ممکن نیست."},423);
       const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
       if(!state)return json({error:"قلعه پیدا نشد."},404);
@@ -941,15 +949,7 @@ async function handleApi(request, env, url) {
       if(!def)return json({error:"این مورد برای قلعه تعریف نشده است."},404);
       const result=await upgradeResourceBacked(env,castle,table,key,def,max);
       if(result.error)return json({error:result.error},result.status);
-      const operationId=String(b.operationId||newId());
-      if(!/^[A-Za-z0-9-]{16,80}$/.test(operationId))return json({error:"شناسه یکتای عملیات معتبر نیست."},400);
-      const prior=await env.DB.prepare("SELECT payload FROM integration_outbox WHERE operation_id=? AND event_type='castle.upgraded'").bind(operationId).first();
-      if(prior){
-        const saved=JSON.parse(prior.payload||"{}");
-        if(saved.telegramUserId && saved.telegramUserId!==telegramUserId)return json({error:"شناسه عملیات قبلاً برای درخواست دیگری استفاده شده است."},409);
-        return json({ok:true,operationId,result:{ok:true,newLevel:Number(saved.newLevel||0),duplicate:true},snapshot:await loadCastleEconomy(env,castle)});
-      }
-      const result=await upgradeResourceBacked(env,castle,table,key,def,max,operationId);
+      const result=await upgradeResourceBacked(env,castle,table,key,def,max,operationId,telegramUserId);
       if(result.error)return json({error:result.error},result.status);
       return json({ok:true,operationId,result,snapshot:await loadCastleEconomy(env,castle)});
     }
