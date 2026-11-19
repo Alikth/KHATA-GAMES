@@ -126,7 +126,7 @@ No live schema migration or data copy is part of this audit document.
 - Added superuser-managed Telegram-to-castle assignment mirror; this is not website account linking.
 - Added assigned-lord castle snapshot reads.
 - Added D1 outbox table and triggers for resource, production, camp, army, equipment, fleet and food-debt mutations.
-- Added event cursor, event acknowledgement and 30-day delivered-event retention.
+- Added event cursor, event acknowledgement (automatic deletion is intentionally disabled until backup/reconciliation cursors are implemented).
 - Added bot-originated production/camp upgrade endpoint with siege checks and idempotent operation IDs.
 - Strengthened the shared upgrade helper so the resource deduction and level increment are conditional on the same expected state.
 - Added D1 migration `0006_bot_integration.sql`.
