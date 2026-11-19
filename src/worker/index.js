@@ -809,8 +809,97 @@ async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
   }
   return {ok:true,newLevel:level+1};
 }
+async function ensureBotIntegrationSchema(env){
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS integration_bot_assignments (
+    telegram_user_id TEXT PRIMARY KEY,
+    castle TEXT NOT NULL UNIQUE,
+    assigned_by TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS integration_outbox (
+    operation_id TEXT PRIMARY KEY,
+    aggregate_type TEXT NOT NULL,
+    aggregate_key TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    delivered_at TEXT
+  )`).run();
+}
+async function requireBotService(request,env){
+  const expected=String(env.BOT_API_SECRET||"");
+  const supplied=String(request.headers.get("authorization")||"").replace(/^Bearer\\s+/i,"");
+  if(!expected || !(await constantTimeSecretEqual(supplied,expected)))return false;
+  return true;
+}
+async function botAssignment(env,telegramUserId,castle){
+  await ensureBotIntegrationSchema(env);
+  return env.DB.prepare("SELECT telegram_user_id,castle FROM integration_bot_assignments WHERE telegram_user_id=? AND castle=? AND active=1")
+    .bind(String(telegramUserId),String(castle)).first();
+}
 async function handleApi(request, env, url) {
   const method=request.method, path=url.pathname;
+  if(path.startsWith("/api/integration/v1/")){
+    if(!(await requireBotService(request,env)))return json({error:"دسترسی سرویس مجاز نیست."},401);
+    await ensureBotIntegrationSchema(env);
+    if(method==="POST"&&path==="/api/integration/v1/assign-lord"){
+      const b=await body(request);
+      const telegramUserId=String(b.telegramUserId||"").trim();
+      const castle=String(b.castle||"").trim();
+      const actor=String(b.assignedBy||"").trim();
+      if(!/^\\d{5,20}$/.test(telegramUserId)||!castle||!/^\\d{5,20}$/.test(actor))return json({error:"اطلاعات انتساب لرد معتبر نیست."},400);
+      const state=await env.DB.prepare("SELECT castle FROM castle_state WHERE castle=?").bind(castle).first();
+      if(!state)return json({error:"قلعه در سایت وجود ندارد یا هنوز اقتصاد آن ایجاد نشده است."},404);
+      const current=await env.DB.prepare("SELECT castle FROM integration_bot_assignments WHERE telegram_user_id=? AND active=1").bind(telegramUserId).first();
+      if(current&&current.castle!==castle)return json({error:"این شناسه تلگرام قبلاً به قلعه دیگری متصل شده است."},409);
+      const occupied=await env.DB.prepare("SELECT telegram_user_id FROM integration_bot_assignments WHERE castle=? AND active=1 AND telegram_user_id<>?").bind(castle,telegramUserId).first();
+      if(occupied)return json({error:"این قلعه به لرد تلگرامی دیگری اختصاص یافته است."},409);
+      const now=new Date().toISOString();
+      await env.DB.prepare("INSERT INTO integration_bot_assignments(telegram_user_id,castle,assigned_by,active,created_at,updated_at) VALUES(?,?,?,1,?,?) ON CONFLICT(telegram_user_id) DO UPDATE SET castle=excluded.castle,assigned_by=excluded.assigned_by,active=1,updated_at=excluded.updated_at")
+        .bind(telegramUserId,castle,actor,now,now).run();
+      return json({ok:true,telegramUserId,castle});
+    }
+    if(method==="GET"&&path==="/api/integration/v1/snapshot"){
+      const telegramUserId=String(url.searchParams.get("telegramUserId")||"").trim();
+      const castle=String(url.searchParams.get("castle")||"").trim();
+      if(!/^\\d{5,20}$/.test(telegramUserId)||!castle)return json({error:"شناسه لرد یا قلعه معتبر نیست."},400);
+      if(!(await botAssignment(env,telegramUserId,castle)))return json({error:"این لرد به قلعه درخواستی متصل نیست."},403);
+      const snapshot=await loadCastleEconomy(env,castle);
+      if(!snapshot)return json({error:"اطلاعات قلعه پیدا نشد."},404);
+      return json({ok:true,snapshot});
+    }
+    if(method==="POST"&&path==="/api/integration/v1/upgrade"){
+      const b=await body(request);
+      const telegramUserId=String(b.telegramUserId||"").trim();
+      const castle=String(b.castle||"").trim();
+      const category=String(b.category||"").trim();
+      const key=String(b.key||"").trim();
+      if(!/^\\d{5,20}$/.test(telegramUserId)||!castle||!key)return json({error:"درخواست ارتقا معتبر نیست."},400);
+      if(!(await botAssignment(env,telegramUserId,castle)))return json({error:"این لرد مالک قلعه درخواستی نیست."},403);
+      if(await castleUnderSiege(env,castle))return json({error:"قلعه در محاصره است و ارتقا ممکن نیست."},423);
+      const state=await env.DB.prepare("SELECT * FROM castle_state WHERE castle=?").bind(castle).first();
+      if(!state)return json({error:"قلعه پیدا نشد."},404);
+      let table,def,max;
+      if(category==="production"){
+        def=GENERAL_PRODUCTIONS[key]||(SPECIAL_PRODUCTIONS[state.region]?.key===key?SPECIAL_PRODUCTIONS[state.region]:null);
+        table="castle_production"; max=Number(def?.max||0);
+      }else if(category==="camp"){
+        def=GENERAL_CAMPS[key]; table="castle_camps"; max=Number(def?.max||0);
+      }else if(category==="special_camp"){
+        def=(SPECIAL_CAMPS[state.region]||[]).find(x=>x.key===key); table="castle_special_camps"; max=Number(def?.max||20);
+      }else return json({error:"دسته ارتقا معتبر نیست."},400);
+      if(!def)return json({error:"این مورد برای قلعه تعریف نشده است."},404);
+      const result=await upgradeResourceBacked(env,castle,table,key,def,max);
+      if(result.error)return json({error:result.error},result.status);
+      const operationId=String(b.operationId||newId());
+      await env.DB.prepare("INSERT OR IGNORE INTO integration_outbox(operation_id,aggregate_type,aggregate_key,event_type,payload,created_at) VALUES(?,?,?,?,?,?)")
+        .bind(operationId,"castle",castle,"castle.upgraded",JSON.stringify({castle,category,key,newLevel:result.newLevel,telegramUserId}),new Date().toISOString()).run();
+      return json({ok:true,operationId,result,snapshot:await loadCastleEconomy(env,castle)});
+    }
+    return json({error:"مسیر یکپارچه‌سازی پیدا نشد."},404);
+  }
   if (method === "GET" && path === "/api/health") { await env.DB.prepare("SELECT 1 AS ok").first(); return json({ok:true,service:"khata-games"}); }
   if (method === "GET" && path === "/api/auth/status") {
     const s=await getSession(request,env); let user=null; if(s?.user_id) user=await env.DB.prepare("SELECT id,username FROM users WHERE id=?").bind(s.user_id).first();
