@@ -779,7 +779,7 @@ async function requireCastleOwner(request,env,castleName=""){
   return {...state,owner_account_id:s.user_id};
 }
 function safeCost(cost){return Object.fromEntries(Object.entries(cost).filter(([k,v])=>RESOURCE_KEYS.includes(k)&&Number(v)>0));}
-async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
+async function upgradeResourceBacked(env,castle,table,key,def,maxLevel,operationId=null){
   const where=table==="castle_production"?"production_key":"camp_key";
   const row=await env.DB.prepare(`SELECT level FROM ${table} WHERE castle=? AND ${where}=?`).bind(castle,key).first();
   const level=Number(row?.level||0);
@@ -793,19 +793,31 @@ async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
   const cost=safeCost(def.cost);
   const keys=Object.keys(cost);
   if(!keys.length)return {error:"هزینهٔ ارتقا معتبر نیست.",status:500};
-
   const sets=keys.map(k=>`${k}=${k}-?`).join(",");
   const cond=keys.map(k=>`${k}>=?`).join(" AND ");
-
-  const b=await env.DB.batch([
-    env.DB.prepare(`UPDATE castle_state SET ${sets} WHERE castle=? AND ${cond}`)
-      .bind(...keys.map(k=>Number(cost[k])),castle,...keys.map(k=>Number(cost[k]))),
-    env.DB.prepare(`UPDATE ${table} SET level=level+1 WHERE castle=? AND ${where}=? AND level=?`)
-      .bind(castle,key,level)
-  ]);
-
-  if(!b[0]?.meta?.changes||!b[1]?.meta?.changes){
-    return {error:"منابع یا سطح همزمان تغییر کرده؛ دوباره تلاش کن.",status:409};
+  const post=keys.map(k=>`${k}=?`).join(" AND ");
+  const postValues=keys.map(k=>Number(state[k]||0)-Number(cost[k]||0));
+  const first=env.DB.prepare(`UPDATE castle_state SET ${sets}
+    WHERE castle=? AND ${cond}
+    AND EXISTS(SELECT 1 FROM ${table} WHERE castle=? AND ${where}=? AND level=?)
+    ${operationId?"AND NOT EXISTS(SELECT 1 FROM integration_outbox WHERE operation_id=?)":""}`)
+    .bind(...keys.map(k=>Number(cost[k])),castle,...keys.map(k=>Number(cost[k])),castle,key,level,...(operationId?[operationId]:[]));
+  const second=env.DB.prepare(`UPDATE ${table} SET level=level+1
+    WHERE castle=? AND ${where}=? AND level=?
+    AND EXISTS(SELECT 1 FROM castle_state WHERE castle=? AND ${post})`)
+    .bind(castle,key,level,castle,...postValues);
+  const statements=[first,second];
+  if(operationId){
+    const payload=JSON.stringify({castle,category:table==="castle_production"?"production":table==="castle_special_camps"?"special_camp":"camp",key,newLevel:level+1});
+    statements.push(env.DB.prepare(`INSERT OR IGNORE INTO integration_outbox(operation_id,aggregate_type,aggregate_key,event_type,payload,created_at)
+      SELECT ?,'castle',?,'castle.upgraded',?,? WHERE
+      EXISTS(SELECT 1 FROM ${table} WHERE castle=? AND ${where}=? AND level=?)
+      AND EXISTS(SELECT 1 FROM castle_state WHERE castle=? AND ${post})`)
+      .bind(operationId,castle,payload,new Date().toISOString(),castle,key,level+1,castle,...postValues));
+  }
+  const result=await env.DB.batch(statements);
+  if(!result[0]?.meta?.changes||!result[1]?.meta?.changes||(operationId&&!result[2]?.meta?.changes)){
+    return {error:"منابع، سطح یا شناسه عملیات همزمان تغییر کرده؛ موجودی کسر نشد. دوباره وضعیت را بررسی کن.",status:409};
   }
   return {ok:true,newLevel:level+1};
 }
@@ -930,8 +942,15 @@ async function handleApi(request, env, url) {
       const result=await upgradeResourceBacked(env,castle,table,key,def,max);
       if(result.error)return json({error:result.error},result.status);
       const operationId=String(b.operationId||newId());
-      await env.DB.prepare("INSERT OR IGNORE INTO integration_outbox(operation_id,aggregate_type,aggregate_key,event_type,payload,created_at) VALUES(?,?,?,?,?,?)")
-        .bind(operationId,"castle",castle,"castle.upgraded",JSON.stringify({castle,category,key,newLevel:result.newLevel,telegramUserId}),new Date().toISOString()).run();
+      if(!/^[A-Za-z0-9-]{16,80}$/.test(operationId))return json({error:"شناسه یکتای عملیات معتبر نیست."},400);
+      const prior=await env.DB.prepare("SELECT payload FROM integration_outbox WHERE operation_id=? AND event_type='castle.upgraded'").bind(operationId).first();
+      if(prior){
+        const saved=JSON.parse(prior.payload||"{}");
+        if(saved.telegramUserId && saved.telegramUserId!==telegramUserId)return json({error:"شناسه عملیات قبلاً برای درخواست دیگری استفاده شده است."},409);
+        return json({ok:true,operationId,result:{ok:true,newLevel:Number(saved.newLevel||0),duplicate:true},snapshot:await loadCastleEconomy(env,castle)});
+      }
+      const result=await upgradeResourceBacked(env,castle,table,key,def,max,operationId);
+      if(result.error)return json({error:result.error},result.status);
       return json({ok:true,operationId,result,snapshot:await loadCastleEconomy(env,castle)});
     }
     return json({error:"مسیر یکپارچه‌سازی پیدا نشد."},404);
