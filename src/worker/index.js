@@ -911,8 +911,6 @@ async function handleApi(request, env, url) {
       const now=new Date().toISOString();
       await env.DB.prepare(`UPDATE integration_outbox SET delivered_at=?
         WHERE id<=? AND aggregate_key IN (SELECT castle FROM integration_bot_assignments WHERE active=1)`).bind(now,cursor).run();
-      await env.DB.prepare("DELETE FROM integration_outbox WHERE delivered_at IS NOT NULL AND delivered_at<?")
-        .bind(new Date(Date.now()-30*86400000).toISOString()).run();
       return json({ok:true,cursor});
     }
     if(method==="GET"&&path==="/api/integration/v1/events"){
