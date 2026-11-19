@@ -821,7 +821,10 @@ async function upgradeResourceBacked(env,castle,table,key,def,maxLevel,operation
   }
   return {ok:true,newLevel:level+1};
 }
+let botIntegrationSchemaPromise=null;
 async function ensureBotIntegrationSchema(env){
+  if(botIntegrationSchemaPromise)return botIntegrationSchemaPromise;
+  botIntegrationSchemaPromise=(async()=>{
   await ensureEconomySchema(env);
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS integration_bot_assignments (
     telegram_user_id TEXT PRIMARY KEY,
@@ -859,6 +862,8 @@ async function ensureBotIntegrationSchema(env){
         END`).run();
     }
   }
+  })().catch(e=>{botIntegrationSchemaPromise=null;throw e});
+  return botIntegrationSchemaPromise;
 }
 async function requireBotService(request,env){
   const expected=String(env.BOT_API_SECRET||"");
