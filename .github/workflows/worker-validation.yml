@@ -1,0 +1,20 @@
+name: Worker validation
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["feature/two-way-game-parity"]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - name: Validate Cloudflare Worker bundle
+        run: npx wrangler deploy --dry-run --outdir=.wrangler/deploy
