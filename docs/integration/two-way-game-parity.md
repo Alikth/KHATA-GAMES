@@ -1,6 +1,6 @@
 # Two-way game parity: architecture and data mapping
 
-Status: Phase 1 audit/design. This document does not migrate, overwrite, or delete existing game data.
+Status: implementation in progress. The Worker now exposes a private bot service API, assignment mirror, castle snapshots, durable D1 change capture and idempotent building/camp upgrades. No live data has been migrated, overwritten, or deleted.
 
 ## Non-negotiable constraints
 
@@ -118,3 +118,30 @@ No live schema migration or data copy is part of this audit document.
 - Never auto-resolve conflicting snapshots by last-write-wins.
 - Never merge either repository's branch into `main` without explicit approval.
 - Keep the existing Telegram proxy PR separate from game-parity changes; verify its current status before merging.
+
+
+## Implemented on the feature branch
+
+- Added private `/api/integration/v1/*` routes authenticated by the Cloudflare `BOT_API_SECRET`.
+- Added superuser-managed Telegram-to-castle assignment mirror; this is not website account linking.
+- Added assigned-lord castle snapshot reads.
+- Added D1 outbox table and triggers for resource, production, camp, army, equipment, fleet and food-debt mutations.
+- Added event cursor, event acknowledgement and 30-day delivered-event retention.
+- Added bot-originated production/camp upgrade endpoint with siege checks and idempotent operation IDs.
+- Strengthened the shared upgrade helper so the resource deduction and level increment are conditional on the same expected state.
+- Added D1 migration `0006_bot_integration.sql`.
+- Latest Wrangler dry-run bundle validation passed.
+
+## Required before deployment
+
+- Set `BOT_API_SECRET` as a Cloudflare Worker secret.
+- Configure the same secret in the bot's private `.env` as `SITE_API_SECRET`, and set `SITE_API_URL`.
+- Apply D1 migration after a verified D1 backup; PostgreSQL migration is separately maintained in the bot repository.
+- Verify a test lord assignment, full snapshot, website-side change propagation and bot-side upgrade using a non-production test castle.
+
+## Remaining parity work
+
+- Trade operations, warfare, alliances, garrisons, scenarios and troop transfers are not yet routed through the service API.
+- Workshop, port, equipment construction and administrative asset mutations still need bot service commands.
+- Full castle reconciliation and explicit conflict resolution are still required before any bulk synchronization.
+- Live D1/PostgreSQL end-to-end tests and production deployment have not been performed.
