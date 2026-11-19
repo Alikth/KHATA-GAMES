@@ -828,12 +828,13 @@ async function ensureBotIntegrationSchema(env){
   await ensureEconomySchema(env);
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS integration_bot_assignments (
     telegram_user_id TEXT PRIMARY KEY,
-    castle TEXT NOT NULL UNIQUE,
+    castle TEXT NOT NULL,
     assigned_by TEXT NOT NULL,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`).run();
+  await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_integration_bot_active_castle ON integration_bot_assignments(castle) WHERE active=1").run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS integration_outbox (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     operation_id TEXT NOT NULL UNIQUE,
