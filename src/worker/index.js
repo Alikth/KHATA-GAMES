@@ -810,6 +810,7 @@ async function upgradeResourceBacked(env,castle,table,key,def,maxLevel){
   return {ok:true,newLevel:level+1};
 }
 async function ensureBotIntegrationSchema(env){
+  await ensureEconomySchema(env);
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS integration_bot_assignments (
     telegram_user_id TEXT PRIMARY KEY,
     castle TEXT NOT NULL UNIQUE,
